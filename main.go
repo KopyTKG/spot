@@ -395,13 +395,14 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 				iconLbl := gtk.NewLabel(tl.Icon)
 				iconLbl.AddCSSClass("spot-tile-icon")
 				iconLbl.SetHAlign(gtk.AlignCenter)
-
-				nameLbl := gtk.NewLabel(tl.Label)
-				nameLbl.AddCSSClass("spot-tile-label")
-				nameLbl.SetHAlign(gtk.AlignCenter)
-
 				tileBox.Append(iconLbl)
-				tileBox.Append(nameLbl)
+
+				if tl.Label != "" {
+					nameLbl := gtk.NewLabel(tl.Label)
+					nameLbl.AddCSSClass("spot-tile-label")
+					nameLbl.SetHAlign(gtk.AlignCenter)
+					tileBox.Append(nameLbl)
+				}
 
 				child := gtk.NewFlowBoxChild()
 				child.AddCSSClass("spot-tile")
