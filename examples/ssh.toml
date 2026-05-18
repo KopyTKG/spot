@@ -1,0 +1,28 @@
+title    = "SSH"
+anchor   = "center"
+width    = 420
+style    = "ssh.css"
+footer   = "Enter to connect · Esc to cancel"
+keyboard = "exclusive"
+
+[[items]]
+type = "field"
+id = "user"
+label = "User"
+placeholder = "user"
+
+[[items]]
+type = "field"
+id = "host"
+label = "Host"
+placeholder = "host or IP"
+
+[[items]]
+type = "field"
+id = "port"
+label = "Port"
+default = "22"
+
+[submit]
+exec  = "setsid -f uwsm-app -- alacritty --class ssh-session -e ssh {user}@{host} -p {port} >/dev/null 2>&1"
+spawn = true

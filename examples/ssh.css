@@ -1,0 +1,53 @@
+/* Stone palette */
+.spot-window {
+  background: transparent;
+}
+
+.spot-root {
+  background: #1c1917;
+  color: #fafaf9;
+  border: 1px solid #44403c;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.spot-title {
+  font-size: 16pt;
+  font-weight: bold;
+  color: #fafaf9;
+  margin-bottom: 4px;
+}
+
+.spot-label {
+  font-size: 10pt;
+  color: #a8a29e;
+}
+
+.spot-field,
+.spot-password {
+  background: #0c0a09;
+  color: #fafaf9;
+  border: 1px solid #44403c;
+  border-radius: 8px;
+  padding: 8px 12px;
+  caret-color: #7aa2f7;
+}
+
+.spot-field:focus,
+.spot-password:focus {
+  border-color: #7aa2f7;
+  outline: none;
+}
+
+.spot-select {
+  background: #0c0a09;
+  color: #fafaf9;
+  border: 1px solid #44403c;
+  border-radius: 8px;
+}
+
+.spot-footer {
+  font-size: 9pt;
+  color: #78716c;
+  margin-top: 4px;
+}

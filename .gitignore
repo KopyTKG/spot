@@ -1,0 +1,14 @@
+# Go build artifacts
+/spot
+*.exe
+*.test
+*.out
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
