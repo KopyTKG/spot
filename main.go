@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/diamondburned/gotk4-layer-shell/pkg/gtk4layershell"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -28,17 +30,28 @@ type Config struct {
 }
 
 type Item struct {
-	Type        string   // field | password | select
+	Type        string   // field | password | select | list | tiles
 	ID          string
 	Label       string
 	Placeholder string
 	Default     string
-	Options     []string // select only
+	Options     []string // select, list
+	Stdin       bool     // list: read newline-delimited options from stdin
+	Height      int      // list: min content height in px
+	Columns     int      // tiles: max children per row (default 3)
+	Tiles       []Tile   // tiles: per-tile icon/label/value
+}
+
+type Tile struct {
+	Icon  string // text rendered large above the label (NF glyph, emoji, etc.)
+	Label string
+	Value string // returned as the item's value when selected
 }
 
 type Submit struct {
-	Exec  string // command template; {id} substituted from field values
-	Spawn bool   // true = fire-and-forget + close window
+	Exec   string // command template; {id} substituted from field values
+	Stdout string // print template to stdout on submit (exit 1 on cancel)
+	Spawn  bool   // (exec only) fire-and-forget then close
 }
 
 func main() {
@@ -68,17 +81,81 @@ func main() {
 		}
 	}
 
-	// Per-config app ID so multiple `spot <foo.toml>` invocations don't dedupe.
-	appID := fmt.Sprintf("dev.kopy.spot.%s",
-		strings.TrimSuffix(filepath.Base(cfgPath), filepath.Ext(cfgPath)))
+	// Env-var overrides so shared configs can be parameterised per invocation
+	// (used by arch-menu / arch-askpass to set a per-call title or hint).
+	if v, ok := os.LookupEnv("SPOT_TITLE"); ok {
+		cfg.Title = v
+	}
+	if v, ok := os.LookupEnv("SPOT_FOOTER"); ok {
+		cfg.Footer = v
+	}
+	if v, ok := os.LookupEnv("SPOT_PLACEHOLDER"); ok {
+		for i := range cfg.Items {
+			t := cfg.Items[i].Type
+			if t == "field" || t == "password" || t == "list" {
+				cfg.Items[i].Placeholder = v
+				break
+			}
+		}
+	}
+	if v, ok := os.LookupEnv("SPOT_DEFAULT"); ok {
+		for i := range cfg.Items {
+			t := cfg.Items[i].Type
+			if t == "field" || t == "select" || t == "list" || t == "tiles" {
+				cfg.Items[i].Default = v
+				break
+			}
+		}
+	}
+
+	// If any list item reads from stdin, slurp before GTK takes over.
+	for i := range cfg.Items {
+		if cfg.Items[i].Type == "list" && cfg.Items[i].Stdin {
+			sc := bufio.NewScanner(os.Stdin)
+			sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+			var lines []string
+			for sc.Scan() {
+				lines = append(lines, sc.Text())
+			}
+			cfg.Items[i].Options = lines
+		}
+	}
+
+	// Per-invocation app ID so concurrent `spot` calls don't dedupe.
+	base := strings.TrimSuffix(filepath.Base(cfgPath), filepath.Ext(cfgPath))
+	appID := fmt.Sprintf("dev.kopy.spot.%s.p%d", sanitizeID(base), os.Getpid())
 	app := gtk.NewApplication(appID, gio.ApplicationFlagsNone)
-	app.ConnectActivate(func() { activate(app, &cfg, cssPath) })
-	if code := app.Run(nil); code > 0 {
+
+	submitted := false
+	app.ConnectActivate(func() { activate(app, &cfg, cssPath, &submitted) })
+	code := app.Run(nil)
+	if code > 0 {
 		os.Exit(code)
+	}
+	if !submitted {
+		os.Exit(1)
 	}
 }
 
-func activate(app *gtk.Application, cfg *Config, cssPath string) {
+// sanitizeID strips characters that GApplication ID validation rejects.
+func sanitizeID(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	out := b.String()
+	if out == "" {
+		out = "cfg"
+	}
+	return out
+}
+
+func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool) {
 	if cssPath != "" {
 		if css, err := os.ReadFile(cssPath); err == nil {
 			prov := gtk.NewCSSProvider()
@@ -112,6 +189,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 
 	gtk4layershell.InitForWindow(&win.Window)
 	gtk4layershell.SetLayer(&win.Window, gtk4layershell.LayerShellLayerTop)
+	gtk4layershell.SetNamespace(&win.Window, "spot")
 	applyAnchor(&win.Window, cfg.Anchor)
 	applyKeyboard(&win.Window, cfg.Keyboard)
 
@@ -121,16 +199,18 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 	if cfg.Title != "" {
 		t := gtk.NewLabel(cfg.Title)
 		t.AddCSSClass("spot-title")
-		t.SetXAlign(0)
+		t.SetXAlign(0.5)
 		root.Append(t)
 	}
 
-	// id -> getter
 	values := map[string]func() string{}
 	var firstFocus gtk.Widgetter
+	var listSelection *gtk.SingleSelection // for keyboard nav
+	var listView *gtk.ListView             // for ScrollTo on key nav
+	var submitFn func()                    // late-bound so tile click handlers can call it
 
 	for _, it := range cfg.Items {
-		item := it // capture per-iter
+		item := it
 		row := gtk.NewBox(gtk.OrientationVertical, 4)
 		row.AddCSSClass("spot-item")
 		if item.Label != "" {
@@ -158,8 +238,6 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 			entry := gtk.NewPasswordEntry()
 			entry.AddCSSClass("spot-password")
 			entry.SetShowPeekIcon(true)
-			// Note: GtkPasswordEntry has no direct SetPlaceholderText API; setting
-			// it via "placeholder-text" property if needed comes later.
 			row.Append(entry)
 			values[item.ID] = func() string { return entry.Text() }
 			if firstFocus == nil {
@@ -169,6 +247,14 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 			sl := gtk.NewStringList(item.Options)
 			dd := gtk.NewDropDown(sl, nil)
 			dd.AddCSSClass("spot-select")
+			if item.Default != "" {
+				for i, opt := range item.Options {
+					if opt == item.Default {
+						dd.SetSelected(uint(i))
+						break
+					}
+				}
+			}
 			row.Append(dd)
 			values[item.ID] = func() string {
 				idx := int(dd.Selected())
@@ -179,6 +265,187 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 			}
 			if firstFocus == nil {
 				firstFocus = dd
+			}
+		case "list":
+			opts := item.Options
+			model := gtk.NewStringList(opts)
+
+			search := gtk.NewSearchEntry()
+			search.AddCSSClass("spot-search")
+			if item.Placeholder != "" {
+				search.SetPlaceholderText(item.Placeholder)
+			}
+
+			var query string
+			filt := gtk.NewCustomFilter(func(obj *coreglib.Object) bool {
+				if query == "" {
+					return true
+				}
+				so, ok := obj.Cast().(*gtk.StringObject)
+				if !ok {
+					return false
+				}
+				return strings.Contains(
+					strings.ToLower(so.String()),
+					strings.ToLower(query),
+				)
+			})
+			filterModel := gtk.NewFilterListModel(model, &filt.Filter)
+			selection := gtk.NewSingleSelection(filterModel)
+
+			factory := gtk.NewSignalListItemFactory()
+			factory.ConnectSetup(func(obj *coreglib.Object) {
+				li, ok := obj.Cast().(*gtk.ListItem)
+				if !ok {
+					return
+				}
+				lbl := gtk.NewLabel("")
+				lbl.AddCSSClass("spot-list-row")
+				lbl.SetXAlign(0)
+				li.SetChild(lbl)
+			})
+			factory.ConnectBind(func(obj *coreglib.Object) {
+				li, ok := obj.Cast().(*gtk.ListItem)
+				if !ok {
+					return
+				}
+				lbl, ok := li.Child().(*gtk.Label)
+				if !ok {
+					return
+				}
+				so, ok := li.Item().Cast().(*gtk.StringObject)
+				if !ok {
+					return
+				}
+				lbl.SetText(so.String())
+			})
+
+			lv := gtk.NewListView(selection, &factory.ListItemFactory)
+			lv.AddCSSClass("spot-list")
+			lv.SetSingleClickActivate(false)
+			listView = lv
+
+			scrolled := gtk.NewScrolledWindow()
+			h := item.Height
+			if h == 0 {
+				h = 320
+			}
+			scrolled.SetMinContentHeight(h)
+			scrolled.SetChild(lv)
+			scrolled.SetHExpand(true)
+			scrolled.SetVExpand(true)
+			scrolled.AddCSSClass("spot-list-scroll")
+
+			search.ConnectSearchChanged(func() {
+				query = search.Text()
+				filt.Changed(gtk.FilterChangeDifferent)
+				if filterModel.NItems() > 0 {
+					selection.SetSelected(0)
+				}
+			})
+
+			row.Append(search)
+			row.Append(scrolled)
+
+			values[item.ID] = func() string {
+				obj := selection.SelectedItem()
+				if obj == nil {
+					return ""
+				}
+				so, ok := obj.Cast().(*gtk.StringObject)
+				if !ok {
+					return ""
+				}
+				return so.String()
+			}
+
+			if item.Default != "" {
+				for i, opt := range opts {
+					if opt == item.Default {
+						selection.SetSelected(uint(i))
+						break
+					}
+				}
+			}
+
+			if firstFocus == nil {
+				firstFocus = search
+			}
+			listSelection = selection
+		case "tiles":
+			cols := item.Columns
+			if cols <= 0 {
+				cols = 3
+			}
+			flow := gtk.NewFlowBox()
+			flow.AddCSSClass("spot-tiles")
+			flow.SetSelectionMode(gtk.SelectionSingle)
+			flow.SetMinChildrenPerLine(uint(cols))
+			flow.SetMaxChildrenPerLine(uint(cols))
+			flow.SetHomogeneous(true)
+
+			tiles := item.Tiles
+			children := make([]*gtk.FlowBoxChild, len(tiles))
+			for i, tl := range tiles {
+				tileBox := gtk.NewBox(gtk.OrientationVertical, 6)
+				tileBox.AddCSSClass("spot-tile-body")
+				tileBox.SetHAlign(gtk.AlignCenter)
+				tileBox.SetVAlign(gtk.AlignCenter)
+
+				iconLbl := gtk.NewLabel(tl.Icon)
+				iconLbl.AddCSSClass("spot-tile-icon")
+				iconLbl.SetHAlign(gtk.AlignCenter)
+
+				nameLbl := gtk.NewLabel(tl.Label)
+				nameLbl.AddCSSClass("spot-tile-label")
+				nameLbl.SetHAlign(gtk.AlignCenter)
+
+				tileBox.Append(iconLbl)
+				tileBox.Append(nameLbl)
+
+				child := gtk.NewFlowBoxChild()
+				child.AddCSSClass("spot-tile")
+				child.SetChild(tileBox)
+				flow.Append(child)
+				children[i] = child
+			}
+
+			defaultIdx := 0
+			if item.Default != "" {
+				for i, tl := range tiles {
+					if tl.Value == item.Default {
+						defaultIdx = i
+						break
+					}
+				}
+			}
+			if len(children) > 0 {
+				flow.SelectChild(children[defaultIdx])
+			}
+
+			row.Append(flow)
+
+			values[item.ID] = func() string {
+				selected := flow.SelectedChildren()
+				if len(selected) == 0 {
+					return ""
+				}
+				idx := selected[0].Index()
+				if idx < 0 || idx >= len(tiles) {
+					return ""
+				}
+				return tiles[idx].Value
+			}
+
+			flow.ConnectChildActivated(func(child *gtk.FlowBoxChild) {
+				flow.SelectChild(child)
+				if submitFn != nil {
+					submitFn()
+				}
+			})
+
+			if firstFocus == nil {
+				firstFocus = flow
 			}
 		default:
 			log.Printf("unknown item type: %q (skipping)", item.Type)
@@ -196,20 +463,35 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 
 	win.SetChild(root)
 
-	submit := func() {
-		if cfg.Submit.Exec == "" {
-			win.Close()
-			return
+	var submit func()
+	submit = func() {
+		exp := func(t string) string {
+			for id, get := range values {
+				t = strings.ReplaceAll(t, "{"+id+"}", get())
+			}
+			return t
 		}
-		cmd := cfg.Submit.Exec
-		for id, get := range values {
-			cmd = strings.ReplaceAll(cmd, "{"+id+"}", get())
+		ranSomething := false
+		if cfg.Submit.Exec != "" {
+			spawn(exp(cfg.Submit.Exec))
+			ranSomething = true
 		}
-		spawn(cmd)
+		if cfg.Submit.Stdout != "" {
+			fmt.Println(exp(cfg.Submit.Stdout))
+			ranSomething = true
+		}
+		if !ranSomething {
+			// No submit action configured — still count as submitted (Enter pressed).
+		}
+		*submitted = true
 		win.Close()
 	}
+	submitFn = submit
 
 	keys := gtk.NewEventControllerKey()
+	// Capture phase so we see Esc/Enter before SearchEntry's built-in
+	// "clear-on-Esc" / "activate-on-Enter" handlers eat them.
+	keys.SetPropagationPhase(gtk.PhaseCapture)
 	keys.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
 		switch keyval {
 		case gdk.KEY_Escape:
@@ -218,21 +500,68 @@ func activate(app *gtk.Application, cfg *Config, cssPath string) {
 		case gdk.KEY_Return, gdk.KEY_KP_Enter:
 			submit()
 			return true
+		case gdk.KEY_Up, gdk.KEY_KP_Up:
+			if listSelection != nil {
+				moveSelection(listSelection, listView, -1)
+				return true
+			}
+		case gdk.KEY_Down, gdk.KEY_KP_Down:
+			if listSelection != nil {
+				moveSelection(listSelection, listView, 1)
+				return true
+			}
+		case gdk.KEY_Page_Up:
+			if listSelection != nil {
+				moveSelection(listSelection, listView, -10)
+				return true
+			}
+		case gdk.KEY_Page_Down:
+			if listSelection != nil {
+				moveSelection(listSelection, listView, 10)
+				return true
+			}
 		}
 		return false
 	})
 	win.AddController(keys)
 
-	win.Show()
+	// Defer GrabFocus until the surface is mapped — calling it before the
+	// layer surface is realized is a no-op and leaves the layer without a
+	// focused widget, which breaks key forwarding under some compositors.
 	if firstFocus != nil {
-		firstFocus.(interface{ GrabFocus() bool }).GrabFocus()
+		win.ConnectMap(func() {
+			firstFocus.(interface{ GrabFocus() bool }).GrabFocus()
+		})
+	}
+	win.Present()
+}
+
+func moveSelection(sel *gtk.SingleSelection, lv *gtk.ListView, delta int) {
+	model := sel.Model()
+	if model == nil {
+		return
+	}
+	n := int(model.NItems())
+	if n == 0 {
+		return
+	}
+	cur := int(sel.Selected())
+	next := cur + delta
+	if next < 0 {
+		next = 0
+	} else if next >= n {
+		next = n - 1
+	}
+	sel.SetSelected(uint(next))
+	if lv != nil {
+		lv.ScrollTo(uint(next), gtk.ListScrollFocus|gtk.ListScrollSelect, nil)
 	}
 }
 
 func applyAnchor(win *gtk.Window, anchor string) {
 	a := strings.ToLower(strings.TrimSpace(anchor))
 	if a == "" || a == "center" {
-		return // no anchor = centered by layer-shell
+		return
 	}
 	for _, part := range strings.Fields(a) {
 		switch part {
