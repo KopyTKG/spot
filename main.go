@@ -115,8 +115,7 @@ func main() {
 
 	// Per-invocation app ID so concurrent `spot` calls don't dedupe.
 	base := strings.TrimSuffix(filepath.Base(cfgPath), filepath.Ext(cfgPath))
-	appID := fmt.Sprintf("dev.kopy.spot.%s.p%d", sanitizeID(base), os.Getpid())
-	app := gtk.NewApplication(appID, gio.ApplicationFlagsNone)
+	app := gtk.NewApplication(appID(base, os.Getpid()), gio.ApplicationFlagsNone)
 
 	var out outcome
 	app.ConnectActivate(func() { activate(app, cfg, cssPath, &out) })

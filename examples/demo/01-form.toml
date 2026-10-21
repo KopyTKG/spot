@@ -1,0 +1,78 @@
+# Every input widget in one form, with validation and JSON output.
+#
+#   spot 01-form.toml | jq
+#
+# Try: clear the port (required), type letters in it (pattern), submit empty.
+# Enter submits; in the note, Ctrl+Enter does.
+
+title    = "Form"
+anchor   = "center"
+width    = 480
+style    = "../theme.css"
+footer   = "Enter submits \u00b7 Ctrl+Enter inside the note \u00b7 Esc / click outside cancels"
+keyboard = "exclusive"
+
+[[items]]
+type        = "field"
+id          = "host"
+label       = "Host  (field, required)"
+placeholder = "box.example.com"
+required    = true
+error       = "Host is required"
+
+[[items]]
+type     = "field"
+id       = "port"
+label    = "Port  (field, pattern)"
+default  = "22"
+required = true
+pattern  = "^[0-9]+$"
+error    = "Port must be a number"
+
+[[items]]
+type  = "password"
+id    = "secret"
+label = "Secret  (password)"
+
+[[items]]
+type        = "text"
+id          = "note"
+label       = "Note  (text)"
+placeholder = "Multi-line. Enter = newline."
+height      = 70
+
+[[items]]
+type    = "select"
+id      = "shell"
+label   = "Shell  (select)"
+options = ["fish", "bash", "zsh"]
+default = "fish"
+
+[[items]]
+type      = "list"
+id        = "tags"
+label     = "Tags  (multi list; Space toggles, joined with ,)"
+multi     = true
+separator = ","
+options   = ["red", "green", "blue", "yellow", "purple"]
+height    = 110
+
+[[items]]
+type    = "scale"
+id      = "vol"
+label   = "Volume  (scale)"
+min     = 0
+max     = 100
+step    = 5
+default = 50
+
+[[items]]
+type    = "toggle"
+id      = "sudo"
+label   = "Run as root  (toggle)"
+default = false
+on      = "yes"
+off     = "no"
+
+[submit]
+format = "json"   # {"_active":"","host":"...","port":"22",...}; multi list is an array

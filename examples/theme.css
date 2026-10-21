@@ -144,3 +144,65 @@
   color: rgba(214, 211, 209, 0.5);
   margin: 6px 2px 0 2px;
 }
+
+/* --- 0.2.0 widgets ---------------------------------------------------- */
+
+/* Multi-line text: same inset pill as the entries. */
+.spot-text-scroll {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(245, 245, 244, 0.08);
+  border-radius: 10px;
+}
+
+.spot-text,
+.spot-text text {
+  background: transparent;
+  color: #fafaf9;
+  caret-color: #7aa2f7;
+  padding: 6px 10px;
+}
+
+.spot-text-placeholder {
+  color: rgba(214, 211, 209, 0.45);
+  padding: 6px 10px;
+}
+
+.spot-toggle {
+  color: #d6d3d1;
+}
+
+.spot-scale trough {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  min-height: 6px;
+}
+
+.spot-scale highlight {
+  background: #7aa2f7;
+  border-radius: 6px;
+}
+
+.spot-scale slider {
+  background: #fafaf9;
+  border-radius: 50%;
+  min-width: 16px;
+  min-height: 16px;
+}
+
+/* Validation: red border + message under the item. */
+.spot-invalid {
+  border-color: #f7768e;
+}
+
+.spot-item-error {
+  font-size: 9pt;
+  color: #f7768e;
+  margin-left: 2px;
+}
+
+/* Failed exec (on_error = "show"). */
+.spot-error {
+  font-size: 9pt;
+  color: #f7768e;
+  margin-top: 6px;
+}

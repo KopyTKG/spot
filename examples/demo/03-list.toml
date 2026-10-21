@@ -1,0 +1,21 @@
+# dmenu-style searchable list fed from stdin; type to filter, Up/Down, Enter.
+#
+#   printf '%s\n' alpha beta gamma delta | spot 03-list.toml
+#   ls /usr/bin | SPOT_TITLE="Binaries" SPOT_PLACEHOLDER="Filter..." spot 03-list.toml
+#
+# SPOT_TITLE / SPOT_FOOTER / SPOT_PLACEHOLDER / SPOT_DEFAULT override per call.
+
+anchor   = "top"
+width    = 420
+style    = "../theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type        = "list"
+id          = "choice"
+placeholder = "Search..."
+stdin       = true
+height      = 360
+
+[submit]
+stdout = "{choice}"
