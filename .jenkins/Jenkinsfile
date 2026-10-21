@@ -8,7 +8,8 @@
 // pkg-config libgtk-4-dev libgirepository1.0-dev libgtk4-layer-shell-dev), plus curl, git and mise on
 // PATH. Go, just and jq come from mise.toml (an agent that already has the
 // pinned Go installed reuses it). Tag builds also need a "Secret text"
-// credential `github-token` with contents:write on KopyTKG/spot.
+// credential `spot-github-token` with contents:write on KopyTKG/spot (not
+// `github-token`: that one belongs to Sleepy and is scoped to that repo only).
 
 pipeline {
     agent any
@@ -75,7 +76,7 @@ pipeline {
         stage('Release') {
             when { buildingTag() }
             steps {
-                withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+                withCredentials([string(credentialsId: 'spot-github-token', variable: 'GH_TOKEN')]) {
                     sh 'mise exec -- ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
                 }
             }
