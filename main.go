@@ -31,10 +31,11 @@ type Config struct {
 }
 
 // Opacity fades the dialog itself depending on where the pointer is.
-// Percentages are 0-100. Omit the [opacity] table for a constant, opaque dialog.
+// Percentages are 0-100. Without an [opacity] table the defaults below apply;
+// set outside = 100 for a constant, opaque dialog.
 type Opacity struct {
 	Inside     *float64 `toml:"inside"`     // % while the pointer is over the dialog (default 100)
-	Outside    *float64 `toml:"outside"`    // % while the pointer is outside it (default 100)
+	Outside    *float64 `toml:"outside"`    // % while the pointer is outside it (default 85)
 	Transition *int     `toml:"transition"` // fade time in ms (default 150, 0 = instant)
 }
 
@@ -498,9 +499,11 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 	})
 	win.AddController(click)
 
-	if cfg.Opacity != nil {
-		setupOpacity(win, root, cfg.Opacity)
+	op := cfg.Opacity
+	if op == nil {
+		op = &Opacity{}
 	}
+	setupOpacity(win, root, op)
 
 	var submit func()
 	submit = func() {
@@ -637,13 +640,13 @@ func spawn(cmd string) {
 // setupOpacity fades the dialog between its "pointer over" and "pointer
 // outside" opacities.
 func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) {
-	pct := func(p *float64) float64 {
-		if p == nil {
-			return 1
+	pct := func(p *float64, def float64) float64 {
+		if p != nil {
+			def = *p
 		}
-		return max(0, min(100, *p)) / 100
+		return max(0, min(100, def)) / 100
 	}
-	in, out := pct(o.Inside), pct(o.Outside)
+	in, out := pct(o.Inside, 100), pct(o.Outside, 85)
 	ms := 150
 	if o.Transition != nil {
 		ms = *o.Transition
