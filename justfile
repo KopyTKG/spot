@@ -87,6 +87,14 @@ aur version:
     sed -i "s|^            '.*')|            '$source')|" "$file"
     echo "$file -> {{version}}"
 
+    # spot-git's pkgver() only runs at build time; the AUR listing reads the
+    # static pkgver from .SRCINFO, so seed it with what pkgver() would print.
+    git fetch --quiet --tags origin || true
+    gitver=$(git describe --long --tags --abbrev=7 "v{{version}}" | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g')
+    file="packaging/aur/spot-git/PKGBUILD"
+    sed -i "s|^pkgver=.*|pkgver=$gitver|; s|^pkgrel=.*|pkgrel=1|" "$file"
+    echo "$file -> $gitver"
+
 # Push both AUR packages from this machine, after the release exists. Needs an AUR SSH key.
 aur-publish version:
     #!/usr/bin/env bash
