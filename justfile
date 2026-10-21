@@ -44,7 +44,9 @@ clean:
 tag version:
     @test -z "$(git status --porcelain)" || { echo "working tree is dirty"; exit 1; }
     git tag -a "v{{version}}" -m "spot v{{version}}"
-    @echo "tagged v{{version}} — push it with: git push origin v{{version}}"
+    @echo "tagged v{{version}}"
+    git push origin v{{version}}
+    @echo "tag v{{version}} pushed"
 
 # Manual fallback when CI is unavailable: tag, push, build, gh release (needs gh).
 release version: (tag version)
