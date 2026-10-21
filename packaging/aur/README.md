@@ -36,7 +36,7 @@ by `just aur-publish` via `makepkg --printsrcinfo`.
 
 Job config: pipeline from SCM, Script Path `.jenkins/Jenkinsfile`, build tags
 too. The agent (Debian) needs `build-essential pkg-config libgtk-4-dev
-libgtk4-layer-shell-dev curl git` and `mise` on PATH; Go, just and jq come from
+libgirepository1.0-dev libgtk4-layer-shell-dev curl git` and `mise` on PATH; Go, just and jq come from
 `mise.toml`, so any Jenkins can build it. One credential: `github-token` (secret text, contents:write on
 KopyTKG/spot). Re-running a failed tag build is safe: the release script
 replaces assets instead of duplicating them. If Jenkins is down,

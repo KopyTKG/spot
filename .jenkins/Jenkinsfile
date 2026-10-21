@@ -5,7 +5,7 @@
 //
 // spot links gtk4 and gtk4-layer-shell through cgo, so the agent needs their
 // development headers, installed from the distro (Debian: build-essential
-// pkg-config libgtk-4-dev libgtk4-layer-shell-dev), plus curl, git and mise on
+// pkg-config libgtk-4-dev libgirepository1.0-dev libgtk4-layer-shell-dev), plus curl, git and mise on
 // PATH. Go, just and jq come from mise.toml (an agent that already has the
 // pinned Go installed reuses it). Tag builds also need a "Secret text"
 // credential `github-token` with contents:write on KopyTKG/spot.
@@ -46,6 +46,7 @@ pipeline {
                     command -v gcc >/dev/null || { echo "gcc missing: apt install build-essential"; exit 1; }
                     command -v pkg-config >/dev/null || { echo "pkg-config missing: apt install pkg-config"; exit 1; }
                     pkg-config --exists gtk4 || { echo "gtk4 headers missing: apt install libgtk-4-dev"; exit 1; }
+                    pkg-config --exists gobject-introspection-1.0 || { echo "gobject-introspection headers missing: apt install libgirepository1.0-dev"; exit 1; }
                     pkg-config --exists gtk4-layer-shell-0 || { echo "gtk4-layer-shell headers missing: apt install libgtk4-layer-shell-dev"; exit 1; }
                 '''
             }
