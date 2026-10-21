@@ -20,7 +20,7 @@ build:
 
 # Fail if anything is formatted off-style, then vet.
 lint:
-    test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+    test -z "$(gofmt -l $(git ls-files '*.go'))" || { gofmt -l $(git ls-files '*.go'); exit 1; }
     go vet ./...
 
 # What CI runs.
