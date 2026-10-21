@@ -2,8 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,72 +17,78 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
-	"github.com/pelletier/go-toml/v2"
 )
 
-type Config struct {
-	Title    string
-	Anchor   string // center (default) | top | bottom | left | right
-	Width    int
-	Height   int
-	Style    string // path to CSS, relative to TOML file
-	Footer   string
-	Keyboard string // exclusive (default) | on-demand | none
-	Items    []Item
-	Submit   Submit
-	Opacity  *Opacity
+// version is set at build time: -ldflags "-X main.version=0.2.0".
+var version = "dev"
+
+const usage = `usage: spot [flags] <config>
+
+spot renders a TOML-described dialog as a Wayland layer-shell overlay.
+<config> is a path to a .toml file, or a bare name looked up as
+$XDG_CONFIG_HOME/spot/<name>.toml (default ~/.config/spot).
+
+flags:
+  -h, --help       show this help
+  -v, --version    print the version
+
+exit status:
+  0  submitted
+  1  cancelled (Esc, click outside)
+  2  usage error
+  3  config or runtime error
+     (with on_error = "exit", the failed command's own status)
+
+config reference: https://github.com/KopyTKG/spot#config-reference
+`
+
+// outcome is what the dialog reports back to main.
+type outcome struct {
+	submitted bool
+	code      int // non-zero: exit with this status (on_error = "exit")
 }
 
-// Opacity fades the dialog itself depending on where the pointer is.
-// Percentages are 0-100. Without an [opacity] table the defaults below apply;
-// set outside = 100 for a constant, opaque dialog.
-type Opacity struct {
-	Inside     *float64 `toml:"inside"`     // % while the pointer is over the dialog (default 100)
-	Outside    *float64 `toml:"outside"`    // % while the pointer is outside it (default 85)
-	Transition *int     `toml:"transition"` // fade time in ms (default 150, 0 = instant)
-}
-
-type Item struct {
-	Type        string // field | password | select | list | tiles
-	ID          string
-	Label       string
-	Placeholder string
-	Default     string
-	Options     []string // select, list
-	Stdin       bool     // list: read newline-delimited options from stdin
-	Height      int      // list: min content height in px
-	Columns     int      // tiles: max children per row (default 3)
-	Tiles       []Tile   // tiles: per-tile icon/label/value
-}
-
-type Tile struct {
-	Icon  string // text rendered large above the label (NF glyph, emoji, etc.)
-	Label string
-	Value string // returned as the item's value when selected
-}
-
-type Submit struct {
-	Exec   string // command template; {id} substituted from field values
-	Stdout string // print template to stdout on submit (exit 1 on cancel)
-	Spawn  bool   // (exec only) fire-and-forget then close
+func fatal(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "spot: "+format+"\n", args...)
+	os.Exit(exitError)
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: spot <config.toml>")
-		os.Exit(2)
+	var arg string
+	for _, a := range os.Args[1:] {
+		switch {
+		case a == "-h" || a == "--help":
+			fmt.Print(usage)
+			return
+		case a == "-v" || a == "--version":
+			fmt.Println("spot", version)
+			return
+		case strings.HasPrefix(a, "-") && a != "-":
+			fmt.Fprintf(os.Stderr, "spot: unknown flag %q\n\n%s", a, usage)
+			os.Exit(exitUsage)
+		case arg != "":
+			fmt.Fprint(os.Stderr, "spot: only one config file is accepted\n\n"+usage)
+			os.Exit(exitUsage)
+		default:
+			arg = a
+		}
 	}
-	cfgPath, err := filepath.Abs(os.Args[1])
+	if arg == "" {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(exitUsage)
+	}
+
+	cfgPath, err := filepath.Abs(resolveConfigPath(arg))
 	if err != nil {
-		log.Fatal(err)
+		fatal("%v", err)
 	}
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
-		log.Fatal(err)
+		fatal("%v", err)
 	}
-	var cfg Config
-	if err := toml.Unmarshal(data, &cfg); err != nil {
-		log.Fatalf("parsing %s: %v", cfgPath, err)
+	cfg, err := parseConfig(data, os.LookupEnv)
+	if err != nil {
+		fatal("%s: %v", cfgPath, err)
 	}
 
 	cssPath := ""
@@ -88,33 +97,6 @@ func main() {
 			cssPath = cfg.Style
 		} else {
 			cssPath = filepath.Join(filepath.Dir(cfgPath), cfg.Style)
-		}
-	}
-
-	// Env-var overrides so shared configs can be parameterised per invocation
-	// (used by arch-menu / arch-askpass to set a per-call title or hint).
-	if v, ok := os.LookupEnv("SPOT_TITLE"); ok {
-		cfg.Title = v
-	}
-	if v, ok := os.LookupEnv("SPOT_FOOTER"); ok {
-		cfg.Footer = v
-	}
-	if v, ok := os.LookupEnv("SPOT_PLACEHOLDER"); ok {
-		for i := range cfg.Items {
-			t := cfg.Items[i].Type
-			if t == "field" || t == "password" || t == "list" {
-				cfg.Items[i].Placeholder = v
-				break
-			}
-		}
-	}
-	if v, ok := os.LookupEnv("SPOT_DEFAULT"); ok {
-		for i := range cfg.Items {
-			t := cfg.Items[i].Type
-			if t == "field" || t == "select" || t == "list" || t == "tiles" {
-				cfg.Items[i].Default = v
-				break
-			}
 		}
 	}
 
@@ -136,36 +118,21 @@ func main() {
 	appID := fmt.Sprintf("dev.kopy.spot.%s.p%d", sanitizeID(base), os.Getpid())
 	app := gtk.NewApplication(appID, gio.ApplicationFlagsNone)
 
-	submitted := false
-	app.ConnectActivate(func() { activate(app, &cfg, cssPath, &submitted) })
+	var out outcome
+	app.ConnectActivate(func() { activate(app, cfg, cssPath, &out) })
 	code := app.Run(nil)
+	if out.code != 0 {
+		os.Exit(out.code)
+	}
 	if code > 0 {
-		os.Exit(code)
+		os.Exit(exitError)
 	}
-	if !submitted {
-		os.Exit(1)
+	if !out.submitted {
+		os.Exit(exitCancelled)
 	}
 }
 
-// sanitizeID strips characters that GApplication ID validation rejects.
-func sanitizeID(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('_')
-		}
-	}
-	out := b.String()
-	if out == "" {
-		out = "cfg"
-	}
-	return out
-}
-
-func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool) {
+func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 	if cssPath != "" {
 		if css, err := os.ReadFile(cssPath); err == nil {
 			prov := gtk.NewCSSProvider()
@@ -221,21 +188,28 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 
 	values := map[string]func() string{}
 	var firstFocus gtk.Widgetter
-	var listSelection *gtk.SingleSelection // for keyboard nav
+	var listSelection *gtk.SingleSelection // for keyboard nav (single-select list)
 	var listView *gtk.ListView             // for ScrollTo on key nav
-	activeID := ""                         // id of the last tiles group interacted with ({_active})
-	var submitFn func()                    // late-bound so tile click handlers can call it
+	var multiSearch *gtk.SearchEntry       // multi-select list: Up/Down move focus into the list
+	var multiView *gtk.ListView
+	var textViews []*gtk.TextView // Enter inserts a newline in these; Ctrl+Enter submits
+	multiValues := map[string]func() []string{}
+	var checks []*check // items with required / pattern rules
+	activeID := ""      // id of the last tiles group interacted with ({_active})
+	var submitFn func() // late-bound so tile click handlers can call it
 
 	for _, it := range cfg.Items {
 		item := it
 		row := gtk.NewBox(gtk.OrientationVertical, 4)
 		row.AddCSSClass("spot-item")
-		if item.Label != "" {
+		if item.Label != "" && item.Type != "toggle" {
 			lbl := gtk.NewLabel(item.Label)
 			lbl.AddCSSClass("spot-label")
 			lbl.SetXAlign(0)
 			row.Append(lbl)
 		}
+		var input gtk.Widgetter // the widget .spot-invalid is put on and focus goes to
+		var onEdit func(func()) // registers a callback for edits (clears .spot-invalid)
 		switch item.Type {
 		case "field":
 			entry := gtk.NewEntry()
@@ -243,11 +217,12 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			if item.Placeholder != "" {
 				entry.SetPlaceholderText(item.Placeholder)
 			}
-			if item.Default != "" {
-				entry.SetText(item.Default)
+			if item.Default != nil {
+				entry.SetText(item.defaultString())
 			}
 			row.Append(entry)
 			values[item.ID] = func() string { return entry.Text() }
+			input, onEdit = entry, func(f func()) { entry.ConnectChanged(f) }
 			if firstFocus == nil {
 				firstFocus = entry
 			}
@@ -257,6 +232,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			entry.SetShowPeekIcon(true)
 			row.Append(entry)
 			values[item.ID] = func() string { return entry.Text() }
+			input, onEdit = entry, func(f func()) { entry.ConnectChanged(f) }
 			if firstFocus == nil {
 				firstFocus = entry
 			}
@@ -264,9 +240,9 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			sl := gtk.NewStringList(item.Options)
 			dd := gtk.NewDropDown(sl, nil)
 			dd.AddCSSClass("spot-select")
-			if item.Default != "" {
+			if item.Default != nil {
 				for i, opt := range item.Options {
-					if opt == item.Default {
+					if opt == item.defaultString() {
 						dd.SetSelected(uint(i))
 						break
 					}
@@ -280,6 +256,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 				}
 				return item.Options[idx]
 			}
+			input = dd
 			if firstFocus == nil {
 				firstFocus = dd
 			}
@@ -308,7 +285,16 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 				)
 			})
 			filterModel := gtk.NewFilterListModel(model, &filt.Filter)
-			selection := gtk.NewSingleSelection(filterModel)
+			var selection *gtk.SingleSelection
+			var multiSel *gtk.MultiSelection
+			var selModel gtk.SelectionModeller
+			if item.Multi {
+				multiSel = gtk.NewMultiSelection(filterModel)
+				selModel = multiSel
+			} else {
+				selection = gtk.NewSingleSelection(filterModel)
+				selModel = selection
+			}
 
 			factory := gtk.NewSignalListItemFactory()
 			factory.ConnectSetup(func(obj *coreglib.Object) {
@@ -337,7 +323,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 				lbl.SetText(so.String())
 			})
 
-			lv := gtk.NewListView(selection, &factory.ListItemFactory)
+			lv := gtk.NewListView(selModel, &factory.ListItemFactory)
 			lv.AddCSSClass("spot-list")
 			lv.SetSingleClickActivate(false)
 			listView = lv
@@ -356,7 +342,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			search.ConnectSearchChanged(func() {
 				query = search.Text()
 				filt.Changed(gtk.FilterChangeDifferent)
-				if filterModel.NItems() > 0 {
+				if selection != nil && filterModel.NItems() > 0 {
 					selection.SetSelected(0)
 				}
 			})
@@ -364,31 +350,61 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			row.Append(search)
 			row.Append(scrolled)
 
-			values[item.ID] = func() string {
-				obj := selection.SelectedItem()
-				if obj == nil {
-					return ""
-				}
+			selectedOf := func(obj *coreglib.Object) string {
 				so, ok := obj.Cast().(*gtk.StringObject)
 				if !ok {
 					return ""
 				}
 				return so.String()
 			}
-
-			if item.Default != "" {
-				for i, opt := range opts {
-					if opt == item.Default {
-						selection.SetSelected(uint(i))
-						break
+			if item.Multi {
+				multiValues[item.ID] = func() []string {
+					var picked []string
+					for i := uint(0); i < filterModel.NItems(); i++ {
+						if multiSel.IsSelected(i) {
+							picked = append(picked, selectedOf(filterModel.Item(i)))
+						}
+					}
+					return picked
+				}
+				values[item.ID] = func() string {
+					return strings.Join(multiValues[item.ID](), item.separator())
+				}
+				if item.Default != nil {
+					want := map[string]bool{}
+					for _, d := range strings.Split(item.defaultString(), item.separator()) {
+						want[d] = true
+					}
+					for i, opt := range opts {
+						if want[opt] {
+							multiSel.SelectItem(uint(i), false)
+						}
 					}
 				}
+				multiSearch, multiView = search, lv
+			} else {
+				values[item.ID] = func() string {
+					obj := selection.SelectedItem()
+					if obj == nil {
+						return ""
+					}
+					return selectedOf(obj)
+				}
+				if item.Default != nil {
+					for i, opt := range opts {
+						if opt == item.defaultString() {
+							selection.SetSelected(uint(i))
+							break
+						}
+					}
+				}
+				listSelection = selection
 			}
 
+			input = search
 			if firstFocus == nil {
 				firstFocus = search
 			}
-			listSelection = selection
 		case "tiles":
 			cols := item.Columns
 			if cols <= 0 {
@@ -429,9 +445,9 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			}
 
 			defaultIdx := 0
-			if item.Default != "" {
+			if item.Default != nil {
 				for i, tl := range tiles {
-					if tl.Value == item.Default {
+					if tl.Value == item.defaultString() {
 						defaultIdx = i
 						break
 					}
@@ -472,9 +488,98 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 			if firstFocus == nil {
 				firstFocus = flow
 			}
+		case "text":
+			tv := gtk.NewTextView()
+			tv.AddCSSClass("spot-text")
+			tv.SetWrapMode(gtk.WrapWordChar)
+			tv.SetAcceptsTab(false)
+			buf := tv.Buffer()
+
+			scrolled := gtk.NewScrolledWindow()
+			h := item.Height
+			if h == 0 {
+				h = 120
+			}
+			scrolled.SetMinContentHeight(h)
+			scrolled.SetChild(tv)
+			scrolled.SetHExpand(true)
+			scrolled.AddCSSClass("spot-text-scroll")
+
+			var widget gtk.Widgetter = scrolled
+			if item.Placeholder != "" {
+				ph := gtk.NewLabel(item.Placeholder)
+				ph.AddCSSClass("spot-text-placeholder")
+				ph.SetXAlign(0)
+				ph.SetYAlign(0)
+				ph.SetCanTarget(false)
+				ph.SetHAlign(gtk.AlignStart)
+				ph.SetVAlign(gtk.AlignStart)
+				ov := gtk.NewOverlay()
+				ov.SetChild(scrolled)
+				ov.AddOverlay(ph)
+				buf.ConnectChanged(func() { ph.SetVisible(buf.CharCount() == 0) })
+				widget = ov
+			}
+			if item.Default != nil {
+				buf.SetText(item.defaultString())
+			}
+			row.Append(widget)
+			values[item.ID] = func() string {
+				start, end := buf.Bounds()
+				return buf.Text(start, end, false)
+			}
+			textViews = append(textViews, tv)
+			input, onEdit = tv, func(f func()) { buf.ConnectChanged(f) }
+			if firstFocus == nil {
+				firstFocus = tv
+			}
+		case "toggle":
+			cb := gtk.NewCheckButton()
+			cb.AddCSSClass("spot-toggle")
+			cb.SetLabel(item.Label)
+			cb.SetActive(item.defaultBool())
+			row.Append(cb)
+			values[item.ID] = func() string {
+				if cb.Active() {
+					return item.onValue()
+				}
+				return item.offValue()
+			}
+			if firstFocus == nil {
+				firstFocus = cb
+			}
+		case "scale":
+			sc := gtk.NewScaleWithRange(gtk.OrientationHorizontal,
+				item.minValue(), item.maxValue(), item.stepValue())
+			sc.AddCSSClass("spot-scale")
+			sc.SetHExpand(true)
+			sc.SetDrawValue(true)
+			sc.SetDigits(digitsFor(item.stepValue()))
+			sc.SetValue(item.scaleDefault())
+			row.Append(sc)
+			values[item.ID] = func() string { return formatNumber(roundTo(sc.Value(), item.stepValue())) }
+			if firstFocus == nil {
+				firstFocus = sc
+			}
 		default:
 			log.Printf("unknown item type: %q (skipping)", item.Type)
 			continue
+		}
+		if item.Required || item.pattern != nil {
+			if _, ok := values[item.ID]; ok {
+				ck := &check{item: item, widget: gtk.BaseWidget(input)}
+				if onEdit != nil {
+					onEdit(ck.clear)
+				}
+				if item.Error != "" {
+					ck.msg = gtk.NewLabel(item.Error)
+					ck.msg.AddCSSClass("spot-item-error")
+					ck.msg.SetXAlign(0)
+					ck.msg.SetVisible(false)
+					row.Append(ck.msg)
+				}
+				checks = append(checks, ck)
+			}
 		}
 		root.Append(row)
 	}
@@ -485,6 +590,14 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 		f.SetXAlign(0)
 		root.Append(f)
 	}
+
+	// Shown when an exec command fails and on_error = "show".
+	execErr := gtk.NewLabel("")
+	execErr.AddCSSClass("spot-error")
+	execErr.SetXAlign(0)
+	execErr.SetWrap(true)
+	execErr.SetVisible(false)
+	root.Append(execErr)
 
 	win.SetChild(root)
 
@@ -505,28 +618,63 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 	}
 	setupOpacity(win, root, op)
 
-	var submit func()
-	submit = func() {
-		exp := func(t string) string {
-			t = strings.ReplaceAll(t, "{_active}", activeID)
-			for id, get := range values {
-				t = strings.ReplaceAll(t, "{"+id+"}", get())
-			}
-			return t
+	submit := func() {
+		vals := make(map[string]string, len(values))
+		for id, get := range values {
+			vals[id] = get()
 		}
-		ranSomething := false
+
+		// Invalid items block submission; the first one takes focus.
+		var firstBad *check
+		for _, ck := range checks {
+			ok := ck.item.valid(vals[ck.item.ID])
+			ck.mark(!ok)
+			if !ok && firstBad == nil {
+				firstBad = ck
+			}
+		}
+		if firstBad != nil {
+			firstBad.widget.GrabFocus()
+			return
+		}
+		execErr.SetVisible(false)
+
 		if cfg.Submit.Exec != "" {
-			spawn(exp(cfg.Submit.Exec))
-			ranSomething = true
+			cmd := expand(cfg.Submit.Exec, activeID, vals)
+			if cfg.Submit.Spawn {
+				spawn(cmd)
+			} else if stderr, status := runCommand(cmd); status != 0 {
+				if cfg.Submit.OnError == "exit" {
+					os.Stderr.WriteString(stderr)
+					out.code = status
+					win.Close()
+					return
+				}
+				msg := strings.TrimSpace(stderr)
+				if msg == "" {
+					msg = fmt.Sprintf("command failed (exit status %d)", status)
+				}
+				execErr.SetText(msg)
+				execErr.SetVisible(true)
+				return
+			}
 		}
 		if cfg.Submit.Stdout != "" {
-			fmt.Println(exp(cfg.Submit.Stdout))
-			ranSomething = true
+			fmt.Println(expand(cfg.Submit.Stdout, activeID, vals))
 		}
-		if !ranSomething {
-			// No submit action configured — still count as submitted (Enter pressed).
+		if cfg.Submit.Format == "json" {
+			multi := map[string][]string{}
+			for id, get := range multiValues {
+				multi[id] = get()
+			}
+			js, err := buildJSON(cfg.Items, vals, multi, activeID)
+			if err != nil {
+				log.Printf("json: %v", err)
+			} else {
+				fmt.Println(js)
+			}
 		}
-		*submitted = true
+		out.submitted = true
 		win.Close()
 	}
 	submitFn = submit
@@ -535,12 +683,31 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 	// Capture phase so we see Esc/Enter before SearchEntry's built-in
 	// "clear-on-Esc" / "activate-on-Enter" handlers eat them.
 	keys.SetPropagationPhase(gtk.PhaseCapture)
-	keys.ConnectKeyPressed(func(keyval, _ uint, _ gdk.ModifierType) bool {
+	keys.ConnectKeyPressed(func(keyval, _ uint, state gdk.ModifierType) bool {
+		// In a text area plain Enter is a newline; Ctrl+Enter submits.
+		inText := false
+		for _, tv := range textViews {
+			if tv.HasFocus() {
+				inText = true
+			}
+		}
+		// Multi-select lists: Up/Down hand focus to the list, whose own
+		// keys (arrows, Space, Shift/Ctrl+arrows) do the selecting.
+		if multiView != nil && multiSearch.HasFocus() {
+			switch keyval {
+			case gdk.KEY_Up, gdk.KEY_KP_Up, gdk.KEY_Down, gdk.KEY_KP_Down:
+				multiView.GrabFocus()
+				return true
+			}
+		}
 		switch keyval {
 		case gdk.KEY_Escape:
 			win.Close()
 			return true
 		case gdk.KEY_Return, gdk.KEY_KP_Enter:
+			if inText && state&gdk.ControlMask == 0 {
+				return false
+			}
 			submit()
 			return true
 		case gdk.KEY_Up, gdk.KEY_KP_Up:
@@ -602,28 +769,16 @@ func moveSelection(sel *gtk.SingleSelection, lv *gtk.ListView, delta int) {
 }
 
 func placeRoot(root *gtk.Box, anchor string) {
-	h, v := gtk.AlignCenter, gtk.AlignCenter
-	for _, part := range strings.Fields(strings.ToLower(anchor)) {
-		switch part {
-		case "top":
-			v = gtk.AlignStart
-		case "bottom":
-			v = gtk.AlignEnd
-		case "left":
-			h = gtk.AlignStart
-		case "right":
-			h = gtk.AlignEnd
-		}
-	}
-	root.SetHAlign(h)
-	root.SetVAlign(v)
+	h, v := parseAnchor(anchor)
+	root.SetHAlign([]gtk.Align{gtk.AlignCenter, gtk.AlignStart, gtk.AlignEnd}[h])
+	root.SetVAlign([]gtk.Align{gtk.AlignCenter, gtk.AlignStart, gtk.AlignEnd}[v])
 }
 
 func applyKeyboard(win *gtk.Window, mode string) {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
+	switch parseKeyboard(mode) {
 	case "none":
 		gtk4layershell.SetKeyboardMode(win, gtk4layershell.LayerShellKeyboardModeNone)
-	case "on-demand", "ondemand":
+	case "on-demand":
 		gtk4layershell.SetKeyboardMode(win, gtk4layershell.LayerShellKeyboardModeOnDemand)
 	default:
 		gtk4layershell.SetKeyboardMode(win, gtk4layershell.LayerShellKeyboardModeExclusive)
@@ -635,6 +790,60 @@ func spawn(cmd string) {
 	if err := c.Start(); err != nil {
 		log.Printf("spawn: %v", err)
 	}
+}
+
+// runCommand runs cmd to completion with its stdout passed through, and
+// returns what it wrote to stderr and its exit status (0 on success).
+func runCommand(cmd string) (stderr string, status int) {
+	var buf bytes.Buffer
+	c := exec.Command("sh", "-c", cmd)
+	c.Stdout = os.Stdout
+	c.Stderr = &buf
+	err := c.Run()
+	var ee *exec.ExitError
+	switch {
+	case err == nil:
+		return buf.String(), 0
+	case errors.As(err, &ee):
+		return buf.String(), ee.ExitCode()
+	default:
+		return err.Error() + "\n", 127
+	}
+}
+
+// check ties an item's required / pattern rules to its widget.
+type check struct {
+	item   Item
+	widget *gtk.Widget
+	msg    *gtk.Label // optional error text under the item
+}
+
+func (c *check) mark(invalid bool) {
+	if invalid {
+		c.widget.AddCSSClass("spot-invalid")
+	} else {
+		c.widget.RemoveCSSClass("spot-invalid")
+	}
+	if c.msg != nil {
+		c.msg.SetVisible(invalid)
+	}
+}
+
+func (c *check) clear() { c.mark(false) }
+
+// digitsFor is the number of decimals a slider with this step needs.
+func digitsFor(step float64) int {
+	d := 0
+	for step != math.Trunc(step) && d < 6 {
+		step *= 10
+		d++
+	}
+	return d
+}
+
+// roundTo snaps v to a multiple of step so floating-point drift never shows.
+func roundTo(v, step float64) float64 {
+	return math.Round(v/step) * step
 }
 
 // setupOpacity fades the dialog between its "pointer over" and "pointer

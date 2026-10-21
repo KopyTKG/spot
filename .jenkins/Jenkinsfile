@@ -1,6 +1,6 @@
 // Jenkins pipeline for spot. In the job, set Script Path to .jenkins/Jenkinsfile.
 //
-// - Lint and Build run for every branch and pull request.
+// - Lint, Test and Build run for every branch and pull request.
 // - Publish and Release run only for a tag (v0.1.0 and so on).
 //
 // spot links gtk4 and gtk4-layer-shell through cgo, so the agent needs their
@@ -56,6 +56,12 @@ pipeline {
         stage('Lint') {
             steps {
                 sh 'mise exec -- just lint'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'mise exec -- just test'
             }
         }
 

@@ -1,6 +1,6 @@
 # Maintainer: Martin Kopecký <kopecky@thekrew.app>
 pkgname=spot-bin
-pkgver=0.0.0
+pkgver=0.1.0
 pkgrel=1
 pkgdesc='TOML+CSS dialog runtime for Wayland (layer-shell overlays), prebuilt binary'
 arch=('x86_64')
@@ -11,13 +11,17 @@ provides=('spot')
 conflicts=('spot' 'spot-git')
 
 _release="$url/releases/download/v$pkgver"
-source=("spot-$pkgver::$_release/spot-linux-x64"
-        "LICENSE-$pkgver::https://raw.githubusercontent.com/KopyTKG/spot/v$pkgver/LICENSE")
-noextract=("spot-$pkgver")
-sha256sums=('SKIP'
-            'SKIP')
+# The tagged source archive supplies LICENSE, README.md and examples/.
+source=("spot-linux-x64-$pkgver::$_release/spot-linux-x64"
+        "spot-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+noextract=("spot-linux-x64-$pkgver")
+sha256sums=('4eba039285c5563741a510a66eb8485811e6d5b38203ec612665c6162e3fbe43'
+            '1798baf70758e95bedd0909fd1599894eb924204e04d446ee2c270935975d721')
 
 package() {
-  install -Dm755 "$srcdir/spot-$pkgver" "$pkgdir/usr/bin/spot"
-  install -Dm644 "$srcdir/LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm755 "$srcdir/spot-linux-x64-$pkgver" "$pkgdir/usr/bin/spot"
+  cd "$srcdir/spot-$pkgver"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/spot/README.md"
+  install -Dm644 -t "$pkgdir/usr/share/doc/spot/examples" examples/*
 }

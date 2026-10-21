@@ -14,9 +14,17 @@ default:
 # Build
 # --------------------------------------------------------------------------
 
+# Version baked into the binary: the latest tag, e.g. 0.2.0 or 0.2.0-3-gabc123.
+build_version := `git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev`
+ldflags := "-X main.version=" + build_version
+
 # Build ./spot for this machine (needs gtk4, gtk4-layer-shell, go).
 build:
-    go build -o spot .
+    go build -ldflags "{{ldflags}}" -o spot .
+
+# Run the unit tests (no display needed).
+test:
+    go test ./...
 
 # Fail if anything is formatted off-style, then vet.
 lint:
@@ -24,12 +32,12 @@ lint:
     go vet ./...
 
 # What CI runs.
-ci: lint build package
+ci: lint test build package
 
 # Release binary: stripped, trimmed paths, PIE.
 package:
     mkdir -p {{dist}}
-    go build -buildmode=pie -trimpath -ldflags "-s -w" -o {{dist}}/spot-linux-x64 .
+    go build -buildmode=pie -trimpath -ldflags "-s -w {{ldflags}}" -o {{dist}}/spot-linux-x64 .
     @ls -lh {{dist}}/spot-linux-x64
 
 # Remove build output.
@@ -68,15 +76,15 @@ aur version:
     trap 'rm -rf "$work"' EXIT
 
     curl --fail --silent --show-error --location -o "$work/spot" "$release/spot-linux-x64"
-    curl --fail --silent --show-error --location -o "$work/LICENSE" \
-        "https://raw.githubusercontent.com/{{repo}}/v{{version}}/LICENSE"
+    curl --fail --silent --show-error --location -o "$work/source.tar.gz" \
+        "https://github.com/{{repo}}/archive/refs/tags/v{{version}}.tar.gz"
     bin=$(sha256sum "$work/spot" | cut -d' ' -f1)
-    licence=$(sha256sum "$work/LICENSE" | cut -d' ' -f1)
+    source=$(sha256sum "$work/source.tar.gz" | cut -d' ' -f1)
 
     file="packaging/aur/spot-bin/PKGBUILD"
     sed -i "s|^pkgver=.*|pkgver={{version}}|; s|^pkgrel=.*|pkgrel=1|" "$file"
     sed -i "0,/^sha256sums=(/{s|^sha256sums=('.*'|sha256sums=('$bin'|}" "$file"
-    sed -i "s|^            '.*')|            '$licence')|" "$file"
+    sed -i "s|^            '.*')|            '$source')|" "$file"
     echo "$file -> {{version}}"
 
 # Push both AUR packages from this machine, after the release exists. Needs an AUR SSH key.

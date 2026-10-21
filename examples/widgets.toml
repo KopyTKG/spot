@@ -1,0 +1,49 @@
+# text, toggle, scale, multi-select list, validation and JSON output.
+#
+#   spot widgets.toml | jq
+title  = "Widgets"
+width  = 460
+style  = "theme.css"
+footer = "Enter to submit · Ctrl+Enter in the note · Esc to cancel"
+
+[[items]]
+type     = "field"
+id       = "port"
+label    = "Port"
+default  = "22"
+required = true
+pattern  = "^[0-9]+$"
+error    = "Port must be a number"
+
+[[items]]
+type        = "text"
+id          = "note"
+label       = "Note"
+placeholder = "Anything else?"
+height      = 80
+
+[[items]]
+type  = "list"
+id    = "tags"
+label = "Tags"
+multi = true
+height = 120
+options = ["red", "green", "blue", "yellow"]
+
+[[items]]
+type    = "scale"
+id      = "vol"
+label   = "Volume"
+min     = 0
+max     = 100
+step    = 5
+default = 50
+
+[[items]]
+type    = "toggle"
+id      = "sudo"
+label   = "Run as root"
+default = false
+
+[submit]
+format = "json"

@@ -66,9 +66,52 @@ icon  = "■"
 label = "Stop"
 value = "stop"
 
+[[items]]
+type        = "text"           # multi-line; Enter = newline, Ctrl+Enter submits
+id          = "note"
+label       = "Note"
+placeholder = "Anything else?"
+height      = 120              # min height in px (default 120)
+
+[[items]]
+type    = "toggle"             # check button; label is the checkbox text
+id      = "sudo"
+label   = "Run as root"
+default = false
+on      = "true"               # value when checked (default "true")
+off     = "false"              # value when unchecked (default "false")
+
+[[items]]
+type    = "scale"              # slider
+id      = "vol"
+label   = "Volume"
+min     = 0                    # default 0
+max     = 100                  # default 100
+step    = 5                    # default 1
+default = 50
+
+[[items]]
+type      = "list"
+id        = "tags"
+label     = "Tags"
+multi     = true               # select several rows; value joined by separator
+separator = ","                # default "\n"
+options   = ["red", "green", "blue"]
+
+[[items]]
+type     = "field"             # validation: any of field/password/text/select/list
+id       = "port"
+label    = "Port"
+default  = "22"
+required = true                # empty blocks submit
+pattern  = "^[0-9]+$"          # non-empty value must match (Go regexp, unanchored)
+error    = "Port must be a number"
+
 # --- submit -----------------------------------------------------------------
 # {id} = that item's value. {_active} = id of the tiles group last used.
 [submit]
 stdout = "{_active} {user} {shell} {host} {action}"   # print on submit
+# format = "json"                                       # or print every value as a JSON object (not with stdout)
 # exec  = "echo {user}@{host}"                          # or run a command
 # spawn = true                                          # exec only: fire-and-forget
+# on_error = "show"                                     # exec only: show (stderr in the dialog) | exit (leave with its status)
