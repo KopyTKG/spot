@@ -8,9 +8,12 @@
 Both depend on `gtk4` and `gtk4-layer-shell` and install `/usr/bin/spot`; they
 conflict with each other.
 
-The PKGBUILDs here are the source of truth. Releases are manual — no CI.
+The PKGBUILDs here are the source of truth. A tag build on Jenkins (`.jenkins/Jenkinsfile`) builds the binary and creates the GitHub release. **Publishing to the AUR is always manual**, from a machine with the AUR SSH key (it can't be done from CI).
 
 ## Releasing
+
+1. `just tag 0.1.0 && git push origin v0.1.0` — Jenkins builds and creates the release.
+2. Once the release exists, on your machine:
 
 ```sh
 just release 0.1.0        # tag, push tag to the `github` remote, build, gh release create
@@ -29,4 +32,11 @@ in `~/.ssh/config` (`Host aur.archlinux.org` / `User aur` / `IdentityFile ~/.ssh
 Pushing to a non-existent AUR repo creates the package. `.SRCINFO` is generated
 by `just aur-publish` via `makepkg --printsrcinfo`.
 
-Needs a `github` git remote: `git remote add github git@github.com:KopyTKG/spot.git`.
+## Jenkins
+
+Job config: pipeline from SCM, Script Path `.jenkins/Jenkinsfile`, build tags
+too. The agent needs docker (usable by the `jenkins` user), curl, jq and git.
+One credential: `github-token` (secret text, contents:write on
+KopyTKG/spot). Re-running a failed tag build is safe: the release script
+replaces assets instead of duplicating them. If Jenkins is down,
+`just release <ver>` does the same from your machine (needs `gh`).

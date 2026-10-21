@@ -18,6 +18,14 @@ default:
 build:
     go build -o spot .
 
+# Fail if anything is formatted off-style, then vet.
+lint:
+    test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+    go vet ./...
+
+# What CI runs (inside the Arch container: see ci/arch-run.sh).
+ci: lint build package
+
 # Release binary: stripped, trimmed paths, PIE.
 package:
     mkdir -p {{dist}}
@@ -29,18 +37,18 @@ clean:
     rm -rf {{dist}} spot
 
 # --------------------------------------------------------------------------
-# Release (manual — no CI)
+# Release (Jenkins builds + releases from the tag; the AUR is always manual)
 # --------------------------------------------------------------------------
 
-# Tag the current commit as v<version>.
+# Tag the current commit as v<version>; push it and Jenkins builds + releases.
 tag version:
     @test -z "$(git status --porcelain)" || { echo "working tree is dirty"; exit 1; }
     git tag -a "v{{version}}" -m "spot v{{version}}"
-    @echo "tagged v{{version}}"
+    @echo "tagged v{{version}} — push it with: git push origin v{{version}}"
 
-# Tag, push the tag, build, and publish a GitHub release with the binary (needs gh).
+# Manual fallback when CI is unavailable: tag, push, build, gh release (needs gh).
 release version: (tag version)
-    git push github "v{{version}}"
+    git push origin "v{{version}}"
     just package
     gh release create "v{{version}}" --repo {{repo}} --title "v{{version}}" --generate-notes \
         {{dist}}/spot-linux-x64
@@ -69,7 +77,7 @@ aur version:
     sed -i "s|^            '.*')|            '$licence')|" "$file"
     echo "$file -> {{version}}"
 
-# Push both AUR packages from this machine. Needs an AUR SSH key.
+# Push both AUR packages from this machine, after the release exists. Needs an AUR SSH key.
 aur-publish version:
     #!/usr/bin/env bash
     set -euo pipefail

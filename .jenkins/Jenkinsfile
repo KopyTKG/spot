@@ -1,0 +1,52 @@
+// Jenkins pipeline for spot. In the job, set Script Path to .jenkins/Jenkinsfile.
+//
+// - Lint and Build run for every branch and pull request.
+// - Publish and Release run only for a tag (v0.1.0 and so on).
+//
+// spot links gtk4 and gtk4-layer-shell through cgo, so builds run in an Arch
+// container (ci/arch-run.sh): the release binary matches Arch's libraries. The
+// agent needs docker (the jenkins user must be able to run it), plus curl, jq
+// and git. Tag builds also need a "Secret text" credential `github-token` with
+// contents:write on KopyTKG/spot.
+
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds(abortPrevious: true)
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '5'))
+    }
+
+    stages {
+        stage('Lint') {
+            steps {
+                sh 'ci/arch-run.sh lint'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'ci/arch-run.sh build'
+            }
+        }
+
+        stage('Publish') {
+            when { buildingTag() }
+            steps {
+                sh 'rm -rf dist && ci/arch-run.sh package'
+                archiveArtifacts artifacts: 'dist/spot-linux-x64', fingerprint: true
+            }
+        }
+
+        stage('Release') {
+            when { buildingTag() }
+            steps {
+                withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+                    sh 'ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
+                }
+            }
+        }
+    }
+}
