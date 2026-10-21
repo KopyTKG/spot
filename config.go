@@ -136,13 +136,33 @@ func applyEnv(cfg *Config, env func(string) (string, bool)) {
 	}
 	if v, ok := env("SPOT_DEFAULT"); ok {
 		for i := range cfg.Items {
-			switch cfg.Items[i].Type {
-			case "field", "text", "select", "list", "tiles", "toggle", "scale":
+			if takesDefault(cfg.Items[i].Type) {
 				cfg.Items[i].Default = v
-				return
+				break
 			}
 		}
 	}
+	// SPOT_DEFAULT_<ID> targets one item by id (upper-cased, non-alphanumerics
+	// as "_") and wins over SPOT_DEFAULT, so a config with several sections can
+	// pre-select each one.
+	for i := range cfg.Items {
+		it := &cfg.Items[i]
+		if it.ID == "" || !takesDefault(it.Type) {
+			continue
+		}
+		if v, ok := env("SPOT_DEFAULT_" + strings.ToUpper(sanitizeID(it.ID))); ok {
+			it.Default = v
+		}
+	}
+}
+
+// takesDefault reports whether an item type has a default value.
+func takesDefault(t string) bool {
+	switch t {
+	case "field", "text", "select", "list", "tiles", "toggle", "scale":
+		return true
+	}
+	return false
 }
 
 func (c *Config) validate() error {
@@ -366,4 +386,11 @@ func sanitizeID(s string) string {
 		out = "cfg"
 	}
 	return out
+}
+
+// appID builds the per-invocation GApplication ID for a config name. Every
+// dot-separated part of a valid ID must start with a letter, so a name such as
+// "01-form" cannot be used as is.
+func appID(name string, pid int) string {
+	return fmt.Sprintf("dev.kopy.spot.c_%s.p%d", sanitizeID(name), pid)
 }

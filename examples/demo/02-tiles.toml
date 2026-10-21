@@ -1,0 +1,58 @@
+# Two tile sections. Clicking (or Enter on) a tile submits; {_active} says
+# which section it came from. Custom fade: 100% inside, 40% outside.
+#
+#   spot 02-tiles.toml
+#   SPOT_DEFAULT=stop spot 02-tiles.toml   # pre-selects a tile in the FIRST section
+
+title    = "Tiles"
+anchor   = "center"
+width    = 460
+style    = "../theme.css"
+footer   = "Arrows move \u00b7 Enter picks \u00b7 move the mouse out to see the fade"
+
+[opacity]
+inside     = 100
+outside    = 40
+transition = 250
+
+[[items]]
+type    = "tiles"
+id      = "action"
+label   = "Actions"
+columns = 3
+default = "run"
+
+[[items.tiles]]
+icon  = "\u25b6"
+label = "Run"
+value = "run"
+
+[[items.tiles]]
+icon  = "\u25a0"
+label = "Stop"
+value = "stop"
+
+[[items.tiles]]
+icon  = "\u21bb"
+label = "Restart"
+value = "restart"
+
+[[items]]
+type    = "tiles"
+id      = "mode"
+label   = "Mode"
+columns = 2
+default = "dev"
+
+[[items.tiles]]
+icon  = "\u2699"
+label = "Dev"
+value = "dev"
+
+[[items.tiles]]
+icon  = "\u2605"
+label = "Prod"
+value = "prod"
+
+[submit]
+stdout = "{_active}: action={action} mode={mode}"

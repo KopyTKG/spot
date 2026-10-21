@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 )
 
 func noEnv(string) (string, bool) { return "", false }
@@ -300,5 +302,78 @@ func TestSeparator(t *testing.T) {
 	s := ","
 	if got := (&Item{Separator: &s}).separator(); !reflect.DeepEqual(got, ",") {
 		t.Errorf("separator = %q", got)
+	}
+}
+
+// Every shipped example must stay valid, so the docs never rot.
+func TestExamplesParse(t *testing.T) {
+	files, err := filepath.Glob("examples/*.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	demos, _ := filepath.Glob("examples/demo/*.toml")
+	files = append(files, demos...)
+	if len(files) == 0 {
+		t.Fatal("no examples found")
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parseConfig(data, noEnv); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+}
+
+// GApplication rejects an ID with a part that starts with a digit; config files
+// named like "01-form.toml" must still produce a valid one.
+func TestAppIDValid(t *testing.T) {
+	for _, name := range []string{"ssh", "01-form", "9", "my conf.v2", "", "ünï"} {
+		id := appID(name, 123)
+		if !gio.ApplicationIDIsValid(id) {
+			t.Errorf("appID(%q) = %q is not a valid application ID", name, id)
+		}
+	}
+}
+
+func TestEnvDefaultByID(t *testing.T) {
+	src := `
+[[items]]
+type = "tiles"
+id   = "action"
+
+[[items]]
+type    = "tiles"
+id      = "battery-mode"
+default = "balanced"
+
+[[items]]
+type = "password"
+id   = "pw"
+`
+	cfg, err := parseConfig([]byte(src), envOf(map[string]string{
+		"SPOT_DEFAULT":              "first",
+		"SPOT_DEFAULT_BATTERY_MODE": "performance",
+		"SPOT_DEFAULT_PW":           "ignored", // password takes no default
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Items[0].defaultString(); got != "first" {
+		t.Errorf("SPOT_DEFAULT should still reach the first item, got %q", got)
+	}
+	if got := cfg.Items[1].defaultString(); got != "performance" {
+		t.Errorf("SPOT_DEFAULT_BATTERY_MODE: got %q", got)
+	}
+	if got := cfg.Items[2].defaultString(); got != "" {
+		t.Errorf("password should not take a default, got %q", got)
+	}
+
+	// Without the per-item variable the config's own default stays.
+	cfg, _ = parseConfig([]byte(src), noEnv)
+	if got := cfg.Items[1].defaultString(); got != "balanced" {
+		t.Errorf("config default lost: %q", got)
 	}
 }

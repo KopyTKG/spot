@@ -101,7 +101,8 @@ More in [`examples/`](examples/):
 | [`menu.toml`](examples/menu.toml) | dmenu-style searchable list from stdin |
 | [`form.toml`](examples/form.toml) | Field + dropdown with an `exec` submit |
 | [`widgets.toml`](examples/widgets.toml) | text, toggle, scale, multi-select list, validation and JSON output |
-| [`theme.css`](examples/theme.css) | Full theme covering fields, lists and tiles (used by all but `ssh`) |
+| [`demo/`](examples/demo/) | **0.2.0 tour**: `./examples/demo/demo.sh` launches a form with every input widget, two tile sections, a stdin list and a failing `exec` |
+| [`theme.css`](examples/theme.css) | Full theme covering every widget, including validation and error states (used by all but `ssh`) |
 
 ## Config reference
 
@@ -280,6 +281,7 @@ Lets one shared config be parameterised per invocation:
 | `SPOT_FOOTER`      | Replaces `footer`                                                   |
 | `SPOT_PLACEHOLDER` | Placeholder of the first field / password / text / list item        |
 | `SPOT_DEFAULT`     | Default of the first field / text / select / list / tiles / toggle / scale item |
+| `SPOT_DEFAULT_<ID>` | Default of the item with that `id` (upper-cased, non-alphanumerics as `_`), e.g. `SPOT_DEFAULT_BATTERY=balanced`; wins over `SPOT_DEFAULT` |
 
 ```sh
 SPOT_DEFAULT=balanced spot power-profile.toml

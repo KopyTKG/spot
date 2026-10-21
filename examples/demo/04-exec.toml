@@ -1,0 +1,27 @@
+# exec submit that can fail. The command runs before the dialog closes; on a
+# non-zero exit the dialog STAYS OPEN and shows the command's stderr, so you can
+# retry. The right answer is 42.
+#
+#   spot 04-exec.toml
+#
+# Switch on_error to "exit" and spot instead closes and exits with the
+# command's own status.
+
+title    = "Guess"
+anchor   = "bottom right"
+width    = 360
+style    = "../theme.css"
+footer   = "Wrong answers keep the dialog open"
+keyboard = "on-demand"
+
+[[items]]
+type     = "field"
+id       = "n"
+label    = "Number"
+required = true
+pattern  = "^[0-9]+$"
+error    = "Digits only"
+
+[submit]
+exec     = "[ {n} -eq 42 ] && echo 'correct!' || { echo 'nope, try again' >&2; exit 1; }"
+on_error = "show"   # or "exit"
