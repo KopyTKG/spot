@@ -104,216 +104,36 @@ More in [`examples/`](examples/):
 | [`demo/`](examples/demo/) | **0.2.0 tour**: `./examples/demo/demo.sh` launches a form with every input widget, two tile sections, a stdin list and a failing `exec` |
 | [`theme.css`](examples/theme.css) | Full theme covering every widget, including validation and error states (used by all but `ssh`) |
 
-## Config reference
+## Documentation
 
-A single file listing every key with its default: [`examples/config-reference.toml`](examples/config-reference.toml).
+Reference docs live in [`docs/`](docs/):
 
-### Top-level
+- **[`docs/toml.md`](docs/toml.md)**: every TOML setting. Window keys, `[opacity]`, each widget type (`field`, `password`, `text`, `select`, `list`, `tiles`, `toggle`, `scale`), validation, `[submit]` (`exec`, `stdout`, JSON output, `on_error`, `{_active}`), exit codes and the `SPOT_*` environment overrides.
+- **[`docs/css.md`](docs/css.md)**: styling. The class tree, every `.spot-*` class, states and inner GTK nodes, validation styles, how the fade interacts with CSS, and a starter stylesheet.
 
-| Key        | Default       | Description                                              |
-|------------|---------------|----------------------------------------------------------|
-| `title`    | —             | Window title text (also sets GTK window title)           |
-| `anchor`   | `center`      | Where the dialog sits on screen: `center` \| `top` \| `bottom` \| `left` \| `right` (space-separated to combine, e.g. `top right`) |
-| `width`    | natural       | Dialog width in px                                       |
-| `height`   | natural       | Dialog height in px                                      |
-| `style`    | —             | Path to CSS file, relative to this TOML                  |
-| `footer`   | —             | Footer label text                                        |
-| `keyboard` | `exclusive`   | Layer-shell keyboard mode: `exclusive` \| `on-demand` \| `none` |
+For every key in one runnable file, see [`examples/config-reference.toml`](examples/config-reference.toml).
 
-### `[opacity]` (optional)
-
-The layer surface covers the whole screen; a click outside the dialog closes it.
-The dialog itself fades while the pointer is outside it. This is on by default
-(85% outside, 100% inside); `[opacity]` overrides it, and `outside = 100`
-turns it off.
-
-| Key          | Default | Description                                              |
-|--------------|---------|----------------------------------------------------------|
-| `inside`     | `100`   | Dialog opacity in % (0-100) while the pointer is over it |
-| `outside`    | `85`    | Dialog opacity in % while the pointer is outside it      |
-| `transition` | `150`   | Fade time in ms (`0` = instant)                          |
-
-The dialog starts at `inside` until the pointer first moves.
+### At a glance
 
 ```toml
-[opacity]
-inside     = 100
-outside    = 55
-transition = 200
-```
+title  = "Example"
+width  = 420
+style  = "theme.css"            # GTK CSS, see docs/css.md
 
-### `[[items]]`
+[opacity]                       # optional; fades the dialog when the pointer leaves it
+outside = 85
 
-Items are rendered top to bottom in file order.
-
-| Key           | Applies to        | Description                                                                 |
-|---------------|-------------------|-----------------------------------------------------------------------------|
-| `type`        | all               | `field` \| `password` \| `text` \| `select` \| `list` \| `tiles` \| `toggle` \| `scale` |
-| `id`          | all               | Identifier used for `{id}` substitution in `[submit]`                       |
-| `label`       | all               | Label rendered above the widget (a section heading for `tiles`)             |
-| `placeholder` | field, password, text, list | Greyed-out placeholder text                                       |
-| `default`     | field, text, select, list, tiles, toggle, scale | Pre-filled / pre-selected value (for `tiles`, a tile `value`; `toggle` takes `true`/`false`; `scale` a number; a multi `list` the options joined by `separator`) |
-| `options`     | select, list      | Array of strings to populate the dropdown / list                            |
-| `stdin`       | list              | If `true`, read newline-delimited options from stdin (dmenu-style)          |
-| `height`      | list, text        | Minimum content height in px (default 320 for `list`, 120 for `text`)       |
-| `multi`       | list              | Allow selecting several rows (see below)                                    |
-| `separator`   | list (`multi`)    | Joins the selected options (default newline)                                |
-| `on`, `off`   | toggle            | Values substituted when checked / unchecked (default `"true"` / `"false"`)  |
-| `min`, `max`, `step` | scale      | Range and increment (default `0`, `100`, `1`)                               |
-| `required`    | field, password, text, select, list | Empty value blocks submission                             |
-| `pattern`     | field, password, text, select, list | Regexp ([Go syntax](https://pkg.go.dev/regexp/syntax)) a non-empty value must match; unanchored, so write `^…$` |
-| `error`       | any validated item | Message shown under the item when it is invalid                            |
-| `columns`     | tiles             | Tiles per row (default `3`)                                                 |
-
-#### Widgets
-
-- **`text`**: multi-line `GtkTextView` with `height` and `placeholder`. Enter
-  inserts a newline, Ctrl+Enter submits.
-- **`toggle`**: a check button labelled with `label`. Substitutes `on` when
-  checked and `off` otherwise.
-- **`scale`**: horizontal slider from `min` to `max` in `step` increments,
-  starting at `default` (clamped into range).
-- **`list` with `multi = true`**: several rows can be selected. Click or
-  Ctrl+click; from the search box, Up/Down moves focus into the list, where
-  Space toggles the row and Shift/Ctrl+arrows extend the selection. The value
-  is the selected options joined by `separator`. Only rows matching the current
-  search count.
-
-```toml
-[[items]]
-type      = "list"
-id        = "pkgs"
-multi     = true
-separator = ","
-options   = ["git", "go", "just"]
-
-[[items]]
-type    = "scale"
-id      = "vol"
-min     = 0
-max     = 100
-step    = 5
-default = 50
-
-[[items]]
-type    = "toggle"
-id      = "sudo"
-label   = "Run as root"
-on      = "sudo "
-off     = ""
-```
-
-#### Validation
-
-On submit, every item with `required` or `pattern` is checked. If any fails,
-nothing is run or printed, the invalid items get the `.spot-invalid` class (plus
-their `error` message, if any) and the first one takes focus. The class is
-cleared as soon as the text is edited.
-
-```toml
-[[items]]
+[[items]]                       # field | password | text | select | list | tiles | toggle | scale
 type     = "field"
 id       = "port"
+label    = "Port"
 required = true
 pattern  = "^[0-9]+$"
 error    = "Port must be a number"
-```
 
-#### `[[items.tiles]]`
-
-Tile picker: a grid of big icon + label buttons. Click or Enter picks one and
-submits. Repeat `[[items]]` with `type = "tiles"` for several sections (see
-`{_active}` below).
-
-| Key     | Description                                                  |
-|---------|--------------------------------------------------------------|
-| `icon`  | Large text above the label (Nerd Font glyph, emoji, …)       |
-| `label` | Tile caption (omit to centre the icon alone)                 |
-| `value` | Returned as the item's value when this tile is chosen        |
-
-### `[submit]`
-
-| Key      | Default | Description                                                                |
-|----------|---------|----------------------------------------------------------------------------|
-| `exec`   | —       | Shell command template, run on submit                                      |
-| `spawn`  | `false` | (`exec` only) fire-and-forget, then close the window                       |
-| `stdout` | —       | Template printed to stdout on submit, for scripts to capture               |
-| `format` | —       | `"json"`: print every item's value as one JSON object (see below). Cannot be combined with `stdout` |
-| `on_error` | `show` | (`exec` without `spawn`) what to do when the command exits non-zero: `show` or `exit` |
-
-Templates substitute `{id}` with that item's current value. `{_active}` expands
-to the `id` of the tiles section last interacted with, so a menu with several
-tile sections can tell which one was used:
-
-```toml
 [submit]
-stdout = "{_active} {action} {battery}"
+format = "json"                 # or stdout = "{port}", or exec = "..."
 ```
-
-Without `spawn`, `exec` runs to completion before the dialog closes; its stdout
-is passed through. If it exits non-zero:
-
-- `on_error = "show"` (default): the dialog stays open and the command's stderr
-  appears in a `.spot-error` label at the bottom, so the user can fix the input
-  and try again. Nothing is printed to stdout.
-- `on_error = "exit"`: the dialog closes, stderr is written through, and spot
-  exits with the command's status.
-
-`format = "json"` makes scripts independent of template parsing; values are
-escaped properly:
-
-```sh
-$ spot ssh.toml
-{"_active":"","host":"box","port":"22","user":"me"}
-$ spot ssh.toml | jq -r .host
-```
-
-Every value is a string, except a `multi` list, which is an array of strings.
-`_active` is always present.
-
-## Environment overrides
-
-Lets one shared config be parameterised per invocation:
-
-| Variable           | Effect                                                              |
-|--------------------|---------------------------------------------------------------------|
-| `SPOT_TITLE`       | Replaces `title`                                                    |
-| `SPOT_FOOTER`      | Replaces `footer`                                                   |
-| `SPOT_PLACEHOLDER` | Placeholder of the first field / password / text / list item        |
-| `SPOT_DEFAULT`     | Default of the first field / text / select / list / tiles / toggle / scale item |
-| `SPOT_DEFAULT_<ID>` | Default of the item with that `id` (upper-cased, non-alphanumerics as `_`), e.g. `SPOT_DEFAULT_BATTERY=balanced`; wins over `SPOT_DEFAULT` |
-
-```sh
-SPOT_DEFAULT=balanced spot power-profile.toml
-```
-
-## CSS hooks
-
-Layout is decided by widget choice in the TOML (GTK4 CSS has no flex/grid —
-only visual styling). The runtime adds these classes; style them however you
-want:
-
-| Class           | Widget                                  |
-|-----------------|-----------------------------------------|
-| `.spot-window`  | Full-screen layer surface (keep it `background: transparent`) |
-| `.spot-root`    | The dialog: vertical box wrapping everything (opacity fade applies here) |
-| `.spot-title`   | Title label                             |
-| `.spot-item`    | Per-item container (label + widget)     |
-| `.spot-label`   | Item label                              |
-| `.spot-field`   | Text input (`GtkEntry`)                 |
-| `.spot-password`| Password input (`GtkPasswordEntry`)     |
-| `.spot-select`  | Dropdown (`GtkDropDown`)                |
-| `.spot-search`  | `list` search entry                     |
-| `.spot-list`, `.spot-list-scroll`, `.spot-list-row` | `list` view, its scroller, and rows |
-| `.spot-tiles`   | `tiles` grid (`GtkFlowBox`)             |
-| `.spot-tile`, `.spot-tile-body`, `.spot-tile-icon`, `.spot-tile-label` | A tile, its content box, icon and caption |
-| `.spot-text`, `.spot-text-scroll`, `.spot-text-placeholder` | `text` view, its scroller and placeholder |
-| `.spot-toggle`  | `toggle` check button                   |
-| `.spot-scale`   | `scale` slider                          |
-| `.spot-invalid` | Added to an item's widget that failed `required` / `pattern` |
-| `.spot-item-error` | An item's `error` message             |
-| `.spot-error`   | Failed `exec` message (`on_error = "show"`) |
-| `.spot-footer`  | Footer label                            |
 
 ## Install
 
