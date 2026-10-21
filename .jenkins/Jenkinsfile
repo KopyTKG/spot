@@ -21,6 +21,7 @@ pipeline {
     }
 
     environment {
+        CGO_ENABLED = '1'
         GOFLAGS = '-buildvcs=false'
         GOCACHE = "${WORKSPACE}/.cache/go-build"
         GOPATH = "${WORKSPACE}/.cache/go"
@@ -33,6 +34,19 @@ pipeline {
                 sh '''
                     mise trust --quiet "$WORKSPACE/mise.toml"
                     mise install
+                '''
+            }
+        }
+
+        stage('Toolchain') {
+            steps {
+                // cgo needs a C compiler and the gtk4 headers; fail with a clear
+                // message instead of Go's "build constraints exclude all Go files".
+                sh '''
+                    command -v gcc >/dev/null || { echo "gcc missing: apt install build-essential"; exit 1; }
+                    command -v pkg-config >/dev/null || { echo "pkg-config missing: apt install pkg-config"; exit 1; }
+                    pkg-config --exists gtk4 || { echo "gtk4 headers missing: apt install libgtk-4-dev"; exit 1; }
+                    pkg-config --exists gtk4-layer-shell-0 || { echo "gtk4-layer-shell headers missing: apt install libgtk4-layer-shell-dev"; exit 1; }
                 '''
             }
         }
