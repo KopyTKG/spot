@@ -12,3 +12,7 @@
 
 # OS
 .DS_Store
+
+# CI / release output
+/dist/
+/.cache/

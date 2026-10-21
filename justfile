@@ -23,7 +23,7 @@ lint:
     test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
     go vet ./...
 
-# What CI runs (inside the Arch container: see ci/arch-run.sh).
+# What CI runs.
 ci: lint build package
 
 # Release binary: stripped, trimmed paths, PIE.

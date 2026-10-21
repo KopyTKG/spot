@@ -3,11 +3,12 @@
 // - Lint and Build run for every branch and pull request.
 // - Publish and Release run only for a tag (v0.1.0 and so on).
 //
-// spot links gtk4 and gtk4-layer-shell through cgo, so builds run in an Arch
-// container (ci/arch-run.sh): the release binary matches Arch's libraries. The
-// agent needs docker (the jenkins user must be able to run it), plus curl, jq
-// and git. Tag builds also need a "Secret text" credential `github-token` with
-// contents:write on KopyTKG/spot.
+// spot links gtk4 and gtk4-layer-shell through cgo, so the agent needs their
+// development headers, installed from the distro (Debian: build-essential
+// pkg-config libgtk-4-dev libgtk4-layer-shell-dev), plus curl, git and mise on
+// PATH. Go, just and jq come from mise.toml (an agent that already has the
+// pinned Go installed reuses it). Tag builds also need a "Secret text"
+// credential `github-token` with contents:write on KopyTKG/spot.
 
 pipeline {
     agent any
@@ -19,23 +20,39 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '5'))
     }
 
+    environment {
+        GOFLAGS = '-buildvcs=false'
+        GOCACHE = "${WORKSPACE}/.cache/go-build"
+        GOPATH = "${WORKSPACE}/.cache/go"
+    }
+
     stages {
+        stage('Prepare') {
+            steps {
+                // Trust this checkout's mise.toml, then install what it pins.
+                sh '''
+                    mise trust --quiet "$WORKSPACE/mise.toml"
+                    mise install
+                '''
+            }
+        }
+
         stage('Lint') {
             steps {
-                sh 'ci/arch-run.sh lint'
+                sh 'mise exec -- just lint'
             }
         }
 
         stage('Build') {
             steps {
-                sh 'ci/arch-run.sh build'
+                sh 'mise exec -- just build'
             }
         }
 
         stage('Publish') {
             when { buildingTag() }
             steps {
-                sh 'rm -rf dist && ci/arch-run.sh package'
+                sh 'rm -rf dist && mise exec -- just package'
                 archiveArtifacts artifacts: 'dist/spot-linux-x64', fingerprint: true
             }
         }
@@ -44,7 +61,7 @@ pipeline {
             when { buildingTag() }
             steps {
                 withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
-                    sh 'ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
+                    sh 'mise exec -- ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
                 }
             }
         }

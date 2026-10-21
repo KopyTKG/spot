@@ -35,8 +35,13 @@ by `just aur-publish` via `makepkg --printsrcinfo`.
 ## Jenkins
 
 Job config: pipeline from SCM, Script Path `.jenkins/Jenkinsfile`, build tags
-too. The agent needs docker (usable by the `jenkins` user), curl, jq and git.
-One credential: `github-token` (secret text, contents:write on
+too. The agent (Debian) needs `build-essential pkg-config libgtk-4-dev
+libgtk4-layer-shell-dev curl git` and `mise` on PATH; Go, just and jq come from
+`mise.toml`, so any Jenkins can build it. One credential: `github-token` (secret text, contents:write on
 KopyTKG/spot). Re-running a failed tag build is safe: the release script
 replaces assets instead of duplicating them. If Jenkins is down,
 `just release <ver>` does the same from your machine (needs `gh`).
+
+The release binary is linked against Debian's gtk4 / gtk4-layer-shell and runs
+against Arch's (same sonames). If a release ever misbehaves on Arch after a
+gtk4-layer-shell bump, rebuild it locally with `just package`.
