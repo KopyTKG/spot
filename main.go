@@ -27,10 +27,19 @@ type Config struct {
 	Keyboard string // exclusive (default) | on-demand | none
 	Items    []Item
 	Submit   Submit
+	Opacity  *Opacity
+}
+
+// Opacity fades the dialog itself depending on where the pointer is.
+// Percentages are 0-100. Omit the [opacity] table for a constant, opaque dialog.
+type Opacity struct {
+	Inside     *float64 `toml:"inside"`     // % while the pointer is over the dialog (default 100)
+	Outside    *float64 `toml:"outside"`    // % while the pointer is outside it (default 100)
+	Transition *int     `toml:"transition"` // fade time in ms (default 150, 0 = instant)
 }
 
 type Item struct {
-	Type        string   // field | password | select | list | tiles
+	Type        string // field | password | select | list | tiles
 	ID          string
 	Label       string
 	Placeholder string
@@ -175,26 +184,32 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 	if cfg.Title != "" {
 		win.SetTitle(cfg.Title)
 	}
-	if cfg.Width > 0 || cfg.Height > 0 {
-		w := cfg.Width
-		if w == 0 {
-			w = -1
-		}
-		h := cfg.Height
-		if h == 0 {
-			h = -1
-		}
-		win.SetDefaultSize(w, h)
-	}
-
 	gtk4layershell.InitForWindow(&win.Window)
 	gtk4layershell.SetLayer(&win.Window, gtk4layershell.LayerShellLayerTop)
 	gtk4layershell.SetNamespace(&win.Window, "spot")
-	applyAnchor(&win.Window, cfg.Anchor)
+	// The layer surface covers the whole output so clicks outside the dialog
+	// land on it and can dismiss it; the dialog is positioned inside.
+	for _, e := range []gtk4layershell.Edge{
+		gtk4layershell.LayerShellEdgeTop, gtk4layershell.LayerShellEdgeBottom,
+		gtk4layershell.LayerShellEdgeLeft, gtk4layershell.LayerShellEdgeRight,
+	} {
+		gtk4layershell.SetAnchor(&win.Window, e, true)
+	}
 	applyKeyboard(&win.Window, cfg.Keyboard)
 
 	root := gtk.NewBox(gtk.OrientationVertical, 12)
 	root.AddCSSClass("spot-root")
+	if cfg.Width > 0 || cfg.Height > 0 {
+		w, h := cfg.Width, cfg.Height
+		if w == 0 {
+			w = -1
+		}
+		if h == 0 {
+			h = -1
+		}
+		root.SetSizeRequest(w, h)
+	}
+	placeRoot(root, cfg.Anchor)
 
 	if cfg.Title != "" {
 		t := gtk.NewLabel(cfg.Title)
@@ -207,6 +222,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 	var firstFocus gtk.Widgetter
 	var listSelection *gtk.SingleSelection // for keyboard nav
 	var listView *gtk.ListView             // for ScrollTo on key nav
+	activeID := ""                         // id of the last tiles group interacted with ({_active})
 	var submitFn func()                    // late-bound so tile click handlers can call it
 
 	for _, it := range cfg.Items {
@@ -426,6 +442,12 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 
 			row.Append(flow)
 
+			if activeID == "" {
+				activeID = item.ID
+			}
+			itemID := item.ID
+			flow.ConnectSelectedChildrenChanged(func() { activeID = itemID })
+
 			values[item.ID] = func() string {
 				selected := flow.SelectedChildren()
 				if len(selected) == 0 {
@@ -440,6 +462,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 
 			flow.ConnectChildActivated(func(child *gtk.FlowBoxChild) {
 				flow.SelectChild(child)
+				activeID = itemID
 				if submitFn != nil {
 					submitFn()
 				}
@@ -464,9 +487,25 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, submitted *bool
 
 	win.SetChild(root)
 
+	// Click outside the dialog dismisses it (same as Esc).
+	click := gtk.NewGestureClick()
+	click.SetPropagationPhase(gtk.PhaseCapture)
+	click.ConnectPressed(func(_ int, x, y float64) {
+		if rx, ry, ok := win.TranslateCoordinates(root, x, y); ok && root.Contains(rx, ry) {
+			return
+		}
+		win.Close()
+	})
+	win.AddController(click)
+
+	if cfg.Opacity != nil {
+		setupOpacity(win, root, cfg.Opacity)
+	}
+
 	var submit func()
 	submit = func() {
 		exp := func(t string) string {
+			t = strings.ReplaceAll(t, "{_active}", activeID)
 			for id, get := range values {
 				t = strings.ReplaceAll(t, "{"+id+"}", get())
 			}
@@ -559,23 +598,22 @@ func moveSelection(sel *gtk.SingleSelection, lv *gtk.ListView, delta int) {
 	}
 }
 
-func applyAnchor(win *gtk.Window, anchor string) {
-	a := strings.ToLower(strings.TrimSpace(anchor))
-	if a == "" || a == "center" {
-		return
-	}
-	for _, part := range strings.Fields(a) {
+func placeRoot(root *gtk.Box, anchor string) {
+	h, v := gtk.AlignCenter, gtk.AlignCenter
+	for _, part := range strings.Fields(strings.ToLower(anchor)) {
 		switch part {
 		case "top":
-			gtk4layershell.SetAnchor(win, gtk4layershell.LayerShellEdgeTop, true)
+			v = gtk.AlignStart
 		case "bottom":
-			gtk4layershell.SetAnchor(win, gtk4layershell.LayerShellEdgeBottom, true)
+			v = gtk.AlignEnd
 		case "left":
-			gtk4layershell.SetAnchor(win, gtk4layershell.LayerShellEdgeLeft, true)
+			h = gtk.AlignStart
 		case "right":
-			gtk4layershell.SetAnchor(win, gtk4layershell.LayerShellEdgeRight, true)
+			h = gtk.AlignEnd
 		}
 	}
+	root.SetHAlign(h)
+	root.SetVAlign(v)
 }
 
 func applyKeyboard(win *gtk.Window, mode string) {
@@ -594,4 +632,53 @@ func spawn(cmd string) {
 	if err := c.Start(); err != nil {
 		log.Printf("spawn: %v", err)
 	}
+}
+
+// setupOpacity fades the dialog between its "pointer over" and "pointer
+// outside" opacities.
+func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) {
+	pct := func(p *float64) float64 {
+		if p == nil {
+			return 1
+		}
+		return max(0, min(100, *p)) / 100
+	}
+	in, out := pct(o.Inside), pct(o.Outside)
+	ms := 150
+	if o.Transition != nil {
+		ms = *o.Transition
+	}
+
+	prov := gtk.NewCSSProvider()
+	gtk.StyleContextAddProviderForDisplay(
+		gdk.DisplayGetDefault(), prov, uint(gtk.STYLE_PROVIDER_PRIORITY_USER))
+	set := func(a float64) {
+		prov.LoadFromString(fmt.Sprintf(
+			".spot-root { opacity: %.3f; transition: opacity %dms ease; }", a, ms))
+	}
+
+	// Start at the "inside" opacity: until the pointer moves we cannot know
+	// whether it is over the dialog.
+	inside := true
+	set(in)
+	update := func(now bool) {
+		if now == inside {
+			return
+		}
+		inside = now
+		if now {
+			set(in)
+		} else {
+			set(out)
+		}
+	}
+
+	motion := gtk.NewEventControllerMotion()
+	motion.SetPropagationPhase(gtk.PhaseCapture)
+	motion.ConnectMotion(func(x, y float64) {
+		rx, ry, ok := win.TranslateCoordinates(root, x, y)
+		update(ok && root.Contains(rx, ry))
+	})
+	motion.ConnectLeave(func() { update(false) })
+	win.AddController(motion)
 }

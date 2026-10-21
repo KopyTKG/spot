@@ -64,6 +64,27 @@ See `examples/` for the matching `ssh.css`.
 | `footer`   | —             | Footer label text                                        |
 | `keyboard` | `exclusive`   | Layer-shell keyboard mode: `exclusive` \| `on-demand` \| `none` |
 
+### `[opacity]` (optional)
+
+The layer surface covers the whole screen; a click outside the dialog closes it.
+`[opacity]` fades the dialog itself depending on where the pointer is. Without
+the table the dialog is always fully opaque.
+
+| Key          | Default | Description                                              |
+|--------------|---------|----------------------------------------------------------|
+| `inside`     | `100`   | Dialog opacity in % (0-100) while the pointer is over it |
+| `outside`    | `100`   | Dialog opacity in % while the pointer is outside it      |
+| `transition` | `150`   | Fade time in ms (`0` = instant)                          |
+
+The dialog starts at `inside` until the pointer first moves.
+
+```toml
+[opacity]
+inside     = 100
+outside    = 55
+transition = 200
+```
+
 ### `[[items]]`
 
 | Key           | Applies to | Description                                                                 |
