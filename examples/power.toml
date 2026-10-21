@@ -1,0 +1,72 @@
+# Two-section tile menu. Each [[items]] tiles group is a section; {_active}
+# in the submit template says which one was used.
+#
+#   out=$(spot power.toml) || exit 0
+#   read -r section action battery <<<"$out"
+
+title    = "Power Menu"
+anchor   = "center"
+width    = 480
+style    = "theme.css"
+keyboard = "exclusive"
+
+[[items]]
+label   = "Power"
+type    = "tiles"
+id      = "action"
+columns = 3
+
+[[items.tiles]]
+icon  = ""
+label = "Lock"
+value = "lock"
+
+[[items.tiles]]
+icon  = ""
+label = "Suspend"
+value = "suspend"
+
+[[items.tiles]]
+icon  = ""
+label = "Hibernate"
+value = "hibernate"
+
+[[items.tiles]]
+icon  = ""
+label = "Logout"
+value = "logout"
+
+[[items.tiles]]
+icon  = ""
+label = "Restart"
+value = "restart"
+
+[[items.tiles]]
+icon  = ""
+label = "Shutdown"
+value = "shutdown"
+
+[[items]]
+label   = "Battery"
+type    = "tiles"
+id      = "battery"
+columns = 3
+default = "balanced"
+
+[[items.tiles]]
+icon  = ""
+label = "Power saver"
+value = "power-saver"
+
+[[items.tiles]]
+icon  = ""
+label = "Balanced"
+value = "balanced"
+
+[[items.tiles]]
+icon  = ""
+label = "Performance"
+value = "performance"
+
+[submit]
+stdout = "{_active} {action} {battery}"

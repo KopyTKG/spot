@@ -1,0 +1,29 @@
+# Yes / No prompt as two tiles. Title comes from the caller:
+#
+#   SPOT_TITLE="Delete 3 files?" spot confirm.toml | grep -qx yes && rm ...
+#   SPOT_DEFAULT=no ...   # pre-select the safe answer
+
+title    = "Confirm"
+anchor   = "center"
+width    = 300
+style    = "theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type    = "tiles"
+id      = "answer"
+columns = 2
+default = "no"
+
+[[items.tiles]]
+icon  = "✓"
+label = "Yes"
+value = "yes"
+
+[[items.tiles]]
+icon  = "✗"
+label = "No"
+value = "no"
+
+[submit]
+stdout = "{answer}"

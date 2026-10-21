@@ -1,0 +1,19 @@
+# dmenu-style picker: options come from stdin, the choice goes to stdout.
+#
+#   printf '%s\n' alpha beta gamma | spot menu.toml
+#   ls ~/Pictures | SPOT_PLACEHOLDER="Pick a file..." spot menu.toml
+
+anchor   = "center"
+width    = 360
+style    = "theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type        = "list"
+id          = "choice"
+placeholder = "Search..."
+stdin       = true
+height      = 360
+
+[submit]
+stdout = "{choice}"

@@ -1,0 +1,28 @@
+# Mixed form: text field, dropdown with static options, and an exec submit.
+# {id} placeholders are replaced with each item's value before running.
+#
+#   spot form.toml
+
+title    = "New note"
+anchor   = "top"
+width    = 440
+style    = "theme.css"
+footer   = "Enter to create · Esc to cancel"
+keyboard = "exclusive"
+
+[[items]]
+type        = "field"
+id          = "name"
+label       = "Name"
+placeholder = "meeting-notes"
+
+[[items]]
+type    = "select"
+id      = "kind"
+label   = "Kind"
+options = ["note", "todo", "journal"]
+default = "note"
+
+[submit]
+exec  = "touch ~/{kind}-{name}.md"
+spawn = true

@@ -57,9 +57,22 @@ spawn = true
 spot ssh.toml
 ```
 
-See `examples/` for the matching `ssh.css`.
+More in [`examples/`](examples/):
+
+| File | Shows |
+|------|-------|
+| [`ssh.toml`](examples/ssh.toml) + [`ssh.css`](examples/ssh.css) | Form of fields, `exec` + `spawn` submit |
+| [`config-reference.toml`](examples/config-reference.toml) | **Every setting** in one commented file, with defaults |
+| [`power.toml`](examples/power.toml) | Two-section tile menu using `{_active}` |
+| [`confirm.toml`](examples/confirm.toml) | Yes/No tiles, `SPOT_TITLE` / `SPOT_DEFAULT` |
+| [`password.toml`](examples/password.toml) | Password prompt printed to stdout |
+| [`menu.toml`](examples/menu.toml) | dmenu-style searchable list from stdin |
+| [`form.toml`](examples/form.toml) | Field + dropdown with an `exec` submit |
+| [`theme.css`](examples/theme.css) | Full theme covering fields, lists and tiles (used by all but `ssh`) |
 
 ## Config reference
+
+A single file listing every key with its default: [`examples/config-reference.toml`](examples/config-reference.toml).
 
 ### Top-level
 

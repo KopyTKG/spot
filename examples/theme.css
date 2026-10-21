@@ -1,0 +1,146 @@
+/* Shared example theme — Stone palette covering every widget (field, list, tiles). */
+
+* {
+  font-family: "CaskaydiaMono Nerd Font", monospace;
+}
+
+.spot-window {
+  background: transparent;
+}
+
+/* Outer pill — single rounded card, soft translucent border like walker. */
+.spot-root {
+  background: #1c1917;
+  color: #fafaf9;
+  border: 1px solid rgba(245, 245, 244, 0.18);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.spot-title {
+  font-size: 13pt;
+  font-weight: bold;
+  color: #fafaf9;
+  margin: 2px 0 8px 0;
+}
+
+.spot-label {
+  font-size: 10pt;
+  color: #a8a29e;
+  margin-left: 2px;
+}
+
+/* Inputs share the same inset pill — flat, no double-border. */
+.spot-field,
+.spot-password,
+.spot-search {
+  background: rgba(0, 0, 0, 0.25);
+  color: #fafaf9;
+  border: 1px solid rgba(245, 245, 244, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  caret-color: #7aa2f7;
+}
+
+.spot-search {
+  font-size: 12pt;
+}
+
+.spot-field:focus,
+.spot-password:focus,
+.spot-search:focus,
+.spot-search:focus-within {
+  border-color: rgba(122, 162, 247, 0.55);
+  outline: none;
+}
+
+.spot-select {
+  background: rgba(0, 0, 0, 0.25);
+  color: #fafaf9;
+  border: 1px solid rgba(245, 245, 244, 0.08);
+  border-radius: 10px;
+}
+
+/* List — no inner pill, just a transparent scroll region. Rows carry their
+   own padding + selection highlight (walker pattern). */
+.spot-list-scroll {
+  background: transparent;
+  border: none;
+}
+
+.spot-list {
+  background: transparent;
+  padding: 4px 0 0 0;
+}
+
+.spot-list row {
+  padding: 0;
+  margin: 2px 0;
+  border-radius: 8px;
+}
+
+.spot-list row:hover {
+  background: rgba(245, 245, 244, 0.04);
+}
+
+.spot-list row:selected {
+  background: rgba(68, 64, 60, 0.55);
+}
+
+.spot-list-row {
+  padding: 8px 12px;
+  color: #d6d3d1;
+}
+
+.spot-list row:selected .spot-list-row {
+  color: #fafaf9;
+}
+
+/* Tiles — square-ish icon-over-label cards, equal-width via FlowBox. */
+.spot-tiles {
+  background: transparent;
+  padding: 4px 0;
+}
+
+.spot-tile {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(245, 245, 244, 0.08);
+  border-radius: 12px;
+  margin: 4px;
+  padding: 0;
+  min-width: 96px;
+  min-height: 96px;
+}
+
+.spot-tile:hover {
+  background: rgba(245, 245, 244, 0.05);
+}
+
+.spot-tile:selected {
+  background: rgba(122, 162, 247, 0.16);
+  border-color: rgba(122, 162, 247, 0.55);
+}
+
+.spot-tile-body {
+  padding: 14px 10px;
+}
+
+.spot-tile-icon {
+  font-size: 26pt;
+  color: #fafaf9;
+}
+
+.spot-tile-label {
+  font-size: 10pt;
+  color: #d6d3d1;
+}
+
+.spot-tile:selected .spot-tile-label {
+  color: #fafaf9;
+}
+
+.spot-footer {
+  font-size: 9pt;
+  color: rgba(214, 211, 209, 0.5);
+  margin: 6px 2px 0 2px;
+}

@@ -1,0 +1,74 @@
+# Every spot setting in one file, with its default. Delete what you don't need.
+#
+#   spot config-reference.toml
+
+# --- window ---------------------------------------------------------------
+title    = "Reference"        # heading + window title (SPOT_TITLE overrides)
+anchor   = "center"           # center | top | bottom | left | right (combine: "top right")
+width    = 420                # dialog width in px (omit for natural size)
+height   = 0                  # dialog height in px (0 = natural)
+style    = "theme.css"        # CSS file, relative to this TOML (or absolute)
+footer   = "Enter to submit · Esc to cancel"   # SPOT_FOOTER overrides
+keyboard = "exclusive"        # exclusive | on-demand | none
+
+# --- opacity (optional) -----------------------------------------------------
+# The dialog fades while the pointer is outside it. This table is optional:
+# without it the defaults below apply. outside = 100 disables the fade.
+[opacity]
+inside     = 100              # % while the pointer is over the dialog
+outside    = 85               # % while the pointer is outside it
+transition = 150              # fade time in ms (0 = instant)
+
+# --- items ------------------------------------------------------------------
+# Rendered top to bottom. Every item has: type, id, label.
+
+[[items]]
+type        = "field"          # text entry
+id          = "user"
+label       = "User"
+placeholder = "name"           # SPOT_PLACEHOLDER overrides (first field/password/list)
+default     = "root"           # SPOT_DEFAULT overrides (first field/select/list/tiles)
+
+[[items]]
+type  = "password"             # masked entry
+id    = "pw"
+label = "Password"
+
+[[items]]
+type    = "select"             # dropdown
+id      = "shell"
+label   = "Shell"
+options = ["fish", "bash", "zsh"]
+default = "fish"
+
+[[items]]
+type        = "list"           # searchable list
+id          = "host"
+label       = "Host"
+placeholder = "Search..."
+options     = ["alpha", "beta", "gamma"]   # or: stdin = true to read from stdin
+height      = 200                          # min list height in px
+
+[[items]]
+type    = "tiles"              # icon + label grid; click/Enter picks and submits
+id      = "action"
+label   = "Action"
+columns = 3                    # tiles per row (default 3)
+default = "run"
+
+[[items.tiles]]
+icon  = "▶"               # large glyph
+label = "Run"                  # optional caption
+value = "run"                  # what the item returns
+
+[[items.tiles]]
+icon  = "■"
+label = "Stop"
+value = "stop"
+
+# --- submit -----------------------------------------------------------------
+# {id} = that item's value. {_active} = id of the tiles group last used.
+[submit]
+stdout = "{_active} {user} {shell} {host} {action}"   # print on submit
+# exec  = "echo {user}@{host}"                          # or run a command
+# spawn = true                                          # exec only: fire-and-forget
