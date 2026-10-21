@@ -270,13 +270,19 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 			}
 
 			var query string
+			// match = "smart" on a single-select list reorders the list itself
+			// (best match first), so the filter lets everything through.
+			ranked := item.Match == "smart" && !item.Multi
 			filt := gtk.NewCustomFilter(func(obj *coreglib.Object) bool {
-				if query == "" {
+				if query == "" || ranked {
 					return true
 				}
 				so, ok := obj.Cast().(*gtk.StringObject)
 				if !ok {
 					return false
+				}
+				if item.Match == "smart" {
+					return smartScore(so.String(), query) >= 0
 				}
 				return strings.Contains(
 					strings.ToLower(so.String()),
@@ -340,6 +346,9 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 
 			search.ConnectSearchChanged(func() {
 				query = search.Text()
+				if ranked {
+					model.Splice(0, model.NItems(), rankSmart(opts, query))
+				}
 				filt.Changed(gtk.FilterChangeDifferent)
 				if selection != nil && filterModel.NItems() > 0 {
 					selection.SetSelected(0)

@@ -12,6 +12,7 @@ keyboard = "exclusive"
 type        = "list"
 id          = "choice"
 placeholder = "Search..."
+match       = "smart"   # abbreviations: "rmt" finds "Remote"; remove for plain substring
 stdin       = true
 height      = 360
 

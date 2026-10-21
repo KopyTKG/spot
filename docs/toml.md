@@ -179,6 +179,7 @@ Searchable list: type to filter, Up/Down to move, Enter to pick.
 | `options` | none | Array of strings |
 | `stdin` | `false` | Read newline-delimited options from stdin instead (dmenu style) |
 | `height` | `320` | Minimum list height in px |
+| `match` | `contains` | How typing filters: `contains` (case-insensitive substring) or `smart` (see below) |
 | `multi` | `false` | Allow selecting several rows |
 | `separator` | newline | Joins the selection of a `multi` list in `{id}` templates |
 
@@ -199,6 +200,23 @@ options   = ["red", "green", "blue"]
 ```sh
 printf '%s\n' alpha beta gamma | spot menu.toml    # stdin = true
 ```
+
+**Smart matching** (`match = "smart"`) works like abbreviations on a network
+device CLI: type a few letters and Enter picks the best hit. Each
+whitespace-separated term of the query has to match, case and icons are
+ignored, and a single-select list is reordered best match first:
+
+| Typed | Finds | Why |
+|-------|-------|-----|
+| `rem` | `Remote` | prefix of the text |
+| `fire` | `System Firewall` | prefix of a word |
+| `sf` | `System Firewall` | word initials |
+| `rmt` | `Remote` | letters in order, gaps allowed |
+| `sys fw` | `System Firewall` | every term must match |
+
+Prefix matches rank above initials, above substrings, above scattered letters;
+ties keep the original order. A `multi` list filters the same way but is not
+reordered (reordering would drop the rows you already selected).
 
 ### `tiles`
 

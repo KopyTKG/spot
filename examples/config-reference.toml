@@ -48,6 +48,7 @@ label       = "Host"
 placeholder = "Search..."
 options     = ["alpha", "beta", "gamma"]   # or: stdin = true to read from stdin
 height      = 200                          # min list height in px
+match       = "contains"                   # contains | smart (abbreviations: "rmt" finds "Remote")
 
 [[items]]
 type    = "tiles"              # icon + label grid; click/Enter picks and submits
