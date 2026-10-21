@@ -1,7 +1,8 @@
 // Jenkins pipeline for spot. In the job, set Script Path to .jenkins/Jenkinsfile.
 //
 // - Lint, Test and Build run for every branch and pull request.
-// - Publish and Release run only for a tag (v0.1.0 and so on).
+// - Publish and Release run only for a tag (v0.1.0 and so on). A tag build skips
+//   Build: Publish compiles the same code in release mode.
 //
 // spot links gtk4 and gtk4-layer-shell through cgo, so the agent needs their
 // development headers, installed from the distro (Debian: build-essential
@@ -10,6 +11,11 @@
 // pinned Go installed reuses it). Tag builds also need a "Secret text"
 // credential `spot-github-token` with contents:write on KopyTKG/spot (not
 // `github-token`: that one belongs to Sleepy and is scoped to that repo only).
+//
+// Compiling the gotk4 cgo bindings is the slow part (they build one after
+// another, so extra CPUs don't help). The Go build and module caches therefore
+// live under the agent user's ~/.cache/spot/, shared by every branch and tag,
+// instead of in the per-tag workspace: only the first build is cold.
 
 pipeline {
     agent any
@@ -24,13 +30,19 @@ pipeline {
     environment {
         CGO_ENABLED = '1'
         GOFLAGS = '-buildvcs=false'
-        GOCACHE = "${WORKSPACE}/.cache/go-build"
-        GOPATH = "${WORKSPACE}/.cache/go"
     }
 
     stages {
         stage('Prepare') {
             steps {
+                // Caches outside the workspace, so they survive across tags.
+                script {
+                    def home = sh(returnStdout: true, script: 'echo "$HOME"').trim()
+                    env.GOCACHE = "${home}/.cache/spot/go-build"
+                    env.GOPATH = "${home}/.cache/spot/go"
+                }
+                sh 'mkdir -p "$GOCACHE" "$GOPATH"'
+
                 // Trust this checkout's mise.toml, then install what it pins.
                 sh '''
                     mise trust --quiet "$WORKSPACE/mise.toml"
@@ -66,6 +78,7 @@ pipeline {
         }
 
         stage('Build') {
+            when { not { buildingTag() } }
             steps {
                 sh 'mise exec -- just build'
             }
