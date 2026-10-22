@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/diamondburned/gotk4-layer-shell/pkg/gtk4layershell"
@@ -132,6 +133,12 @@ func main() {
 }
 
 func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
+	// Default look of the keyboard cursor; any theme CSS overrides it.
+	cursor := gtk.NewCSSProvider()
+	cursor.LoadFromString(".spot-picked { background: alpha(currentColor, 0.18); }\n.spot-cursor { outline: 2px solid alpha(currentColor, 0.8); outline-offset: -2px; border-radius: 12px; }")
+	gtk.StyleContextAddProviderForDisplay(
+		gdk.DisplayGetDefault(), cursor, uint(gtk.STYLE_PROVIDER_PRIORITY_FALLBACK))
+
 	if cssPath != "" {
 		if css, err := os.ReadFile(cssPath); err == nil {
 			prov := gtk.NewCSSProvider()
@@ -191,6 +198,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 	var listView *gtk.ListView             // for ScrollTo on key nav
 	var multiSearch *gtk.SearchEntry       // multi-select list: Up/Down move focus into the list
 	var multiView *gtk.ListView
+	nav := &tileNav{}             // keyboard cursor across all tile sections
 	var textViews []*gtk.TextView // Enter inserts a newline in these; Ctrl+Enter submits
 	multiValues := map[string]func() []string{}
 	var checks []*check // items with required / pattern rules
@@ -427,6 +435,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 
 			tiles := item.Tiles
 			children := make([]*gtk.FlowBoxChild, len(tiles))
+			picks := make([]*gtk.Label, len(tiles)) // "●" marker, shown on the picked tile
 			for i, tl := range tiles {
 				tileBox := gtk.NewBox(gtk.OrientationVertical, 6)
 				tileBox.AddCSSClass("spot-tile-body")
@@ -445,8 +454,26 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 					tileBox.Append(nameLbl)
 				}
 
+				pick := gtk.NewLabel("●")
+				pick.AddCSSClass("spot-tile-pick")
+				pick.SetHAlign(gtk.AlignCenter)
+				pick.SetVisible(false)
+				tileBox.Append(pick)
+				picks[i] = pick
+
+				isCurrent := item.Current != "" && tl.Value == item.Current
+				if isCurrent {
+					badge := gtk.NewLabel("● active")
+					badge.AddCSSClass("spot-tile-badge")
+					badge.SetHAlign(gtk.AlignCenter)
+					tileBox.Append(badge)
+				}
+
 				child := gtk.NewFlowBoxChild()
 				child.AddCSSClass("spot-tile")
+				if isCurrent {
+					child.AddCSSClass("spot-active")
+				}
 				child.SetChild(tileBox)
 				flow.Append(child)
 				children[i] = child
@@ -471,7 +498,35 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 				activeID = item.ID
 			}
 			itemID := item.ID
-			flow.ConnectSelectedChildrenChanged(func() { activeID = itemID })
+			group := &tileGroup{id: itemID, flow: flow, children: children, cols: cols}
+			nav.groups = append(nav.groups, group)
+			markPicked := func() {
+				for i, c := range children {
+					c.RemoveCSSClass("spot-picked")
+					picks[i].SetVisible(false)
+				}
+				if i := group.selected(); i >= 0 {
+					children[i].AddCSSClass("spot-picked")
+					picks[i].SetVisible(true)
+				}
+			}
+			markPicked()
+			flow.ConnectSelectedChildrenChanged(func() {
+				activeID = itemID
+				markPicked()
+			})
+			focus := gtk.NewEventControllerFocus()
+			focus.ConnectEnter(func() {
+				nav.active, nav.cur = group, max(group.selected(), 0)
+				nav.show(group)
+			})
+			focus.ConnectLeave(func() {
+				if nav.active == group {
+					nav.active = nil
+					nav.hide()
+				}
+			})
+			flow.AddController(focus)
 
 			values[item.ID] = func() string {
 				selected := flow.SelectedChildren()
@@ -624,7 +679,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 	if op == nil {
 		op = &Opacity{}
 	}
-	setupOpacity(win, root, op)
+	keyPressed := setupOpacity(win, root, op)
 
 	submit := func() {
 		vals := make(map[string]string, len(values))
@@ -692,6 +747,7 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 	// "clear-on-Esc" / "activate-on-Enter" handlers eat them.
 	keys.SetPropagationPhase(gtk.PhaseCapture)
 	keys.ConnectKeyPressed(func(keyval, _ uint, state gdk.ModifierType) bool {
+		keyPressed()
 		// In a text area plain Enter is a newline; Ctrl+Enter submits.
 		inText := false
 		for _, tv := range textViews {
@@ -708,6 +764,24 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 				return true
 			}
 		}
+		// While a tile section has focus the arrow keys drive one cursor
+		// across all sections (GTK's own navigation stops at a section's edge).
+		if nav.active != nil {
+			var dx, dy int
+			switch keyval {
+			case gdk.KEY_Left, gdk.KEY_KP_Left:
+				dx = -1
+			case gdk.KEY_Right, gdk.KEY_KP_Right:
+				dx = 1
+			case gdk.KEY_Up, gdk.KEY_KP_Up:
+				dy = -1
+			case gdk.KEY_Down, gdk.KEY_KP_Down:
+				dy = 1
+			}
+			if (dx != 0 || dy != 0) && nav.move(dx, dy) {
+				return true
+			}
+		}
 		switch keyval {
 		case gdk.KEY_Escape:
 			win.Close()
@@ -715,6 +789,9 @@ func activate(app *gtk.Application, cfg *Config, cssPath string, out *outcome) {
 		case gdk.KEY_Return, gdk.KEY_KP_Enter:
 			if inText && state&gdk.ControlMask == 0 {
 				return false
+			}
+			if nav.active != nil {
+				activeID = nav.choose()
 			}
 			submit()
 			return true
@@ -819,6 +896,97 @@ func runCommand(cmd string) (stderr string, status int) {
 	}
 }
 
+// tileGroup is one `tiles` section.
+type tileGroup struct {
+	id       string
+	flow     *gtk.FlowBox
+	children []*gtk.FlowBoxChild
+	cols     int
+}
+
+// selected is the index of the section's selected tile, or -1.
+func (g *tileGroup) selected() int {
+	sel := g.flow.SelectedChildren()
+	if len(sel) == 0 {
+		return -1
+	}
+	return sel[0].Index()
+}
+
+// tileNav is the keyboard cursor over every tile section, drawn with
+// .spot-cursor. It moves independently of each section's selection (the
+// picked tile), which only changes when the cursor tile is chosen with Enter.
+type tileNav struct {
+	groups []*tileGroup
+	active *tileGroup // section holding keyboard focus, nil if none
+	cur    int        // cursor tile within active
+}
+
+// choose selects the tile under the cursor and returns its section's id.
+func (n *tileNav) choose() string {
+	n.active.flow.SelectChild(n.active.children[n.cur])
+	return n.active.id
+}
+
+// hide removes the cursor from every tile.
+func (n *tileNav) hide() {
+	for _, g := range n.groups {
+		for _, c := range g.children {
+			c.RemoveCSSClass("spot-cursor")
+		}
+	}
+}
+
+// show puts the cursor on tile n.cur of g and nowhere else.
+func (n *tileNav) show(g *tileGroup) {
+	n.hide()
+	if n.cur >= 0 && n.cur < len(g.children) {
+		g.children[n.cur].AddCSSClass("spot-cursor")
+	}
+}
+
+// move steps the cursor by (dx, dy) tiles, crossing into the neighbouring
+// section past the first or last row. It reports whether it moved; at the
+// outer edge it returns false so GTK can move focus on.
+func (n *tileNav) move(dx, dy int) bool {
+	gi := slices.Index(n.groups, n.active)
+	g := n.groups[gi]
+	idx := n.cur
+	row, col := idx/g.cols, idx%g.cols
+	last := len(g.children) - 1
+
+	target, next := g, idx
+	switch {
+	case dx != 0:
+		next = idx + dx
+		if next < 0 || next > last || next/g.cols != row {
+			return true // end of the row: stay, but the key is ours
+		}
+	case dy > 0 && idx+g.cols <= last:
+		next = idx + g.cols
+	case dy > 0 && row < last/g.cols:
+		next = last // short final row
+	case dy > 0:
+		if gi+1 >= len(n.groups) || len(n.groups[gi+1].children) == 0 {
+			return false
+		}
+		target = n.groups[gi+1]
+		next = min(col, len(target.children)-1)
+	case dy < 0 && idx-g.cols >= 0:
+		next = idx - g.cols
+	default:
+		if gi == 0 || len(n.groups[gi-1].children) == 0 {
+			return false
+		}
+		target = n.groups[gi-1]
+		next = min((len(target.children)-1)/target.cols*target.cols+col, len(target.children)-1)
+	}
+	target.children[next].GrabFocus()
+	n.active, n.cur = target, next
+	n.show(target)
+	return true
+}
+
 // check ties an item's required / pattern rules to its widget.
 type check struct {
 	item   Item
@@ -855,8 +1023,10 @@ func roundTo(v, step float64) float64 {
 }
 
 // setupOpacity fades the dialog between its "pointer over" and "pointer
-// outside" opacities.
-func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) {
+// outside" opacities. It returns keyPressed, to be called on every key press:
+// the pointer is then hidden and ignored (the dialog counts as "inside")
+// until it really moves again.
+func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) (keyPressed func()) {
 	pct := func(p *float64, def float64) float64 {
 		if p != nil {
 			def = *p
@@ -893,12 +1063,41 @@ func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) {
 		}
 	}
 
+	// While the keyboard is in use the pointer is hidden and its position
+	// ignored. GTK can re-send motion at the same spot (e.g. after a
+	// relayout), so only a changed position counts as the pointer moving.
+	typing := false
+	var lastX, lastY float64
+	var haveLast bool
+
 	motion := gtk.NewEventControllerMotion()
 	motion.SetPropagationPhase(gtk.PhaseCapture)
 	motion.ConnectMotion(func(x, y float64) {
+		moved := !haveLast || x != lastX || y != lastY
+		lastX, lastY, haveLast = x, y, true
+		if typing {
+			if !moved {
+				return
+			}
+			typing = false
+			win.SetCursor(nil)
+		}
 		rx, ry, ok := win.TranslateCoordinates(root, x, y)
 		update(ok && root.Contains(rx, ry))
 	})
-	motion.ConnectLeave(func() { update(false) })
+	motion.ConnectLeave(func() {
+		if !typing {
+			update(false)
+		}
+	})
 	win.AddController(motion)
+
+	return func() {
+		if typing {
+			return
+		}
+		typing = true
+		win.SetCursorFromName("none")
+		update(true)
+	}
 }

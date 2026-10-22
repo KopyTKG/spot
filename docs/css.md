@@ -93,6 +93,10 @@ The widget inside an `.spot-item`, by `type`:
 | `.spot-list-row` | A row's label inside the list |
 | `.spot-tiles` | `tiles` grid (`GtkFlowBox`) |
 | `.spot-tile` | One tile (the flow-box child; carries `:selected`) |
+| `.spot-picked` | Each tiles section's selected tile, kept even while the cursor is in another section, so every section shows its pending choice. Default: a light fill; the cursor outline is separate |
+| `.spot-tile-pick` | A "●" marker inside every tile, visible only on the picked tile (so the pick shows even without CSS for `.spot-picked`) |
+| `.spot-active` | The tile whose `value` equals the item's `current`; its body holds a `.spot-tile-badge` label |
+| `.spot-cursor` | Added to the tile the keyboard cursor is on. The arrow keys move it across every tiles section without changing any section's pick; Enter picks the cursor tile and submits; a faint outline is the default, so override it in your CSS |
 | `.spot-tile-body` | Box inside a tile holding icon and caption |
 | `.spot-tile-icon` | A tile's `icon` |
 | `.spot-tile-label` | A tile's `label` |

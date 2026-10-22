@@ -440,3 +440,14 @@ func TestMatchModeValidated(t *testing.T) {
 		t.Errorf("match = smart rejected: %v", err)
 	}
 }
+
+func TestEnvCurrentForTiles(t *testing.T) {
+	cfg, err := parseConfig([]byte("[[items]]\ntype=\"tiles\"\nid=\"battery-mode\"\n[[items]]\ntype=\"field\"\nid=\"f\"\n"),
+		envOf(map[string]string{"SPOT_CURRENT_BATTERY_MODE": "balanced", "SPOT_CURRENT_F": "x"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Items[0].Current != "balanced" || cfg.Items[1].Current != "" {
+		t.Errorf("current: %q %q", cfg.Items[0].Current, cfg.Items[1].Current)
+	}
+}

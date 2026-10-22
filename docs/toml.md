@@ -88,6 +88,9 @@ The dialog fades while the pointer is outside it. This is **on by default**
 
 The dialog starts at `inside` until the pointer first moves.
 
+Pressing a key hides the mouse pointer and stops tracking it: the dialog stays
+at `inside` until the pointer actually moves again.
+
 ```toml
 [opacity]
 inside     = 100
@@ -227,6 +230,7 @@ it, picks it **and submits the whole dialog**.
 |-----|---------|-------------|
 | `columns` | `3` | Tiles per row |
 | `default` | first tile | `value` of the tile selected initially |
+| `current` | none | `value` of the tile that is the live setting (say, the power profile in use). It gets a persistent `● active` badge and the `.spot-active` class, whatever is selected. `SPOT_CURRENT_<ID>` sets it from a script |
 
 Each tile is an `[[items.tiles]]` table:
 
@@ -368,6 +372,7 @@ Let one shared config be parameterised per call.
 | `SPOT_FOOTER` | Replaces `footer` |
 | `SPOT_PLACEHOLDER` | Placeholder of the first field, password, text or list item |
 | `SPOT_DEFAULT` | Default of the first item that takes one (field, text, select, list, tiles, toggle, scale) |
+| `SPOT_CURRENT_<ID>` | `current` of the `tiles` item with that `id`, same naming as `SPOT_DEFAULT_<ID>` |
 | `SPOT_DEFAULT_<ID>` | Default of the item with that `id`, upper-cased with non-alphanumerics as `_` (`battery-mode` becomes `SPOT_DEFAULT_BATTERY_MODE`). Wins over `SPOT_DEFAULT` |
 
 ```sh

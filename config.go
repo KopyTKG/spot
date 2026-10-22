@@ -57,6 +57,7 @@ type Item struct {
 	Height      int      // list, text: min content height in px
 	Columns     int      // tiles: max children per row (default 3)
 	Tiles       []Tile   // tiles: per-tile icon/label/value
+	Current     string   // tiles: value of the tile marked as the live setting (.spot-active)
 	Multi       bool     // list: allow several rows to be selected
 	Match       string   // list: "contains" (default) | "smart" (see smartScore)
 	Separator   *string  // list (multi): joins the selected options (default newline)
@@ -156,6 +157,11 @@ func applyEnv(cfg *Config, env func(string) (string, bool)) {
 		}
 		if v, ok := env("SPOT_DEFAULT_" + strings.ToUpper(sanitizeID(it.ID))); ok {
 			it.Default = v
+		}
+		// SPOT_CURRENT_<ID> marks the tile that is the live setting, e.g. the
+		// power profile in use, independently of what is selected.
+		if v, ok := env("SPOT_CURRENT_" + strings.ToUpper(sanitizeID(it.ID))); ok && it.Type == "tiles" {
+			it.Current = v
 		}
 	}
 }

@@ -121,6 +121,31 @@
   border-color: rgba(122, 162, 247, 0.55);
 }
 
+/* Keyboard cursor: the tile arrow keys are on, across all sections. */
+.spot-tile.spot-cursor {
+  outline: 2px solid rgba(122, 162, 247, 0.9);
+  outline-offset: -2px;
+}
+
+.spot-tile.spot-picked {
+  background: rgba(122, 162, 247, 0.16);
+  border-color: rgba(122, 162, 247, 0.55);
+}
+
+.spot-tile.spot-active {
+  border-color: rgba(166, 227, 161, 0.6);
+}
+
+.spot-tile-pick {
+  font-size: 7pt;
+  color: rgba(122, 162, 247, 0.9);
+}
+
+.spot-tile-badge {
+  font-size: 8pt;
+  color: #a6e3a1;
+}
+
 .spot-tile-body {
   padding: 14px 10px;
 }
