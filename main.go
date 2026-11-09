@@ -1025,7 +1025,7 @@ func roundTo(v, step float64) float64 {
 // setupOpacity fades the dialog between its "pointer over" and "pointer
 // outside" opacities. It returns keyPressed, to be called on every key press:
 // the pointer is then hidden and ignored (the dialog counts as "inside")
-// until it really moves again.
+// until it really moves again. The dialog starts in that state.
 func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) (keyPressed func()) {
 	pct := func(p *float64, def float64) float64 {
 		if p != nil {
@@ -1066,12 +1066,24 @@ func setupOpacity(win *gtk.ApplicationWindow, root *gtk.Box, o *Opacity) (keyPre
 	// While the keyboard is in use the pointer is hidden and its position
 	// ignored. GTK can re-send motion at the same spot (e.g. after a
 	// relayout), so only a changed position counts as the pointer moving.
-	typing := false
+	//
+	// A dialog starts in this state too: it was usually opened from the
+	// keyboard (or from another dialog), so showing the cursor and fading to
+	// "outside" because of wherever the pointer happens to rest would flash
+	// the cursor and then blink the opacity on the first key press. The
+	// position reported when the pointer enters is only a baseline.
+	typing := true
+	win.SetCursorFromName("none")
 	var lastX, lastY float64
 	var haveLast bool
 
 	motion := gtk.NewEventControllerMotion()
 	motion.SetPropagationPhase(gtk.PhaseCapture)
+	motion.ConnectEnter(func(x, y float64) {
+		if typing {
+			lastX, lastY, haveLast = x, y, true
+		}
+	})
 	motion.ConnectMotion(func(x, y float64) {
 		moved := !haveLast || x != lastX || y != lastY
 		lastX, lastY, haveLast = x, y, true
