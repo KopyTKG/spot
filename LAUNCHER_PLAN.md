@@ -167,26 +167,28 @@ Stable, documented class names, added to `docs/css.md`:
 
 ## State at the end of today (2026-11-11)
 
-- **spot v0.4.0 is released.** Tagged and pushed by Martin (16:23, on `14d15eb`,
-  the head of `service`); Jenkins built it and published the GitHub release a
-  minute later (asset `spot-linux-x64`). Our part is only commit, tag, push;
-  Jenkins does the rest, and the AUR step follows afterwards.
-- **`main` has not been updated.** The tag is not an ancestor of `main`
-  (`origin/main` is still `95638b2`). There is no divergence, so
-  `git switch main && git merge --ff-only service && git push` brings `main`
-  level with the release. Do this before the AUR step and before starting new
-  work: `spot-git` builds from `main`'s head, so until then it would ship old
-  code under a 0.4.0 version, and the launcher should branch from released code.
-- **AUR: prepared, not published.** `packaging/aur/*` are updated to 0.4.0 with
-  real checksums (`just aur 0.4.0`, committed and pushed on `service`). Publishing
-  (`just aur-publish 0.4.0`) needs the AUR SSH key; from the assistant's shell
-  `ssh aur@aur.archlinux.org` was `Permission denied (publickey)`, so run it
-  yourself after `ssh-add` (the key is probably `~/.ssh/devel/aur`).
-- **hypr-setup is pushed** (menus use Back; Dolphin fix; fish recursive `cd` /
-  `**` completion). To activate: install the release spot, run `install.sh`, and
-  `sudo pacman -S --needed kimageformats kio-admin`.
-- **Installed spot** (`/usr/bin/spot`) is still a local dev build from before the
-  release, not v0.4.0. Replace it with the released binary or the AUR package.
+Everything about the v0.4.0 release is done. The launcher starts from here.
+
+- **spot v0.4.0 is released and on `main`.** Tagged and pushed by Martin (16:23,
+  on `14d15eb`); Jenkins built it and published the GitHub release a minute
+  later (asset `spot-linux-x64`). `main` was fast-forwarded to `f9b96bc`, so the
+  tag, the daemon (`c5d8f91`) and Back (`70a6433`) are all on `main`. Branch the
+  launcher from it. Our part of a release is only commit, tag, push; Jenkins does
+  the build, and the AUR step follows afterwards.
+- **AUR: published.** `spot-bin 0.4.0-1` and `spot-git 0.4.0.r0.g14d15eb-1` are
+  on the AUR (checked through its public API). `spot-git` builds from `main`'s
+  head and recomputes its version at build time. The AUR build also produces a
+  `spot-bin-debug` package; add `!debug` to `OPTIONS` in `/etc/makepkg.conf` to
+  stop that.
+- **Installed:** `spot-bin 0.4.0-1`; the daemon runs as 0.4.0.
+- **hypr-setup is pushed** through `bfc84bd` (menus use Back; Dolphin fix; fish
+  recursive `cd` / `**` completion; Remove -> Cache; System -> Disk; repo-managed
+  Disk Usage launcher; webapp launcher migration). Activate with `install.sh`
+  and `sudo pacman -S --needed gdu duf kimageformats kio-admin`.
+- **Housekeeping left:** the `service` branch still exists on GitHub and equals
+  `main` (delete with `git push origin --delete service` when convenient).
+  walker and elephant are still installed and in use until the launcher replaces
+  them (see the parity checklist above).
 - Not done anywhere: the keyboard paths of Back (Enter/Esc/click on the real
   window) have only been exercised by GTK-level tests, not by hand.
 - This file is not shipped by the AUR packages (they install README, docs/, examples/).
