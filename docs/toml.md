@@ -57,7 +57,8 @@ no `.toml` suffix is looked up as `${XDG_CONFIG_HOME:-~/.config}/spot/<name>.tom
 
 Dialogs are shown by a background daemon, started on first use, so chained
 dialogs reuse one window. `--chain`, `--last`, `--sub` and the daemon controls
-are described in the [README](../README.md#daemon).
+are described in [`daemon.md`](daemon.md), with the systemd service and
+`daemon.toml`.
 
 | Exit code | Meaning |
 |-----------|---------|

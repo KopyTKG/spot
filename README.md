@@ -103,30 +103,27 @@ menu that opens a sub-menu used to destroy one surface and create another, and
 the fade started over each time. Now the content is swapped in place.
 
 - **Starting.** The first `spot` call starts the daemon (a moment slower, once).
-  Starting it at login (`spot daemon` from `exec-once` or a user service) makes
-  even the first call instant. Two starts at once end up as one daemon.
+  To have it ready at login, enable the user service the packages ship:
+  `systemctl --user enable --now spot.service`, or run `spot daemon` from your
+  compositor's autostart.
 - **Chaining.** When a dialog closes, the window stays mapped for ~120 ms with
   the dialog hidden. If the script asks for another dialog in that time it takes
   over the same surface; otherwise the surface is released. `--chain` keeps an
-  *answered* dialog visible (up to 1.5 s) so a menu hands over without any gap
-  (a cancelled one never holds the window); `--last` releases at once.
+  *answered* dialog visible (up to 1.5 s) so a menu hands over without any gap;
+  `--last` releases at once. Both times are set in `daemon.toml`.
 - **Several at a time.** A request that arrives while a dialog is up waits its
-  turn, in order. With `--sub` it opens *on top* instead, and the dialog below
-  comes back, state intact, when it closes. Sub-dialogs nest.
-- **Cancelling.** Esc or a click outside closes the top dialog. `--dismiss`
-  closes all of them. If a client is killed, its dialog goes with it.
-- **Live config.** The TOML and CSS are read on every request, so edits show on
-  the next open. `SPOT_*` variables and `submit.exec` / `spawn` commands use the
-  *caller's* environment and working directory, not the daemon's.
-- **`submit.exec`** runs without blocking the daemon, so a command may itself
-  call `spot` (typically with `--sub`).
-- **Upgrades.** A daemon from an older build is replaced automatically on the
-  next call.
+  turn. With `--sub` it opens *on top* instead, and the dialog below comes back,
+  state intact, when it closes.
+- **Live config.** Dialog TOML and CSS are read on every request. `SPOT_*`
+  variables and `submit.exec` commands use the *caller's* environment and
+  working directory, not the daemon's.
 - **Fallback.** If no daemon can be reached or started (no Wayland session,
-  `--oneshot`), spot shows the dialog in a window of its own, as before.
+  `--oneshot`), spot shows the dialog in a window of its own.
 
-`SPOT_SOCKET` overrides the socket path (default `$XDG_RUNTIME_DIR/spot.sock`),
-which is how to run a second, separate daemon.
+Optional settings (socket, log file, timing) live in
+`~/.config/spot/daemon.toml`; see [`examples/daemon.toml`](examples/daemon.toml).
+The service, `daemon.toml`, the control flags and troubleshooting are covered in
+**[`docs/daemon.md`](docs/daemon.md)**.
 
 ### Exit codes
 
@@ -175,6 +172,7 @@ More in [`examples/`](examples/):
 | [`menu.toml`](examples/menu.toml) | dmenu-style searchable list from stdin |
 | [`form.toml`](examples/form.toml) | Field + dropdown with an `exec` submit |
 | [`widgets.toml`](examples/widgets.toml) | text, toggle, scale, multi-select list, validation and JSON output |
+| [`daemon.toml`](examples/daemon.toml) | Daemon settings (socket, log, timing), every key with its default; not a dialog |
 | [`back.sh`](examples/back.sh) | A menu → submenu → dialog flow with Back, and the same dialog opened directly with none: `--back`, `SPOT_BACK`, exit status 4 |
 | [`demo/`](examples/demo/) | **0.2.0 tour**: `./examples/demo/demo.sh` launches a form with every input widget, two tile sections, a stdin list and a failing `exec` |
 | [`theme.css`](examples/theme.css) | Full theme covering every widget, including validation and error states (used by all but `ssh`) |
@@ -184,6 +182,7 @@ More in [`examples/`](examples/):
 Reference docs live in [`docs/`](docs/):
 
 - **[`docs/toml.md`](docs/toml.md)**: every TOML setting. Window keys, `[opacity]`, `[back]`, each widget type (`field`, `password`, `text`, `select`, `list`, `tiles`, `toggle`, `scale`), validation, `[submit]` (`exec`, `stdout`, JSON output, `on_error`, `{_active}`), exit codes and the `SPOT_*` environment overrides.
+- **[`docs/daemon.md`](docs/daemon.md)**: the daemon. Running it on demand, as a systemd user service or from compositor autostart, `daemon.toml`, `--status` / `--dismiss` / `--quit`, how dialogs share the window, and troubleshooting.
 - **[`docs/css.md`](docs/css.md)**: styling. The class tree, every `.spot-*` class, states and inner GTK nodes, validation styles, how the fade interacts with CSS, and a starter stylesheet.
 
 For every key in one runnable file, see [`examples/config-reference.toml`](examples/config-reference.toml).
@@ -213,8 +212,9 @@ format = "json"                 # or stdout = "{port}", or exec = "..."
 ## Install
 
 From the AUR: `spot-bin` (prebuilt release binary) or `spot-git` (built from the
-repository head). Both install the README and the example configs to
-`/usr/share/doc/spot/`. Releases are cut manually; see
+repository head). Both install the README, docs and example configs to
+`/usr/share/doc/spot/`, and a systemd user unit for the daemon (not enabled;
+see [`docs/daemon.md`](docs/daemon.md#systemd-user-service)). Releases are cut manually; see
 [`packaging/aur/README.md`](packaging/aur/README.md).
 
 ## Build

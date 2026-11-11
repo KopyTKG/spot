@@ -26,6 +26,9 @@ Dialogs are shown by a background daemon (started on first use, or with
 "spot daemon"), so consecutive dialogs reuse one window instead of opening a
 new one each time. Without a usable daemon spot shows the dialog itself.
 
+The daemon reads $XDG_CONFIG_HOME/spot/daemon.toml (socket, log, timing)
+when it starts; run it from a systemd user service to have it up at login.
+
 flags:
   -h, --help       show this help
   -v, --version    print the version
@@ -49,7 +52,8 @@ exit status:
      (with on_error = "exit", the failed command's own status)
   4  Back (the Back control, Backspace on an empty search, or Alt+Left)
 
-config reference: https://github.com/KopyTKG/spot#config-reference
+config reference: https://github.com/KopyTKG/spot/blob/main/docs/toml.md
+daemon and service: https://github.com/KopyTKG/spot/blob/main/docs/daemon.md
 `
 
 func fatal(format string, args ...any) {
@@ -177,7 +181,7 @@ func runOneshot(req request) response {
 	// Per-invocation app ID so concurrent `spot` calls don't dedupe.
 	base := strings.TrimSuffix(filepath.Base(req.Config), filepath.Ext(req.Config))
 	app := gtk.NewApplication(appID(base, os.Getpid()), gio.ApplicationFlagsNone)
-	sh := newShell(app, true)
+	sh := newShell(app, true, &DaemonConfig{})
 	app.ConnectActivate(func() {
 		sh.init()
 		sh.sched.enqueue(j)

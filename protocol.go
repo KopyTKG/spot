@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
-	"strconv"
 )
 
 // The daemon and its clients talk over a Unix socket. One connection carries
@@ -50,18 +47,6 @@ type response struct {
 	Stderr  string `json:"stderr,omitempty"`
 	Version string `json:"version,omitempty"` // the daemon's build
 	Stale   bool   `json:"stale,omitempty"`   // daemon and client builds differ: restart the daemon
-}
-
-// socketPath is where the daemon listens. SPOT_SOCKET overrides it (tests, or
-// running a second daemon).
-func socketPath() string {
-	if p := os.Getenv("SPOT_SOCKET"); p != "" {
-		return p
-	}
-	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
-		return filepath.Join(dir, "spot.sock")
-	}
-	return filepath.Join(os.TempDir(), "spot-"+strconv.Itoa(os.Getuid())+".sock")
 }
 
 // roundTrip sends req on conn and returns the daemon's answer.

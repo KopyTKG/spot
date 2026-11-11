@@ -88,7 +88,7 @@ func runDaemon() int {
 	// unique application ID GTK would hand a second daemon (another SPOT_SOCKET)
 	// over to the first and exit, re-activating the first one.
 	app := gtk.NewApplication("dev.kopy.spot.daemon", gio.ApplicationNonUnique)
-	sh := newShell(app, false)
+	sh := newShell(app, false, daemonConf())
 	app.ConnectActivate(func() {
 		sh.init()
 		app.Hold() // no window yet is not a reason to exit

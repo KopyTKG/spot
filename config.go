@@ -111,15 +111,24 @@ func resolveConfigPath(arg string) string {
 	if arg == "" || strings.ContainsRune(arg, filepath.Separator) || strings.HasSuffix(arg, ".toml") {
 		return arg
 	}
+	dir := configDir()
+	if dir == "" {
+		return arg
+	}
+	return filepath.Join(dir, arg+".toml")
+}
+
+// configDir is ${XDG_CONFIG_HOME:-~/.config}/spot, or "" without a home.
+func configDir() string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return arg
+			return ""
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "spot", arg+".toml")
+	return filepath.Join(dir, "spot")
 }
 
 // parseConfig decodes and validates a config, and applies the SPOT_* overrides

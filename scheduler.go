@@ -16,6 +16,8 @@ import "slices"
 // a shell script about to ask for the next menu (see idle).
 
 const (
+	// Defaults; daemon.toml can change both (grace, chain).
+	//
 	// graceMs: after a dialog closes the surface stays mapped, with the dialog
 	// hidden, this long. A follow-up request inside it takes over the surface;
 	// otherwise the surface is released.
@@ -61,6 +63,8 @@ type scheduler struct {
 	cur   *job
 	stack []*job
 	queue []*job
+
+	grace, chain int // ms: graceMs / chainMs, or what daemon.toml says
 
 	cancelGrace func()
 	quitting    bool   // opQuit received: leave once idle
@@ -129,10 +133,10 @@ func (s *scheduler) idle(last *job, r response) {
 	case last.req.Last && r.Code != exitBack:
 		s.p.unmap()
 	case last.req.Chain && r.Code == exitSubmitted, r.Code == exitBack:
-		s.hold(chainMs)
+		s.hold(s.chain)
 	default:
 		s.p.conceal()
-		s.hold(graceMs)
+		s.hold(s.grace)
 	}
 }
 
