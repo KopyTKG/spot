@@ -19,6 +19,14 @@ inside     = 100              # % while the pointer is over the dialog
 outside    = 85               # % while the pointer is outside it
 transition = 150              # fade time in ms (0 = instant)
 
+# Back control. Whether to show it is up to the caller (spot --back, or
+# SPOT_BACK='<command>' which also runs the command); this table only tunes it.
+# Back exits with status 4. Backspace (on tiles, a list or an empty search) and
+# Alt+Left do the same.
+[back]
+label = "\u2039 Back"           # button text
+show  = "auto"                 # auto | never (refuse even when the caller asks)
+
 # --- items ------------------------------------------------------------------
 # Rendered top to bottom. Every item has: type, id, label.
 

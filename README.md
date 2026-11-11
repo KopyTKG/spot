@@ -7,7 +7,10 @@ cancels.
 
 Fills a gap between `walker --dmenu` (launcher-shaped, compiled-in templates),
 `yad` / `zenity` (transactional but preset dialogs, no CSS), and `eww`
-(declarative + CSS but daemon-based, built for ambient widgets, not one-shots).
+(declarative + CSS, but built for ambient widgets rather than one-shot
+dialogs). spot is for the dialog: ask, answer, done. A small background daemon
+(see [Daemon](#daemon)) keeps one window alive so chained dialogs hand over
+without flicker; it holds no state of its own and draws nothing ambient.
 
 **Status:** early / v0. Widgets: field, password, text, select, list, tiles, toggle, scale.
 
@@ -18,8 +21,13 @@ Fills a gap between `walker --dmenu` (launcher-shaped, compiled-in templates),
 - The layer surface covers the whole output with the dialog inside it, so a
   **click outside the dialog closes it**.
 - While the pointer is outside the dialog it fades (85% by default, see
-  [`[opacity]`](#opacity-optional)).
-- Each invocation gets its own app ID, so concurrent `spot` calls don't dedupe.
+  [`[opacity]`](docs/toml.md#opacity)).
+- Concurrent `spot` calls are served by one daemon: a call that arrives while a
+  dialog is up **waits its turn**, or with `--sub` opens **on top** of it (see
+  [Daemon](#daemon)).
+- A dialog can offer **Back** (button, **Backspace** on an empty search or on
+  tiles, **Alt+Left**), but only when its caller asks for it (see
+  [Back](#back)).
 
 ## Example
 
@@ -74,6 +82,7 @@ resolves against the directory of the TOML that was found.
 |------|-|
 | `-h`, `--help` | Usage and a link to this reference |
 | `-v`, `--version` | Print the version |
+| `--back` | Show a [Back control](docs/toml.md#back) (`SPOT_BACK=<command>` does too, and runs the command); Back exits with status 4 |
 | `--chain` | Another dialog follows this one: keep the window up for it (see [Daemon](#daemon)) |
 | `--last` | Nothing follows: release the window immediately |
 | `--sub` | Open on top of the dialog that is showing; it returns when this one closes |
@@ -129,9 +138,30 @@ Scripts wrapping spot can rely on these:
 | `1` | Cancelled (Esc, click outside the dialog); nothing is printed |
 | `2` | Usage error (bad flag, missing or extra argument) |
 | `3` | Config or runtime error (unreadable file, invalid TOML, bad `pattern`, GTK failure); the message goes to stderr |
+| `4` | Back (the [Back control](docs/toml.md#back), Backspace on an empty search, or Alt+Left); nothing is printed |
 
 With `[submit] on_error = "exit"` a failing `exec` command makes spot exit
 with *that command's* status instead.
+
+### Back
+
+Whether a dialog should offer Back is the caller's call, not the config's, so
+the same config can go back to a menu when a menu opened it and have no Back
+when a keybind did. The caller says so in the environment, which child scripts
+inherit:
+
+```sh
+# menu.sh: "Display" opens a script whose dialogs should return here.
+SPOT_BACK="menu.sh settings" ./display.sh    # display.sh needs no changes
+./display.sh                                 # from a keybind: no Back
+```
+
+`SPOT_BACK=<command>` shows the Back control and runs `<command>` when it is
+used. `--back` shows it without a command, for scripts that handle navigation
+themselves: Back then ends the dialog with **exit status 4** and prints
+nothing. Esc is unchanged and still closes the dialog (status 1). Details and
+the `[back]` table are in [`docs/toml.md`](docs/toml.md#back); a runnable
+walk-through is [`examples/back.sh`](examples/back.sh).
 
 More in [`examples/`](examples/):
 
@@ -145,6 +175,7 @@ More in [`examples/`](examples/):
 | [`menu.toml`](examples/menu.toml) | dmenu-style searchable list from stdin |
 | [`form.toml`](examples/form.toml) | Field + dropdown with an `exec` submit |
 | [`widgets.toml`](examples/widgets.toml) | text, toggle, scale, multi-select list, validation and JSON output |
+| [`back.sh`](examples/back.sh) | A menu → submenu → dialog flow with Back, and the same dialog opened directly with none: `--back`, `SPOT_BACK`, exit status 4 |
 | [`demo/`](examples/demo/) | **0.2.0 tour**: `./examples/demo/demo.sh` launches a form with every input widget, two tile sections, a stdin list and a failing `exec` |
 | [`theme.css`](examples/theme.css) | Full theme covering every widget, including validation and error states (used by all but `ssh`) |
 
@@ -152,7 +183,7 @@ More in [`examples/`](examples/):
 
 Reference docs live in [`docs/`](docs/):
 
-- **[`docs/toml.md`](docs/toml.md)**: every TOML setting. Window keys, `[opacity]`, each widget type (`field`, `password`, `text`, `select`, `list`, `tiles`, `toggle`, `scale`), validation, `[submit]` (`exec`, `stdout`, JSON output, `on_error`, `{_active}`), exit codes and the `SPOT_*` environment overrides.
+- **[`docs/toml.md`](docs/toml.md)**: every TOML setting. Window keys, `[opacity]`, `[back]`, each widget type (`field`, `password`, `text`, `select`, `list`, `tiles`, `toggle`, `scale`), validation, `[submit]` (`exec`, `stdout`, JSON output, `on_error`, `{_active}`), exit codes and the `SPOT_*` environment overrides.
 - **[`docs/css.md`](docs/css.md)**: styling. The class tree, every `.spot-*` class, states and inner GTK nodes, validation styles, how the fade interacts with CSS, and a starter stylesheet.
 
 For every key in one runnable file, see [`examples/config-reference.toml`](examples/config-reference.toml).
@@ -188,7 +219,7 @@ repository head). Both install the README and the example configs to
 
 ## Build
 
-Requires Go ≥ 1.21, GTK4 dev headers, and the gtk4-layer-shell C library.
+Requires Go ≥ 1.26 (see `go.mod`), GTK4 dev headers, and the gtk4-layer-shell C library.
 
 ```sh
 # Arch
@@ -196,6 +227,7 @@ sudo pacman -S gtk4 gtk4-layer-shell go
 
 go build -o spot .   # or: just build
 go test ./...        # or: just test (no display needed)
+go test -tags gui ./...   # also the dialog tests; they need a Wayland session (nothing is drawn)
 ```
 
 `just build` and `just package` bake the git tag into `spot --version`; a plain

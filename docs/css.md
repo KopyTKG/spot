@@ -36,6 +36,11 @@ click outside the dialog can cancel it. The dialog is a box inside it, placed by
 - `.spot-root` is the dialog itself: the card with the background, border,
   radius and padding.
 
+The daemon keeps one window and swaps the dialog inside it, so consecutive
+dialogs share the surface. Each dialog's `style` file is read when that dialog
+opens (edits show on the next open), and replaces the previous dialog's
+stylesheet.
+
 ```css
 .spot-window { background: transparent; }
 
@@ -53,7 +58,8 @@ click outside the dialog can cancel it. The dialog is a box inside it, placed by
 ```
 .spot-window
 └── .spot-root
-    ├── .spot-title
+    ├── .spot-title                      (or, when Back is offered:)
+    ├── .spot-header                     .spot-back button + .spot-title
     ├── .spot-item                       one per [[items]]
     │   ├── .spot-label                  the item's label (not for toggle)
     │   ├── <the widget>                 see below
@@ -82,6 +88,8 @@ The widget inside an `.spot-item`, by `type`:
 | `.spot-window` | Full-screen layer surface (keep transparent) |
 | `.spot-root` | The dialog card |
 | `.spot-title` | Heading from `title` |
+| `.spot-header` | Row holding the Back button and the (centred) title; exists only when the caller offers [Back](toml.md#back). `.spot-title` keeps its class inside it |
+| `.spot-back` | The Back button (`GtkButton`). It never takes keyboard focus. Style `:hover` and `:active` |
 | `.spot-item` | Container of one item (label + widget + error) |
 | `.spot-label` | An item's `label` |
 | `.spot-field` | `field` entry (`GtkEntry`) |
@@ -121,6 +129,7 @@ GTK pseudo-classes work on these nodes:
 | `.spot-tile:selected .spot-tile-label` | A tile's caption while selected |
 | `.spot-list row:hover`, `.spot-list row:selected` | List rows (`row` is GTK's own node) |
 | `.spot-list row:selected .spot-list-row` | The label of the selected row |
+| `.spot-back:hover`, `.spot-back:active` | Pointer over / pressing the Back button |
 
 Widgets with inner nodes need the GTK element names:
 
@@ -227,6 +236,22 @@ A minimal theme that covers every widget. Save it next to your config and set
 }
 .spot-tile:selected { background: rgba(122, 162, 247, 0.16); border-color: #7aa2f7; }
 .spot-tile-icon     { font-size: 24pt; }
+
+/* back button (shown when the caller offers Back) */
+.spot-header { margin-bottom: 10px; }
+.spot-header .spot-title { margin: 0; }
+.spot-back {
+  background: rgba(245, 245, 244, 0.07);
+  background-image: none;
+  color: #e7e5e4;
+  border: 1px solid rgba(245, 245, 244, 0.18);
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 4px 12px;
+  min-height: 0;
+}
+.spot-back:hover  { background: rgba(122, 162, 247, 0.16); border-color: #7aa2f7; }
+.spot-back:active { background: rgba(122, 162, 247, 0.26); }
 
 /* validation */
 .spot-invalid, .spot-item-error, .spot-error { color: #f7768e; border-color: #f7768e; }

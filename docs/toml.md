@@ -25,6 +25,7 @@ For a single commented file with every key and its default, see
 - [Running it](#running-it)
 - [Window](#window)
 - [`[opacity]`](#opacity)
+- [`[back]`](#back)
 - [Items](#items)
   - [Common keys](#common-keys)
   - [`field`](#field) · [`password`](#password) · [`text`](#text) · [`select`](#select)
@@ -47,6 +48,16 @@ no `.toml` suffix is looked up as `${XDG_CONFIG_HOME:-~/.config}/spot/<name>.tom
 |------|-|
 | `-h`, `--help` | Usage |
 | `-v`, `--version` | Print the version |
+| `--back` | Show a [Back control](#back); Back exits with status 4 |
+| `--chain` | Another dialog follows this one: keep the window up for it |
+| `--last` | Nothing follows: release the window immediately |
+| `--sub` | Open on top of the dialog that is showing; it returns when this one closes |
+| `--oneshot` | Do not use the daemon (also `SPOT_NO_DAEMON=1`) |
+| `--dismiss`, `--quit`, `--status` | Control the daemon: cancel everything and release the window / stop it once idle / report whether it runs |
+
+Dialogs are shown by a background daemon, started on first use, so chained
+dialogs reuse one window. `--chain`, `--last`, `--sub` and the daemon controls
+are described in the [README](../README.md#daemon).
 
 | Exit code | Meaning |
 |-----------|---------|
@@ -54,12 +65,14 @@ no `.toml` suffix is looked up as `${XDG_CONFIG_HOME:-~/.config}/spot/<name>.tom
 | `1` | Cancelled (Esc or a click outside the dialog); nothing is printed |
 | `2` | Usage error (bad flag, missing or extra argument) |
 | `3` | Config or runtime error (unreadable file, invalid TOML, bad `pattern`, GTK failure); message on stderr |
+| `4` | [Back](#back): the Back control, Backspace on an empty search or on tiles, or Alt+Left; nothing is printed |
 
 With `on_error = "exit"` a failing `exec` command makes spot exit with *that
 command's* status instead.
 
 Enter submits and Esc cancels. In a [`text`](#text) item Enter inserts a
-newline; Ctrl+Enter submits. The layer surface covers the whole output, so a
+newline; Ctrl+Enter submits. When the caller offers [Back](#back), Backspace
+(on tiles, a list, or an empty search box) and Alt+Left go back. The layer surface covers the whole output, so a
 click outside the dialog cancels it.
 
 ## Window
@@ -97,6 +110,46 @@ inside     = 100
 outside    = 55
 transition = 250
 ```
+
+## `[back]`
+
+A dialog can offer **Back**: a `‹ Back` button in a header row next to the
+title, Backspace on tiles, a list or an empty search box, and Alt+Left
+anywhere. Back ends the dialog with exit status **4**, prints nothing, and runs
+the command in `SPOT_BACK` if there is one.
+
+Whether to offer it is the *caller's* call, not the config's: only the caller
+knows if there is somewhere to go back to. Nothing is shown unless one of these
+is set, so the same dialog has Back when a menu opened it and none when a
+keybind did:
+
+| Caller says | Effect |
+|-------------|--------|
+| `spot --back cfg.toml` | Show Back; status 4 on use. For scripts that handle navigation themselves |
+| `SPOT_BACK='arch-menu system' spot cfg.toml` | Show Back, **and** run that command when it is used |
+
+`SPOT_BACK` is an environment variable, so it is inherited: a menu that
+launches a script with it set gives every dialog that script opens a Back that
+returns to the menu. The command runs with the caller's environment minus
+`SPOT_BACK` itself, so the dialog it opens does not offer a Back of its own to
+where it already is.
+
+`[back]` only tunes the control:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `label` | `‹ Back` | Button text |
+| `show` | `auto` | `auto` shows it when the caller asked; `never` refuses, whatever the caller says (a top-level menu, say) |
+
+```toml
+[back]
+label = "‹ Settings"
+```
+
+Backspace only goes back when it could not be deleting text: on tiles, a list,
+or a search box that is already empty. In a field, password or text area it
+stays an ordinary edit key. Esc is unchanged and still closes the dialog (exit
+status 1, and no command is run).
 
 ## Items
 
@@ -373,6 +426,7 @@ Let one shared config be parameterised per call.
 | `SPOT_PLACEHOLDER` | Placeholder of the first field, password, text or list item |
 | `SPOT_DEFAULT` | Default of the first item that takes one (field, text, select, list, tiles, toggle, scale) |
 | `SPOT_CURRENT_<ID>` | `current` of the `tiles` item with that `id`, same naming as `SPOT_DEFAULT_<ID>` |
+| `SPOT_BACK` | Show [Back](#back) and run this command when it is used. Empty means unset |
 | `SPOT_DEFAULT_<ID>` | Default of the item with that `id`, upper-cased with non-alphanumerics as `_` (`battery-mode` becomes `SPOT_DEFAULT_BATTERY_MODE`). Wins over `SPOT_DEFAULT` |
 
 ```sh

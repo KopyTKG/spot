@@ -2,7 +2,7 @@
 
 | Page | What's in it |
 |------|--------------|
-| [`toml.md`](toml.md) | Every TOML setting: window, `[opacity]`, each widget type, validation, `[submit]`, environment overrides |
+| [`toml.md`](toml.md) | Every TOML setting: window, `[opacity]`, `[back]`, each widget type, validation, `[submit]`, environment overrides |
 | [`css.md`](css.md) | Styling: the class tree, states, per-widget notes, a starter stylesheet |
 
 Runnable material lives next to the code:
