@@ -126,11 +126,21 @@ func (s *scheduler) idle(last *job, r response) {
 	case last.req.Last:
 		s.p.unmap()
 	case last.req.Chain && r.Code == exitSubmitted:
-		s.cancelGrace = s.t.after(chainMs, s.p.unmap)
+		s.hold(chainMs)
 	default:
 		s.p.conceal()
-		s.cancelGrace = s.t.after(graceMs, s.p.unmap)
+		s.hold(graceMs)
 	}
+}
+
+// hold keeps the surface for ms, then releases it. Once the timer has fired
+// its cancel function must not be used again: GLib may have handed the source
+// id to something else by then.
+func (s *scheduler) hold(ms int) {
+	s.cancelGrace = s.t.after(ms, func() {
+		s.cancelGrace = nil
+		s.p.unmap()
+	})
 }
 
 func (s *scheduler) stopGrace() {

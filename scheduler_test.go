@@ -28,6 +28,9 @@ type fakeTimers struct {
 	pending map[int]func()
 	next    int
 	ms      map[int]int
+
+	fired       map[int]bool
+	staleCancel int // cancels of a timer that had already fired
 }
 
 func (t *fakeTimers) after(ms int, f func()) func() {
@@ -37,13 +40,22 @@ func (t *fakeTimers) after(ms int, f func()) func() {
 	t.next++
 	id := t.next
 	t.pending[id], t.ms[id] = f, ms
-	return func() { delete(t.pending, id) }
+	return func() {
+		if t.fired[id] {
+			t.staleCancel++
+		}
+		delete(t.pending, id)
+	}
 }
 
 // fire runs every timer that is still pending.
 func (t *fakeTimers) fire() {
+	if t.fired == nil {
+		t.fired = map[int]bool{}
+	}
 	for id, f := range t.pending {
 		delete(t.pending, id)
+		t.fired[id] = true
 		f()
 	}
 }
@@ -131,6 +143,21 @@ func TestSurfaceReleasedWhenGraceRunsOut(t *testing.T) {
 	tm.fire()
 	if got := p.take(); got != "unmap" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestFiredTimerIsNeverCancelled(t *testing.T) {
+	s, p, tm := newTestScheduler()
+	a := mkJob("a")
+	s.enqueue(a)
+	s.complete(a, response{})
+	tm.fire() // grace ran out, surface released
+	p.take()
+	s.enqueue(mkJob("b")) // would cancel the dead timer
+	s.dismissAll()        // and so would this
+	s.quit()
+	if tm.staleCancel != 0 {
+		t.Fatalf("cancelled an already-fired timer %d time(s): GLib would complain, or hit a reused source id", tm.staleCancel)
 	}
 }
 
