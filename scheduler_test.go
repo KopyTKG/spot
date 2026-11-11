@@ -204,6 +204,37 @@ func TestCancelledChainDialogDoesNotHoldTheWindow(t *testing.T) {
 	}
 }
 
+func TestBackHoldsTheWindowForTheDialogItReturnsTo(t *testing.T) {
+	// Back spawns the previous menu; it takes a moment to start. The window
+	// must wait for it instead of closing after the short grace period.
+	for _, name := range []string{"plain", "chain", "last"} {
+		var mods []func(*request)
+		switch name {
+		case "chain":
+			mods = append(mods, chain)
+		case "last":
+			mods = append(mods, last)
+		}
+		s, p, tm := newTestScheduler()
+		a := mkJob("a", mods...)
+		s.enqueue(a)
+		p.take()
+		s.complete(a, response{Code: exitBack})
+		if got := p.take(); got != "retire:a" {
+			t.Errorf("%s: got %q (content stays up, surface kept)", name, got)
+		}
+		for _, ms := range tm.ms {
+			if ms != chainMs {
+				t.Errorf("%s: waits %dms, want %dms", name, ms, chainMs)
+			}
+		}
+		s.enqueue(mkJob("menu")) // the menu Back opened
+		if got := p.take(); got != "present:menu" {
+			t.Errorf("%s: got %q", name, got)
+		}
+	}
+}
+
 func TestLastReleasesImmediately(t *testing.T) {
 	s, p, tm := newTestScheduler()
 	a := mkJob("a", last)

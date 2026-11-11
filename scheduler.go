@@ -32,6 +32,7 @@ type job struct {
 	css   string // absolute path of the stylesheet, or ""
 	env   []string
 	dir   string
+	back  *backSpec
 	reply chan response // buffered: the scheduler never blocks on a slow client
 	dlg   *dialog       // set while the dialog exists
 
@@ -118,14 +119,16 @@ func (s *scheduler) complete(j *job, r response) {
 
 // idle runs when the last dialog has closed and nothing is waiting. A chain is
 // only expected after an answer: if the dialog was cancelled the caller is
-// done, so the window gets the ordinary short grace instead.
+// done, so the window gets the ordinary short grace instead. Back always
+// expects a follow-up (the dialog it returns to is being started), so it holds
+// the window like --chain does.
 func (s *scheduler) idle(last *job, r response) {
 	switch {
 	case s.oneshot || s.quitting:
 		s.onIdle()
-	case last.req.Last:
+	case last.req.Last && r.Code != exitBack:
 		s.p.unmap()
-	case last.req.Chain && r.Code == exitSubmitted:
+	case last.req.Chain && r.Code == exitSubmitted, r.Code == exitBack:
 		s.hold(chainMs)
 	default:
 		s.p.conceal()

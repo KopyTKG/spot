@@ -451,3 +451,59 @@ func TestEnvCurrentForTiles(t *testing.T) {
 		t.Errorf("current: %q %q", cfg.Items[0].Current, cfg.Items[1].Current)
 	}
 }
+
+func TestBackSpec(t *testing.T) {
+	parse := func(toml string, env map[string]string) *Config {
+		t.Helper()
+		cfg, err := parseConfig([]byte(toml), func(k string) (string, bool) { v, ok := env[k]; return v, ok })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+
+	// Nothing asks for it: no Back, whatever the config says about its label.
+	if b := parse("[back]\nlabel = \"Up\"\n", nil).backSpec(false); b != nil {
+		t.Errorf("unrequested Back appeared: %+v", b)
+	}
+	// --back shows it, with the default label and no command.
+	if b := parse("", nil).backSpec(true); b == nil || b.cmd != "" || b.label != "‹ Back" {
+		t.Errorf("--back: %+v", b)
+	}
+	// SPOT_BACK shows it and names the command.
+	b := parse("", map[string]string{"SPOT_BACK": "arch-menu system"}).backSpec(false)
+	if b == nil || b.cmd != "arch-menu system" {
+		t.Errorf("SPOT_BACK: %+v", b)
+	}
+	// An empty SPOT_BACK is "not set": scripts export it unconditionally.
+	if b := parse("", map[string]string{"SPOT_BACK": ""}).backSpec(false); b != nil {
+		t.Errorf("empty SPOT_BACK must not enable Back: %+v", b)
+	}
+	// The config can relabel it ...
+	if b := parse("[back]\nlabel = \"Menu\"\n", nil).backSpec(true); b == nil || b.label != "Menu" {
+		t.Errorf("label: %+v", b)
+	}
+	// ... or refuse it, even when the caller asks (a top-level menu has nowhere to go).
+	if b := parse("[back]\nshow = \"never\"\n", map[string]string{"SPOT_BACK": "x"}).backSpec(true); b != nil {
+		t.Errorf("show = never ignored: %+v", b)
+	}
+}
+
+func TestBackShowValidated(t *testing.T) {
+	if _, err := parseConfig([]byte("[back]\nshow = \"sometimes\"\n"), func(string) (string, bool) { return "", false }); err == nil {
+		t.Fatal("want an error for an unknown back.show")
+	}
+}
+
+func TestWithoutEnv(t *testing.T) {
+	got := withoutEnv([]string{"A=1", "SPOT_BACK=x y", "SPOT_BACKUP=keep", "B=2"}, "SPOT_BACK")
+	want := []string{"A=1", "SPOT_BACKUP=keep", "B=2"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v want %v", got, want)
+		}
+	}
+}

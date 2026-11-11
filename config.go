@@ -22,6 +22,7 @@ const (
 	exitCancelled = 1
 	exitUsage     = 2
 	exitError     = 3
+	exitBack      = 4 // the Back control was used
 )
 
 type Config struct {
@@ -35,6 +36,19 @@ type Config struct {
 	Items    []Item
 	Submit   Submit
 	Opacity  *Opacity
+	Back     *Back
+
+	// From SPOT_BACK: the caller wants a Back control, and what to run on it.
+	backEnv bool
+	backCmd string
+}
+
+// Back configures the Back control. It is only shown when the caller asks for
+// it (--back, or SPOT_BACK in the environment), because only the caller knows
+// whether there is anything to go back to.
+type Back struct {
+	Label string // default "‹ Back"
+	Show  string // auto (default: when asked for) | never
 }
 
 // Opacity fades the dialog itself depending on where the pointer is.
@@ -130,6 +144,9 @@ func applyEnv(cfg *Config, env func(string) (string, bool)) {
 	if v, ok := env("SPOT_FOOTER"); ok {
 		cfg.Footer = v
 	}
+	if v, ok := env("SPOT_BACK"); ok && v != "" {
+		cfg.backEnv, cfg.backCmd = true, v
+	}
 	if v, ok := env("SPOT_PLACEHOLDER"); ok {
 		for i := range cfg.Items {
 			t := cfg.Items[i].Type
@@ -188,6 +205,13 @@ func (c *Config) validate() error {
 	case "", "show", "exit":
 	default:
 		return fmt.Errorf("submit.on_error: unknown mode %q (want \"show\" or \"exit\")", c.Submit.OnError)
+	}
+	if c.Back != nil {
+		switch c.Back.Show {
+		case "", "auto", "never":
+		default:
+			return fmt.Errorf("back.show: unknown mode %q (want \"auto\" or \"never\")", c.Back.Show)
+		}
 	}
 	for i := range c.Items {
 		it := &c.Items[i]
@@ -523,6 +547,41 @@ func rankSmart(opts []string, query string) []string {
 	out := make([]string, len(hits))
 	for i, h := range hits {
 		out[i] = h.s
+	}
+	return out
+}
+
+// backSpec is the Back control of one dialog.
+type backSpec struct {
+	label string
+	cmd   string // run when Back is used; may be empty
+}
+
+// backSpec reports the Back control this dialog gets, or nil for none. flag is
+// --back on the command line; SPOT_BACK (already read into the config) asks
+// for it too and also names the command to run. A config can opt out with
+// back.show = "never" (a top-level menu, say, whatever its caller exports).
+func (c *Config) backSpec(flag bool) *backSpec {
+	if c.Back != nil && c.Back.Show == "never" {
+		return nil
+	}
+	if !flag && !c.backEnv {
+		return nil
+	}
+	b := &backSpec{label: "\u2039 Back", cmd: c.backCmd}
+	if c.Back != nil && c.Back.Label != "" {
+		b.label = c.Back.Label
+	}
+	return b
+}
+
+// withoutEnv returns env minus the named variable.
+func withoutEnv(env []string, name string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, name+"=") {
+			out = append(out, kv)
+		}
 	}
 	return out
 }

@@ -31,6 +31,8 @@ flags:
   -v, --version    print the version
   --chain          another dialog follows this one: keep the window up for it
   --last           nothing follows: release the window immediately
+  --back           show a Back control (SPOT_BACK=<cmd> does too, and runs <cmd>);
+                   Back ends the dialog with status 4
   --sub            open on top of the dialog that is showing; it returns when
                    this one closes (without it, the request waits its turn)
   --oneshot        do not use the daemon (also: SPOT_NO_DAEMON=1)
@@ -45,6 +47,7 @@ exit status:
   2  usage error
   3  config or runtime error
      (with on_error = "exit", the failed command's own status)
+  4  Back (the Back control, Backspace on an empty search, or Alt+Left)
 
 config reference: https://github.com/KopyTKG/spot#config-reference
 `
@@ -61,9 +64,9 @@ func usageError(format string, args ...any) {
 
 func main() {
 	var (
-		arg                         string
-		chain, last, sub, oneshot   bool
-		daemon, dismiss, quit, stat bool
+		arg                             string
+		chain, last, sub, back, oneshot bool
+		daemon, dismiss, quit, stat     bool
 	)
 	for _, a := range os.Args[1:] {
 		switch {
@@ -79,6 +82,8 @@ func main() {
 			last = true
 		case a == "--sub":
 			sub = true
+		case a == "--back":
+			back = true
 		case a == "--oneshot":
 			oneshot = true
 		case a == "--dismiss":
@@ -121,7 +126,7 @@ func main() {
 	}
 	req := request{
 		Op: opShow, Version: version, Config: cfgPath, Env: os.Environ(),
-		Chain: chain, Last: last, Sub: sub,
+		Chain: chain, Last: last, Sub: sub, Back: back,
 	}
 	req.Dir, _ = os.Getwd()
 

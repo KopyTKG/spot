@@ -41,6 +41,7 @@ type request struct {
 	Chain bool `json:"chain,omitempty"` // another dialog follows: keep the window up for it
 	Last  bool `json:"last,omitempty"`  // nothing follows: release the window at once
 	Sub   bool `json:"sub,omitempty"`   // open on top of the current dialog, which returns when this one closes
+	Back  bool `json:"back,omitempty"`  // show the Back control (SPOT_BACK in Env asks for it too)
 }
 
 type response struct {

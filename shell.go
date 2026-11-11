@@ -34,6 +34,9 @@ func newShell(app *gtk.Application, oneshot bool) *shell {
 
 // init creates the window. It is not shown until the first dialog arrives.
 func (s *shell) init() {
+	if s.win != nil { // activate can fire again; the window is made once
+		return
+	}
 	// Default look of the keyboard cursor; any theme CSS overrides it.
 	cursor := gtk.NewCSSProvider()
 	cursor.LoadFromString(".spot-picked { background: alpha(currentColor, 0.18); }\n.spot-cursor { outline: 2px solid alpha(currentColor, 0.8); outline-offset: -2px; border-radius: 12px; }")
@@ -82,7 +85,7 @@ func (s *shell) init() {
 			return false
 		}
 		s.fade.keyPressed()
-		return d.onKey(keyval, state)
+		return d.onKey(keyval, state, s.win.Focus())
 	})
 	win.AddController(keys)
 
@@ -108,7 +111,7 @@ func (s *shell) live() *dialog {
 // ---- presenter ------------------------------------------------------------
 
 func (s *shell) present(j *job) {
-	d := newDialog(j.cfg, j.env, j.dir)
+	d := newDialog(j.cfg, j.env, j.dir, j.back)
 	d.finish = func(r result) { s.sched.complete(j, s.answer(d, r)) }
 	j.dlg = d
 	s.show(j)
@@ -135,8 +138,11 @@ func (s *shell) retire(j *job) {
 		return
 	}
 	d.done = true
-	// The window may keep showing it for a moment (--chain); it must not react.
+	// The window may keep showing it for a moment (--chain, Back); it must not
+	// react, and must not keep the keyboard either, or the first keys typed into
+	// whatever opens next would vanish. The next dialog asks for it again.
 	d.root.SetSensitive(false)
+	gtk4layershell.SetKeyboardMode(&s.win.Window, gtk4layershell.LayerShellKeyboardModeNone)
 }
 
 func (s *shell) conceal() {

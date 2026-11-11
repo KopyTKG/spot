@@ -42,7 +42,7 @@ func buildJob(req request) (*job, error) {
 			css = filepath.Join(filepath.Dir(req.Config), css)
 		}
 	}
-	return &job{req: req, cfg: cfg, css: css, env: req.Env, dir: req.Dir, reply: make(chan response, 1)}, nil
+	return &job{req: req, cfg: cfg, css: css, env: req.Env, dir: req.Dir, back: cfg.backSpec(req.Back), reply: make(chan response, 1)}, nil
 }
 
 // stdinLines splits newline-delimited list options.
@@ -84,7 +84,10 @@ func runDaemon() int {
 	defer os.Remove(sock)
 	defer ln.Close()
 
-	app := gtk.NewApplication("dev.kopy.spot.daemon", gio.ApplicationFlagsNone)
+	// NonUnique: one daemon per socket is enforced by the lock above. With a
+	// unique application ID GTK would hand a second daemon (another SPOT_SOCKET)
+	// over to the first and exit, re-activating the first one.
+	app := gtk.NewApplication("dev.kopy.spot.daemon", gio.ApplicationNonUnique)
 	sh := newShell(app, false)
 	app.ConnectActivate(func() {
 		sh.init()

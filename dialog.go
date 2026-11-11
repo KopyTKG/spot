@@ -31,9 +31,9 @@ type dialog struct {
 
 	out, errOut bytes.Buffer // what `spot` prints to stdout / stderr when this ends
 
-	onKey  func(keyval uint, state gdk.ModifierType) bool // window key press, capture phase
-	cancel func()                                         // Esc, click outside, client gone
-	finish func(result)                                   // set by the shell
+	onKey  func(keyval uint, state gdk.ModifierType, focus gtk.Widgetter) bool // window key press, capture phase
+	cancel func()                                                              // Esc, click outside, client gone
+	finish func(result)                                                        // set by the shell
 
 	done bool
 	busy bool // submit.exec is running
@@ -48,8 +48,9 @@ func (d *dialog) focusFirst() {
 
 // newDialog builds the widgets for cfg. env and dir are what submit.exec and
 // submit.spawn commands run with: the caller's, not the daemon's.
-func newDialog(cfg *Config, env []string, dir string) *dialog {
+func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 	d := &dialog{}
+	var goBack func() // late-bound: needs `end`, defined below
 
 	root := gtk.NewBox(gtk.OrientationVertical, 12)
 	root.AddCSSClass("spot-root")
@@ -65,7 +66,26 @@ func newDialog(cfg *Config, env []string, dir string) *dialog {
 	}
 	placeRoot(root, cfg.Anchor)
 
-	if cfg.Title != "" {
+	if back != nil {
+		// Header row: the Back button on the left, the title truly centred (a
+		// CenterBox, so the button's width does not push it off-centre).
+		header := gtk.NewCenterBox()
+		header.AddCSSClass("spot-header")
+		btn := gtk.NewButtonWithLabel(back.label)
+		btn.AddCSSClass("spot-back")
+		btn.SetFocusable(false) // Enter and Tab belong to the dialog's input
+		btn.SetFocusOnClick(false)
+		btn.SetVAlign(gtk.AlignCenter)
+		btn.ConnectClicked(func() { goBack() })
+		header.SetStartWidget(btn)
+		if cfg.Title != "" {
+			t := gtk.NewLabel(cfg.Title)
+			t.AddCSSClass("spot-title")
+			t.SetXAlign(0.5)
+			header.SetCenterWidget(t)
+		}
+		root.Append(header)
+	} else if cfg.Title != "" {
 		t := gtk.NewLabel(cfg.Title)
 		t.AddCSSClass("spot-title")
 		t.SetXAlign(0.5)
@@ -557,6 +577,19 @@ func newDialog(cfg *Config, env []string, dir string) *dialog {
 		d.finish(r)
 	}
 	d.cancel = func() { end(result{}) }
+	if back != nil {
+		goBack = func() {
+			if d.done || d.busy {
+				return
+			}
+			if back.cmd != "" {
+				// The command must not see SPOT_BACK itself, or the dialog it
+				// opens would offer a Back to where it is.
+				spawn(back.cmd, withoutEnv(env, "SPOT_BACK"), dir)
+			}
+			end(result{code: exitBack})
+		}
+	}
 
 	setBusy := func(b bool) {
 		d.busy = b
@@ -649,9 +682,20 @@ func newDialog(cfg *Config, env []string, dir string) *dialog {
 	}
 	submitFn = submit
 
-	d.onKey = func(keyval uint, state gdk.ModifierType) bool {
+	d.onKey = func(keyval uint, state gdk.ModifierType, focus gtk.Widgetter) bool {
 		if d.busy {
 			return false
+		}
+		if back != nil {
+			switch {
+			case keyval == gdk.KEY_Left && state&gdk.AltMask != 0:
+				goBack()
+				return true
+			case keyval == gdk.KEY_BackSpace && state&(gdk.ShiftMask|gdk.ControlMask|gdk.AltMask) == 0 &&
+				backspaceGoesBack(focus):
+				goBack()
+				return true
+			}
 		}
 		// In a text area plain Enter is a newline; Ctrl+Enter submits.
 		inText := false
@@ -908,4 +952,23 @@ func placeRoot(root *gtk.Box, anchor string) {
 	h, v := parseAnchor(anchor)
 	root.SetHAlign([]gtk.Align{gtk.AlignCenter, gtk.AlignStart, gtk.AlignEnd}[h])
 	root.SetVAlign([]gtk.Align{gtk.AlignCenter, gtk.AlignStart, gtk.AlignEnd}[v])
+}
+
+// backspaceGoesBack reports whether Backspace, with focus where it is, means
+// Back: yes on tiles, on a list, or in an empty search box; no while editing
+// text, where it deletes.
+func backspaceGoesBack(focus gtk.Widgetter) bool {
+	if focus == nil {
+		return true
+	}
+	for w := focus; w != nil; w = gtk.BaseWidget(w).Parent() {
+		switch v := w.(type) {
+		case *gtk.SearchEntry:
+			return v.Text() == ""
+		case *gtk.Entry, *gtk.PasswordEntry, *gtk.TextView:
+			return false
+		}
+		// A *gtk.Text is the editable inside an entry; keep climbing to find which.
+	}
+	return true
 }
