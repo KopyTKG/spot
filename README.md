@@ -74,6 +74,50 @@ resolves against the directory of the TOML that was found.
 |------|-|
 | `-h`, `--help` | Usage and a link to this reference |
 | `-v`, `--version` | Print the version |
+| `--chain` | Another dialog follows this one: keep the window up for it (see [Daemon](#daemon)) |
+| `--last` | Nothing follows: release the window immediately |
+| `--sub` | Open on top of the dialog that is showing; it returns when this one closes |
+| `--oneshot` | Do not use the daemon (also `SPOT_NO_DAEMON=1`) |
+| `--dismiss` | Cancel every dialog the daemon is showing or holding, and release the window |
+| `--quit` | Stop the daemon once it is idle |
+| `--status` | Report whether the daemon is running |
+
+### Daemon
+
+Dialogs are shown by a background process, `spot daemon`, that owns one
+layer-shell window. `spot <config>` is a thin client: it hands the config path,
+your environment and any stdin to the daemon, waits, then prints the answer and
+exits with the same status as before. Scripts do not change.
+
+The point is that **moving from one dialog to the next reuses the window.** A
+menu that opens a sub-menu used to destroy one surface and create another, and
+the fade started over each time. Now the content is swapped in place.
+
+- **Starting.** The first `spot` call starts the daemon (a moment slower, once).
+  Starting it at login (`spot daemon` from `exec-once` or a user service) makes
+  even the first call instant. Two starts at once end up as one daemon.
+- **Chaining.** When a dialog closes, the window stays mapped for ~120 ms with
+  the dialog hidden. If the script asks for another dialog in that time it takes
+  over the same surface; otherwise the surface is released. `--chain` keeps an
+  *answered* dialog visible (up to 1.5 s) so a menu hands over without any gap
+  (a cancelled one never holds the window); `--last` releases at once.
+- **Several at a time.** A request that arrives while a dialog is up waits its
+  turn, in order. With `--sub` it opens *on top* instead, and the dialog below
+  comes back, state intact, when it closes. Sub-dialogs nest.
+- **Cancelling.** Esc or a click outside closes the top dialog. `--dismiss`
+  closes all of them. If a client is killed, its dialog goes with it.
+- **Live config.** The TOML and CSS are read on every request, so edits show on
+  the next open. `SPOT_*` variables and `submit.exec` / `spawn` commands use the
+  *caller's* environment and working directory, not the daemon's.
+- **`submit.exec`** runs without blocking the daemon, so a command may itself
+  call `spot` (typically with `--sub`).
+- **Upgrades.** A daemon from an older build is replaced automatically on the
+  next call.
+- **Fallback.** If no daemon can be reached or started (no Wayland session,
+  `--oneshot`), spot shows the dialog in a window of its own, as before.
+
+`SPOT_SOCKET` overrides the socket path (default `$XDG_RUNTIME_DIR/spot.sock`),
+which is how to run a second, separate daemon.
 
 ### Exit codes
 
