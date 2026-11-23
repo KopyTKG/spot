@@ -366,3 +366,88 @@ func TestSetAppIcon(t *testing.T) {
 		}
 	}
 }
+
+// --- launcher sources -----------------------------------------------------------
+
+func sourcesCfg(dir, marker string, extra string) string {
+	return "[[items]]\ntype = \"apps\"\nid = \"app\"\n" + extra +
+		"[apps]\npaths = [\"" + dir + "\"]\ndesktop = [\"Hyprland\"]\n" +
+		"[[sources]]\nname = \"calc\"\nprefix = \"=\"\ndelay = 0\n" +
+		"exec = \"printf '%s\\\\t%s\\\\t%s\\\\n' \\\"answer: $SPOT_QUERY\\\" \\\"v:$SPOT_QUERY\\\" 'a comment'\"\n" +
+		"activate = \"printf %s {value} > " + marker + "\"\n"
+}
+
+func TestSourcePrefixSwitchesTheListAndEnterActivates(t *testing.T) {
+	dir, marker := appsTestDir(t)
+	env := append(os.Environ(), "XDG_STATE_HOME="+t.TempDir())
+	d, ended := guiDialog(t, sourcesCfg(dir, marker, ""), nil, env)
+	lines, _, search := listLines(t, d)
+	if len(lines) != 2 {
+		t.Fatalf("apps first: %q", lines)
+	}
+	typeInto(search, "= 2+2")
+	lines, _, _ = listLines(t, d)
+	if len(lines) != 1 || lines[0] != "answer: 2+2" {
+		t.Fatalf("the source's rows replace the apps: %q", lines)
+	}
+	// The prefix alone is below min_chars: an empty list, not the apps.
+	typeInto(search, "=")
+	if lines, _, _ = listLines(t, d); len(lines) != 0 {
+		t.Fatalf("just the prefix: %q", lines)
+	}
+	typeInto(search, "= 7*6")
+	d.onKey(gdk.KEY_Return, 0, nil)
+	if len(*ended) != 1 || !(*ended)[0].submitted {
+		t.Fatalf("Enter should activate: %v", *ended)
+	}
+	var got []byte
+	for i := 0; i < 50; i++ {
+		if got, _ = os.ReadFile(marker); len(got) > 0 {
+			break
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+	if string(got) != "v:7*6" { // {value} is the row's second column, shell-quoted
+		t.Fatalf("activate wrote %q", got)
+	}
+}
+
+func TestSourceLeavingThePrefixBringsTheAppsBack(t *testing.T) {
+	dir, marker := appsTestDir(t)
+	d, _ := guiDialog(t, sourcesCfg(dir, marker, ""), nil, append(os.Environ(), "XDG_STATE_HOME="+t.TempDir()))
+	_, _, search := listLines(t, d)
+	typeInto(search, "= 1")
+	typeInto(search, "beta")
+	lines, _, _ := listLines(t, d)
+	if len(lines) != 1 || lines[0] != "Beta Browser" {
+		t.Fatalf("plain search again: %q", lines)
+	}
+}
+
+func TestSourceWithoutActivatePrintsTheValue(t *testing.T) {
+	dir, _ := appsTestDir(t)
+	cfg := "[[items]]\ntype = \"apps\"\nid = \"app\"\n[apps]\npaths = [\"" + dir + "\"]\ndesktop = [\"Hyprland\"]\n" +
+		"[[sources]]\nname = \"pick\"\nprefix = \">\"\ndelay = 0\nexec = \"printf 'one\\\\tfirst\\\\ntwo\\\\tsecond\\\\n'\"\n"
+	d, ended := guiDialog(t, cfg, nil, append(os.Environ(), "XDG_STATE_HOME="+t.TempDir()))
+	_, _, search := listLines(t, d)
+	typeInto(search, "> x")
+	d.onKey(gdk.KEY_Return, 0, nil)
+	if len(*ended) != 1 || d.out.String() != "first\n" {
+		t.Fatalf("no activate: ended=%v out=%q", *ended, d.out.String())
+	}
+}
+
+func TestSpotQueryStartsTheSearchBox(t *testing.T) {
+	dir, marker := appsTestDir(t)
+	cfg := sourcesCfg(dir, marker, "query = \"= 5\"\n")
+	d, _ := guiDialog(t, cfg, nil, append(os.Environ(), "XDG_STATE_HOME="+t.TempDir()))
+	_, _, search := listLines(t, d)
+	if search.Text() != "= 5" {
+		t.Fatalf("search text = %q", search.Text())
+	}
+	// let its delayed change fire: the source answers for the preset query
+	typeInto(search, "= 5")
+	if lines, _, _ := listLines(t, d); len(lines) != 1 || lines[0] != "answer: 5" {
+		t.Fatalf("preset query: %q", lines)
+	}
+}

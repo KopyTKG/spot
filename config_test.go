@@ -513,3 +513,59 @@ func TestWithoutEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestSourcesAndQueryConfig(t *testing.T) {
+	src := `
+[[items]]
+type = "apps"
+id = "app"
+query = "= "
+
+[[sources]]
+name = "calc"
+prefix = "="
+exec = "qalc -t {query}"
+activate = "wl-copy {value}"
+icon = "accessories-calculator"
+delay = 0
+min_chars = 2
+max_results = 3
+timeout = 1000
+
+[[sources]]
+name = "files"
+prefix = "."
+exec = "fd {query}"
+`
+	cfg, err := parseConfig([]byte(src), noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Sources) != 2 || cfg.Sources[0].Prefix != "=" || cfg.Sources[0].MinChars != 2 || cfg.Sources[0].delay() != 0 {
+		t.Errorf("sources: %+v", cfg.Sources)
+	}
+	if cfg.Items[0].Query != "= " {
+		t.Errorf("query = %q", cfg.Items[0].Query)
+	}
+	// SPOT_QUERY overrides the item's query.
+	env := func(k string) (string, bool) {
+		if k == "SPOT_QUERY" {
+			return ". ", true
+		}
+		return "", false
+	}
+	cfg, _ = parseConfig([]byte(src), env)
+	if cfg.Items[0].Query != ". " {
+		t.Errorf("SPOT_QUERY: %q", cfg.Items[0].Query)
+	}
+	// Invalid sources fail the whole config, with the source named.
+	for name, bad := range map[string]string{
+		"no prefix": "[[sources]]\nname=\"x\"\nexec=\"y\"\n",
+		"no exec":   "[[sources]]\nname=\"x\"\nprefix=\"=\"\n",
+		"duplicate": "[[sources]]\nname=\"a\"\nprefix=\"=\"\nexec=\"y\"\n[[sources]]\nname=\"b\"\nprefix=\"=\"\nexec=\"z\"\n",
+	} {
+		if _, err := parseConfig([]byte(bad), noEnv); err == nil {
+			t.Errorf("%s should be rejected", name)
+		}
+	}
+}

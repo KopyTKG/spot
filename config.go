@@ -38,7 +38,8 @@ type Config struct {
 	Submit   Submit
 	Opacity  *Opacity
 	Back     *Back
-	Apps     *AppsConfig // [apps]: the application index and how apps are launched (type = "apps")
+	Apps     *AppsConfig    // [apps]: the application index and how apps are launched (type = "apps")
+	Sources  []SourceConfig // [[sources]]: prefixes that hand the launcher's search to a command (see sources.go)
 
 	// From SPOT_BACK: the caller wants a Back control, and what to run on it.
 	backEnv bool
@@ -77,6 +78,7 @@ type Item struct {
 	Multi       bool     // list: allow several rows to be selected
 	Match       string   // list: "contains" (default) | "smart" (see smartScore)
 	Separator   *string  // list (multi): joins the selected options (default newline)
+	Query       string   // list, apps: text the search box starts with (SPOT_QUERY overrides it)
 	Collapsible bool     // list: options are "GROUP<TAB>ROW"; groups fold and unfold (see groups.go)
 	Collapsed   *bool    // list (collapsible): groups start folded (default true)
 	GroupSep    *string  `toml:"group_separator"` // list (collapsible): what splits group from row (default tab)
@@ -170,6 +172,14 @@ func applyEnv(cfg *Config, env func(string) (string, bool)) {
 			}
 		}
 	}
+	if v, ok := env("SPOT_QUERY"); ok {
+		for i := range cfg.Items {
+			if t := cfg.Items[i].Type; t == "list" || t == "apps" {
+				cfg.Items[i].Query = v
+				break
+			}
+		}
+	}
 	if v, ok := env("SPOT_DEFAULT"); ok {
 		for i := range cfg.Items {
 			if takesDefault(cfg.Items[i].Type) {
@@ -226,6 +236,9 @@ func (c *Config) validate() error {
 		default:
 			return fmt.Errorf("back.show: unknown mode %q (want \"auto\" or \"never\")", c.Back.Show)
 		}
+	}
+	if err := validateSources(c.Sources); err != nil {
+		return err
 	}
 	if c.Apps != nil && (c.Apps.IconSize < 0 || c.Apps.IconSizeSel < 0) {
 		return fmt.Errorf("apps.icon_size and apps.icon_size_selected must not be negative")

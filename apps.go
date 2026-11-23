@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -714,6 +715,16 @@ func appLine(e *AppEntry, comment bool) string {
 
 // appResults ties the list lines back to the apps they stand for.
 type appResults struct {
+	// Source mode (see sources.go): while the query starts with a source's prefix
+	// the list shows that source's rows instead of apps.
+	sources   []SourceConfig
+	src       *SourceConfig // the active source, nil = app search
+	srcQuery  string        // the query without its prefix
+	srcRows   []sourceRow
+	srcSeq    int // bumped whenever the query changes: a late result for an old one is dropped
+	srcCancel context.CancelFunc
+	pick      func() int // the selected position in the list (set by the dialog)
+
 	paths   []string // the directories scanned (icons are looked up next to them)
 	cfg     *AppsConfig
 	apps    []*AppEntry
@@ -723,9 +734,10 @@ type appResults struct {
 	nowFunc func() time.Time
 }
 
-func newAppResults(c *AppsConfig, env func(string) string, home string) *appResults {
+func newAppResults(c *AppsConfig, sources []SourceConfig, env func(string) string, home string) *appResults {
 	r := &appResults{cfg: c, home: home, apps: loadApps(c, env, home), byLine: map[string]*AppEntry{}, nowFunc: time.Now}
 	r.paths = appPaths(c, env, home)
+	r.sources = sources
 	if c.useFrecency() {
 		r.frec = openFrecency(frecencyPath(env, home))
 	}
@@ -792,4 +804,65 @@ func homeOf(env func(string) string) string {
 	}
 	h, _ := os.UserHomeDir()
 	return h
+}
+
+// --- source mode ------------------------------------------------------------
+
+// sourceRequest asks the dialog to run src for query, then hand the rows to
+// finishSource with seq.
+type sourceRequest struct {
+	seq   int
+	src   *SourceConfig
+	query string
+}
+
+// setQuery reacts to the search text. For plain app search it returns the list
+// lines. When the query starts with a source's prefix it switches to that source
+// and returns a request to run (nil while the query is still too short: the list
+// is just empty). Any run that is still going for an older query is cancelled.
+func (r *appResults) setQuery(query string) (lines []string, req *sourceRequest) {
+	r.cancelSource()
+	src, rest := matchSource(r.sources, query)
+	if src == nil {
+		r.src, r.srcRows, r.srcQuery = nil, nil, ""
+		return r.lines(query), nil
+	}
+	r.src, r.srcRows, r.srcQuery = src, nil, rest
+	r.srcSeq++
+	if len([]rune(rest)) < src.minChars() {
+		return nil, nil
+	}
+	return nil, &sourceRequest{seq: r.srcSeq, src: src, query: rest}
+}
+
+func (r *appResults) cancelSource() {
+	if r.srcCancel != nil {
+		r.srcCancel()
+		r.srcCancel = nil
+	}
+}
+
+// finishSource stores a run's rows and returns the list lines, unless the query
+// has moved on since the run started (then ok is false and nothing changes).
+func (r *appResults) finishSource(seq int, rows []sourceRow) (lines []string, ok bool) {
+	if seq != r.srcSeq || r.src == nil {
+		return nil, false
+	}
+	r.srcRows = rows
+	lines = make([]string, len(rows))
+	for i, row := range rows {
+		lines[i] = row.label
+	}
+	return lines, true
+}
+
+// pickedRow is the selected source row, nil when there is none.
+func (r *appResults) pickedRow() *sourceRow {
+	if r.src == nil || r.pick == nil {
+		return nil
+	}
+	if i := r.pick(); i >= 0 && i < len(r.srcRows) {
+		return &r.srcRows[i]
+	}
+	return nil
 }

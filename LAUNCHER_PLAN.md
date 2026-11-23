@@ -214,6 +214,12 @@ Built, tested (unit + GTK-level), documented in `docs/toml.md`, with examples:
   lookup covers the theme, absolute paths, the flatpak and user icon dirs, with a
   generic fallback (`appicons.go`).
 
+- **Dynamic sources** (Phase 3, `[[sources]]`, 0.6.0): a prefix hands the launcher's
+  search to a command that runs as you type (debounced, cancelled when the query
+  moves on, killed as a process group on timeout); rows are `label[<TAB>value[<TAB>
+  comment]]`; Enter runs `activate`. `query` / `SPOT_QUERY` pre-fill the search box.
+  Calculator, file search, web search and a command runner are all just configs.
+
 Not done yet (next phases): `layout = "grid"` (Phase 2), inotify refresh instead of the directory-mtime check, desktop
 actions (New Window), other sources (calc, emoji, web, files) and clipboard
 history (Phases 3-4), then retiring walker in hypr-setup (Phase 5).

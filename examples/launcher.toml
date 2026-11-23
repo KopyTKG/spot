@@ -35,3 +35,28 @@ terminal = "xdg-terminal-exec {exec}"          # wraps Terminal=true apps
 # [[apps.override]]
 # id      = "org.mozilla.firefox"
 # command = "firefox --new-window"
+
+# --- sources: a prefix hands the search to a command (docs/toml.md#sources) ---------
+# "= 2+2" calculates, ". report" finds files, "> htop" runs a command. A source's
+# command prints rows as  label[<TAB>value[<TAB>comment]]; Enter runs `activate`.
+
+[[sources]]
+name     = "calc"
+prefix   = "="
+icon     = "accessories-calculator"
+exec     = "qalc -t -- {query} | head -n 1"
+activate = "wl-copy {value}"
+
+[[sources]]
+name     = "files"
+prefix   = "."
+icon     = "system-file-manager"
+exec     = "fd --max-results 40 -- {query} \"$HOME\" | awk '{ print $0 \"\\t\" $0 }'"
+activate = "xdg-open {value}"
+
+[[sources]]
+name     = "run"
+prefix   = ">"
+icon     = "utilities-terminal"
+exec     = "bash -c 'compgen -c | sort -u | grep -i -m 30 -- \"$0\"' {query}"
+activate = "sh -c {value}"

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -176,7 +177,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			opts := item.Options
 			var apps *appResults
 			if item.Type == "apps" {
-				apps = newAppResults(cfg.Apps, envOf, homeOf(envOf))
+				apps = newAppResults(cfg.Apps, cfg.Sources, envOf, homeOf(envOf))
 				appsRes, appsID = apps, item.ID
 				opts = apps.lines("")
 			}
@@ -300,6 +301,22 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					text := img.NextSibling().(*gtk.Box)
 					name := text.FirstChild().(*gtk.Label)
 					comment := name.NextSibling().(*gtk.Label)
+					if apps.src != nil { // a source's row: its label, comment and the source's icon
+						if pos := int(li.Position()); pos < len(apps.srcRows) {
+							row := apps.srcRows[pos]
+							name.SetText(row.label)
+							comment.SetText(row.comment)
+							comment.SetVisible(row.comment != "")
+							if apps.src.Icon != "" {
+								img.SetVisible(true)
+								setAppIcon(img, apps.src.Icon, apps.cfg.iconSize())
+							} else {
+								img.SetVisible(false)
+							}
+							return
+						}
+					}
+					img.SetVisible(true)
 					e := apps.entryOf(so.String())
 					if e == nil { // not an app line: show it as it is
 						setAppIcon(img, "", apps.cfg.iconSize())
@@ -357,6 +374,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 
 			// rebuild redraws a collapsible list; keep, when set, is the group
 			// whose header the selection should land on.
+			var pendingSource coreglib.SourceHandle // the debounce timer of a source run
 			rebuild := func(keep string) {
 				entries = gs.flatten(collapsed, query, item.Match)
 				model.Splice(0, model.NItems(), entryTexts(entries))
@@ -417,7 +435,41 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				case gs != nil:
 					rebuild("")
 				case apps != nil:
-					model.Splice(0, model.NItems(), apps.lines(query))
+					lines, req := apps.setQuery(query)
+					if pendingSource != 0 {
+						coreglib.SourceRemove(pendingSource)
+						pendingSource = 0
+					}
+					model.Splice(0, model.NItems(), lines)
+					if req != nil {
+						runIt := func() {
+							ctx, cancel := context.WithCancel(context.Background())
+							apps.srcCancel = cancel
+							go func() {
+								rows, err := runSource(ctx, req.src, req.query, env, dir)
+								coreglib.IdleAdd(func() {
+									if err != nil || ctx.Err() != nil {
+										return
+									}
+									if got, ok := apps.finishSource(req.seq, rows); ok {
+										model.Splice(0, model.NItems(), got)
+										if selection != nil && filterModel.NItems() > 0 {
+											selection.SetSelected(0)
+										}
+									}
+								})
+							}()
+						}
+						if d := req.src.delay(); d > 0 {
+							pendingSource = coreglib.TimeoutAdd(uint(d.Milliseconds()), func() bool {
+								pendingSource = 0
+								runIt()
+								return false
+							})
+						} else {
+							runIt()
+						}
+					}
 				case ranked:
 					model.Splice(0, model.NItems(), rankSmart(opts, query))
 				}
@@ -429,6 +481,10 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 
 			row.Append(search)
 			row.Append(scrolled)
+			if item.Query != "" { // the search box starts with this text (a prefix, say)
+				search.SetText(item.Query)
+				search.SetPosition(-1)
+			}
 
 			selectedOf := func(obj *coreglib.Object) string {
 				so, ok := obj.Cast().(*gtk.StringObject)
@@ -474,6 +530,11 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 							return entries[pos].value
 						}
 						return ""
+					case apps != nil && apps.src != nil: // a source row's value
+						if row := apps.pickedRow(); row != nil {
+							return row.value
+						}
+						return ""
 					case apps != nil: // the desktop id
 						if e := apps.entryOf(selectedOf(obj)); e != nil {
 							return e.ID
@@ -491,6 +552,9 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					}
 				}
 				listSelection = selection
+				if apps != nil {
+					apps.pick = func() int { return int(selection.Selected()) }
+				}
 			}
 
 			input = search
@@ -798,6 +862,21 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 
 		// An apps list with no [submit] of its own launches the selected app.
 		if appsRes != nil && cfg.Submit.Exec == "" && cfg.Submit.Stdout == "" && cfg.Submit.Format == "" {
+			if appsRes.src != nil { // a source row: run its activate command
+				row := appsRes.pickedRow()
+				if row == nil {
+					return
+				}
+				src := appsRes.src
+				if src.Activate == "" {
+					fmt.Fprintln(&d.out, row.value)
+				} else {
+					senv := append(append([]string(nil), env...), "SPOT_VALUE="+row.value, "SPOT_LABEL="+row.label, "SPOT_QUERY="+appsRes.srcQuery)
+					spawnDetached(expandSource(src.Activate, *row, appsRes.srcQuery), senv, dir)
+				}
+				end(result{submitted: true})
+				return
+			}
 			if e := appsRes.entryByID(vals[appsID]); e != nil {
 				appsRes.launch(e, env, dir)
 				end(result{submitted: true})

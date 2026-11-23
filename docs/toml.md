@@ -32,7 +32,7 @@ For a single commented file with every key and its default, see
   - [`list`](#list) · [`apps`](#apps) · [`tiles`](#tiles) · [`toggle`](#toggle) · [`scale`](#scale)
   - [Collapsible lists](#collapsible-lists)
   - [Validation](#validation)
-- [`[apps]`](#apps-1)
+- [`[apps]`](#apps-1) · [`[[sources]]`](#sources)
 - [`[submit]`](#submit)
 - [Environment overrides](#environment-overrides)
 
@@ -165,6 +165,7 @@ status 1, and no command is run).
 | `id` | all | Name used in `{id}` templates and as the JSON key |
 | `label` | all | Shown above the widget. For `toggle` it is the checkbox text; for `tiles` it is a section heading |
 | `placeholder` | field, password, text, list | Greyed-out hint text |
+| `query` | list, apps | Text the search box starts with (`SPOT_QUERY` overrides it) |
 | `default` | field, text, select, list, tiles, toggle, scale | Initial value. For `tiles` it is a tile `value`; for `toggle` `true` or `false`; for `scale` a number; for a multi `list` the options joined by `separator` |
 | `required` | field, password, text, select, list | An empty value blocks submission |
 | `pattern` | field, password, text, select, list | A non-empty value must match this [Go regexp](https://pkg.go.dev/regexp/syntax). Unanchored: write `^...$` |
@@ -509,6 +510,47 @@ command = "uwsm-app -- firefox --new-window"
 
 Example: [`examples/launcher.toml`](../examples/launcher.toml).
 
+## `[[sources]]`
+
+Prefixes that hand the launcher's search to a **command**. When the text in an
+[`apps`](#apps) item starts with a source's prefix, the prefix is stripped, the
+command runs for the rest (debounced, an older run is cancelled) and its output
+replaces the app list. Each `[[sources]]` table is one source:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `name` | none | A label for messages, and `$SPOT_SOURCE` |
+| `prefix` | required | What you type first: `=`, `.`, `@`, `>`. No whitespace. The longest matching prefix wins, so `=` and `==` can coexist |
+| `exec` | required | Run with `sh -c` in the caller's environment. The query is in `$SPOT_QUERY` and as `{query}` (shell-quoted). A non-zero exit is fine: whatever it printed is the answer |
+| `activate` | print the value | Run when you press Enter on a row. `{value}`, `{label}` and `{query}` are shell-quoted. The command starts detached, then the dialog closes. Empty: the value is printed to stdout and the dialog closes |
+| `icon` | none | Icon theme name shown on every row of this source (no icon column without it) |
+| `delay` | `150` | Milliseconds to wait after the last keystroke before running |
+| `min_chars` | `1` | Shortest query (without the prefix) that runs; below it the list is empty |
+| `max_results` | `50` | Rows kept |
+| `timeout` | `5000` | Milliseconds before the command is killed (its whole process group) |
+
+The command prints one row per line: `label`, `label<TAB>value` or
+`label<TAB>value<TAB>comment` (shown under the label). `value` defaults to the
+label. Empty lines are skipped.
+
+```toml
+[[sources]]
+name     = "calc"
+prefix   = "="
+exec     = "qalc -t -- {query} | head -n 1"       # "= 2+2" shows 4
+activate = "wl-copy {value}"
+
+[[sources]]
+name     = "files"
+prefix   = "."
+exec     = "my-file-search {query}"               # prints  ~/docs/a.pdf<TAB>/home/me/docs/a.pdf
+activate = "xdg-open {value}"
+```
+
+Sources work only on an `apps` item. To open the launcher already in a mode, set
+`SPOT_QUERY`: `SPOT_QUERY=". " spot launcher`. Example:
+[`examples/launcher.toml`](../examples/launcher.toml).
+
 ## `[submit]`
 
 | Key | Default | Description |
@@ -560,7 +602,8 @@ Let one shared config be parameterised per call.
 |----------|--------|
 | `SPOT_TITLE` | Replaces `title` |
 | `SPOT_FOOTER` | Replaces `footer` |
-| `SPOT_PLACEHOLDER` | Placeholder of the first field, password, text or list item |
+| `SPOT_PLACEHOLDER` | Placeholder of the first field, password, text, list or apps item |
+| `SPOT_QUERY` | Text the search box of the first list or apps item starts with: `SPOT_QUERY="= " spot launcher` opens the launcher already in calculator mode |
 | `SPOT_DEFAULT` | Default of the first item that takes one (field, text, select, list, tiles, toggle, scale) |
 | `SPOT_CURRENT_<ID>` | `current` of the `tiles` item with that `id`, same naming as `SPOT_DEFAULT_<ID>` |
 | `SPOT_BACK` | Show [Back](#back) and run this command when it is used. Empty means unset |
