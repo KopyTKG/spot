@@ -62,7 +62,7 @@ func (t *fakeTimers) fire() {
 
 func newTestScheduler() (*scheduler, *fakePresenter, *fakeTimers) {
 	p, t := &fakePresenter{}, &fakeTimers{}
-	return &scheduler{p: p, t: t, onIdle: func() { p.log = append(p.log, "idle") }}, p, t
+	return &scheduler{p: p, t: t, grace: graceMs, chain: chainMs, onIdle: func() { p.log = append(p.log, "idle") }}, p, t
 }
 
 func mkJob(name string, mod ...func(*request)) *job {

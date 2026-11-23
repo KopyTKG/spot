@@ -321,6 +321,12 @@ func TestExamplesParse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if filepath.Base(f) == "daemon.toml" { // not a dialog
+			if _, err := parseDaemonConfig(data, "/x"); err != nil {
+				t.Errorf("%s: %v", f, err)
+			}
+			continue
+		}
 		if _, err := parseConfig(data, noEnv); err != nil {
 			t.Errorf("%s: %v", f, err)
 		}

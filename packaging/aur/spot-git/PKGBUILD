@@ -34,4 +34,6 @@ package() {
   # examples/ has a demo/ subdirectory, which `install -t ... examples/*` would refuse
   cp -r examples "$pkgdir/usr/share/doc/spot/"
   [ ! -d docs ] || cp -r docs "$pkgdir/usr/share/doc/spot/"   # absent before v0.2.1
+  [ ! -f packaging/systemd/spot.service ] ||   # absent before v0.4.1
+    install -Dm644 packaging/systemd/spot.service "$pkgdir/usr/lib/systemd/user/spot.service"
 }

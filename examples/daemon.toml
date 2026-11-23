@@ -1,0 +1,32 @@
+# daemon.toml: settings for the spot daemon, not a dialog.
+#
+# Copy to ~/.config/spot/daemon.toml (or $XDG_CONFIG_HOME/spot/daemon.toml).
+# Every key is optional; the values below are the defaults. The daemon reads
+# this file once, when it starts, so restart it after an edit:
+#
+#   systemctl --user restart spot      # with the user service
+#   spot --quit                        # otherwise; the next call starts a new one
+#
+# A broken file is reported on stderr (or in the journal) and ignored: spot then
+# runs with the defaults rather than refusing to show dialogs.
+# Reference: docs/daemon.md
+
+# Unix socket the daemon listens on and clients connect to. $VARS and a leading
+# ~/ are expanded; a relative path is relative to this file's directory.
+# SPOT_SOCKET in the environment overrides it.
+# Default: $XDG_RUNTIME_DIR/spot.sock
+# socket = "$XDG_RUNTIME_DIR/spot.sock"
+
+# Where a daemon started on demand (by the first `spot` call) writes its
+# output. A daemon run by systemd logs to the journal and ignores this.
+# Default: $XDG_STATE_HOME/spot/daemon.log (~/.local/state/spot/daemon.log)
+# log = "~/.local/state/spot/daemon.log"
+
+# Milliseconds the window stays mapped, empty, after a dialog closes, waiting
+# for a script to ask for the next one. Raise it if a slow script's next menu
+# makes the window flicker; 0 releases the window at once.
+grace = 120
+
+# Milliseconds an answered `--chain` dialog (and one left with Back) stays on
+# screen while the next dialog starts. 0-60000.
+chain = 1500

@@ -70,9 +70,9 @@ func spawnDaemon() error {
 		return err
 	}
 	logf := os.NewFile(0, os.DevNull)
-	if dir := stateDir(); dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err == nil {
-			if f, err := os.OpenFile(filepath.Join(dir, "daemon.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); err == nil {
+	if path := logPath(); path != "" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
+			if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); err == nil {
 				defer f.Close()
 				logf = f
 			}
@@ -102,16 +102,6 @@ func stopDaemon() {
 		conn.Close()
 		time.Sleep(25 * time.Millisecond)
 	}
-}
-
-func stateDir() string {
-	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
-		return filepath.Join(d, "spot")
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".local", "state", "spot")
-	}
-	return ""
 }
 
 // control sends a one-off command to a running daemon (never starts one).

@@ -26,9 +26,12 @@ type shell struct {
 	style *gtk.CSSProvider // the current dialog's stylesheet
 }
 
-func newShell(app *gtk.Application, oneshot bool) *shell {
+func newShell(app *gtk.Application, oneshot bool, dc *DaemonConfig) *shell {
 	s := &shell{app: app}
-	s.sched = &scheduler{p: s, t: glibTimers{}, oneshot: oneshot, onIdle: app.Quit}
+	s.sched = &scheduler{
+		p: s, t: glibTimers{}, oneshot: oneshot, onIdle: app.Quit,
+		grace: dc.graceMs(), chain: dc.chainMs(),
+	}
 	return s
 }
 
