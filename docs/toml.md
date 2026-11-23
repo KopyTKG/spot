@@ -465,6 +465,7 @@ Configures the [`apps`](#apps) item. Every key is optional.
 | `desktop` | `$XDG_CURRENT_DESKTOP` | Desktop names that `OnlyShowIn` / `NotShowIn` are checked against |
 | `icons` | `true` | Show each app's icon: a row is then icon, name and the comment under it. `false` gives plain `Name  —  comment` lines |
 | `icon_size` | `32` | Icon size in px |
+| `icon_size_selected` | `icon_size` | Icon size of the selected row, so the highlighted app can be larger than the rest (the text size is CSS: `.spot-list row:selected .spot-app-name`) |
 | `show_comment` | `true` | Show the comment (under the name, or after it without icons) |
 | `max_results` | `0` | Cap on the list (`0` = all) |
 | `frecency` | `true` | Rank by launch count and recency, kept in `$XDG_STATE_HOME/spot/frecency.json` |

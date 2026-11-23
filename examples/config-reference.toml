@@ -79,6 +79,7 @@ exclude        = ["*Setup*"]   # globs on desktop id or name
 # desktop      = ["Hyprland"]  # OnlyShowIn / NotShowIn names (default $XDG_CURRENT_DESKTOP)
 icons          = true          # icon + name + comment under it (false: plain "Name - comment" lines)
 icon_size      = 32            # px
+# icon_size_selected = 44      # a bigger icon on the selected row
 show_comment   = true          # the comment, under the name
 max_results    = 0             # 0 = all
 frecency       = true          # rank by launch count and recency

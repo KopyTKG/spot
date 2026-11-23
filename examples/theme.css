@@ -281,3 +281,6 @@
 .spot-app { padding: 6px 12px; }
 .spot-app-name { font-size: 11pt; }
 .spot-app-comment { opacity: 0.65; font-size: 9pt; }
+/* the selected row bigger than the others (pair with icon_size_selected) */
+.spot-list row:selected .spot-app-name { font-size: 13pt; }
+.spot-list row:selected .spot-app-comment { font-size: 10pt; }

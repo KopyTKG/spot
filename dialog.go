@@ -268,6 +268,16 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					box.Append(img)
 					box.Append(text)
 					li.SetChild(box)
+					// The selected row can have a bigger icon (icon_size_selected).
+					if apps.cfg.iconSizeSelected() != apps.cfg.iconSize() {
+						li.NotifyProperty("selected", func() {
+							if li.Selected() {
+								img.SetPixelSize(apps.cfg.iconSizeSelected())
+							} else {
+								img.SetPixelSize(apps.cfg.iconSize())
+							}
+						})
+					}
 					return
 				}
 				lbl := gtk.NewLabel("")
@@ -297,7 +307,11 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 						comment.SetVisible(false)
 						return
 					}
-					setAppIcon(img, e.Icon, apps.cfg.iconSize())
+					size := apps.cfg.iconSize()
+					if li.Selected() {
+						size = apps.cfg.iconSizeSelected()
+					}
+					setAppIcon(img, e.Icon, size)
 					name.SetText(e.Name)
 					comment.SetText(e.Comment)
 					comment.SetVisible(apps.cfg.showComment() && e.Comment != "")

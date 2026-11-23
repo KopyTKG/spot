@@ -217,8 +217,8 @@ func (c *Config) validate() error {
 			return fmt.Errorf("back.show: unknown mode %q (want \"auto\" or \"never\")", c.Back.Show)
 		}
 	}
-	if c.Apps != nil && c.Apps.IconSize < 0 {
-		return fmt.Errorf("apps.icon_size: must not be negative")
+	if c.Apps != nil && (c.Apps.IconSize < 0 || c.Apps.IconSizeSel < 0) {
+		return fmt.Errorf("apps.icon_size and apps.icon_size_selected must not be negative")
 	}
 	for i := range c.Items {
 		it := &c.Items[i]

@@ -22,14 +22,15 @@ import (
 
 // AppsConfig is the top-level [apps] table.
 type AppsConfig struct {
-	Paths       []string      `toml:"paths"`        // directories to scan (default: XDG data dirs + flatpak exports)
-	Exclude     []string      `toml:"exclude"`      // globs on the desktop id or the name
-	Desktop     []string      `toml:"desktop"`      // names OnlyShowIn / NotShowIn are checked against (default $XDG_CURRENT_DESKTOP)
-	ShowComment *bool         `toml:"show_comment"` // "Name  —  comment" (default true)
-	Icons       *bool         `toml:"icons"`        // show each app's icon (default true)
-	IconSize    int           `toml:"icon_size"`    // icon size in px (default 32)
-	MaxResults  int           `toml:"max_results"`  // 0 = all
-	Frecency    *bool         `toml:"frecency"`     // rank by how often / recently launched (default true)
+	Paths       []string      `toml:"paths"`              // directories to scan (default: XDG data dirs + flatpak exports)
+	Exclude     []string      `toml:"exclude"`            // globs on the desktop id or the name
+	Desktop     []string      `toml:"desktop"`            // names OnlyShowIn / NotShowIn are checked against (default $XDG_CURRENT_DESKTOP)
+	ShowComment *bool         `toml:"show_comment"`       // "Name  —  comment" (default true)
+	Icons       *bool         `toml:"icons"`              // show each app's icon (default true)
+	IconSize    int           `toml:"icon_size"`          // icon size in px (default 32)
+	IconSizeSel int           `toml:"icon_size_selected"` // icon size of the selected row (default: icon_size)
+	MaxResults  int           `toml:"max_results"`        // 0 = all
+	Frecency    *bool         `toml:"frecency"`           // rank by how often / recently launched (default true)
 	Launch      AppsLaunch    `toml:"launch"`
 	Override    []AppOverride `toml:"override"`
 }
@@ -55,6 +56,12 @@ func (a *AppsConfig) iconSize() int {
 		return 32
 	}
 	return a.IconSize
+}
+func (a *AppsConfig) iconSizeSelected() int {
+	if a == nil || a.IconSizeSel <= 0 {
+		return a.iconSize()
+	}
+	return a.IconSizeSel
 }
 func (a *AppsConfig) useFrecency() bool { return a == nil || a.Frecency == nil || *a.Frecency }
 
