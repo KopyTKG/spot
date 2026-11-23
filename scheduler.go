@@ -70,6 +70,9 @@ type scheduler struct {
 
 // enqueue takes a new request.
 func (s *scheduler) enqueue(j *job) {
+	if s.toggled(j) {
+		return
+	}
 	s.stopGrace()
 	switch {
 	case s.cur == nil:
@@ -81,6 +84,34 @@ func (s *scheduler) enqueue(j *job) {
 	default:
 		s.queue = append(s.queue, j)
 	}
+}
+
+// toggled handles a request for a config with toggle = true that is already
+// showing or waiting (a keybind pressed again, or held down). Asking for the
+// dialog that is on screen closes it, like a toggle key; asking for one that is
+// already queued does nothing. Either way the repeat is answered as cancelled
+// (status 1) and never queues, so mashing the key cannot pile up windows to
+// close one by one. A --sub request is a deliberate nesting and is left alone.
+func (s *scheduler) toggled(j *job) bool {
+	if j.cfg == nil || !j.cfg.Toggle || j.req.Sub {
+		return false
+	}
+	same := func(x *job) bool {
+		return x != nil && x != j && x.cfg != nil && x.cfg.Toggle && x.req.Config == j.req.Config
+	}
+	cancelled := response{Code: exitCancelled, Version: version}
+	switch {
+	case same(s.cur):
+		j.finished = true
+		j.reply <- cancelled
+		s.complete(s.cur, cancelled) // the key pressed again: close it
+		return true
+	case slices.ContainsFunc(s.queue, same):
+		j.finished = true
+		j.reply <- cancelled
+		return true
+	}
+	return false
 }
 
 func (s *scheduler) show(j *job) {

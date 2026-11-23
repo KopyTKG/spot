@@ -9,6 +9,7 @@ width    = 420                # dialog width in px (omit for natural size)
 height   = 0                  # dialog height in px (0 = natural)
 style    = "theme.css"        # CSS file, relative to this TOML (or absolute)
 footer   = "Enter to submit · Esc to cancel"   # SPOT_FOOTER overrides
+toggle   = false                # keybind dialogs: asking again closes it; repeats never queue up
 keyboard = "exclusive"        # exclusive | on-demand | none
 
 # --- opacity (optional) -----------------------------------------------------

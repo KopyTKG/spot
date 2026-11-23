@@ -420,3 +420,88 @@ func TestQuitWhenAlreadyIdle(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// --- toggle: a keybind pressed again ------------------------------------------
+
+func toggleJob(name string, mod ...func(*request)) *job {
+	j := mkJob(name, mod...)
+	j.cfg = &Config{Toggle: true}
+	return j
+}
+
+func TestToggleClosesTheDialogThatIsOnScreen(t *testing.T) {
+	s, p, _ := newTestScheduler()
+	a := toggleJob("launcher")
+	s.enqueue(a)
+	p.take()
+	again := toggleJob("launcher")
+	s.enqueue(again)
+	if got := p.take(); got != "retire:launcher conceal" {
+		t.Fatalf("pressed again: got %q", got)
+	}
+	if r := <-a.reply; r.Code != exitCancelled {
+		t.Errorf("the open dialog should end cancelled: %+v", r)
+	}
+	if r := <-again.reply; r.Code != exitCancelled {
+		t.Errorf("the repeat should be answered cancelled: %+v", r)
+	}
+	if s.cur != nil || len(s.queue) != 0 {
+		t.Errorf("nothing should be left: cur=%v queue=%d", s.cur, len(s.queue))
+	}
+}
+
+func TestToggleRepeatsNeverQueueUp(t *testing.T) {
+	s, p, _ := newTestScheduler()
+	other := mkJob("menu") // a plain dialog, no toggle, on screen
+	s.enqueue(other)
+	first := toggleJob("launcher")
+	s.enqueue(first) // waits its turn
+	for i := 0; i < 5; i++ {
+		s.enqueue(toggleJob("launcher")) // key held down
+	}
+	if len(s.queue) != 1 {
+		t.Fatalf("queue = %d, want 1: repeats must be dropped", len(s.queue))
+	}
+	p.take()
+	s.complete(other, response{})
+	if got := p.take(); got != "retire:menu present:launcher" {
+		t.Fatalf("after the first closes: got %q", got)
+	}
+}
+
+func TestToggleOnlyMatchesTheSameConfig(t *testing.T) {
+	s, p, _ := newTestScheduler()
+	s.enqueue(toggleJob("launcher"))
+	s.enqueue(toggleJob("power")) // another toggle dialog: queued, not a repeat
+	if len(s.queue) != 1 {
+		t.Fatalf("a different config should queue normally: %d", len(s.queue))
+	}
+	// A plain request for the same file is not a toggle either.
+	s.enqueue(mkJob("launcher"))
+	if len(s.queue) != 2 {
+		t.Fatalf("a request without toggle keeps today's behaviour: %d", len(s.queue))
+	}
+	_ = p
+}
+
+func TestToggleSubDialogIsDeliberate(t *testing.T) {
+	s, p, _ := newTestScheduler()
+	s.enqueue(toggleJob("launcher"))
+	p.take()
+	s.enqueue(toggleJob("launcher", sub))
+	if got := p.take(); got != "suspend:launcher present:launcher" {
+		t.Fatalf("--sub must nest, not toggle: %q", got)
+	}
+}
+
+func TestWithoutToggleRepeatsStillQueue(t *testing.T) {
+	s, _, _ := newTestScheduler()
+	for i := 0; i < 3; i++ {
+		j := mkJob("menu")
+		j.cfg = &Config{}
+		s.enqueue(j)
+	}
+	if len(s.queue) != 2 {
+		t.Fatalf("default behaviour changed: queue = %d, want 2", len(s.queue))
+	}
+}

@@ -33,6 +33,7 @@ type Config struct {
 	Style    string // path to CSS, relative to TOML file
 	Footer   string
 	Keyboard string // exclusive (default) | on-demand | none
+	Toggle   bool   // a keybind dialog: asking for it again closes it, and repeats do not queue up
 	Items    []Item
 	Submit   Submit
 	Opacity  *Opacity

@@ -87,6 +87,7 @@ click outside the dialog cancels it.
 | `height` | natural | Dialog height in px |
 | `style` | none | CSS file, relative to this TOML (or absolute). See [css.md](css.md) |
 | `footer` | none | Small text at the bottom |
+| `toggle` | `false` | For dialogs bound to a key (a launcher, a menu): pressing the key again **closes** the dialog instead of opening another, and repeated or held-down presses never pile up in the queue. Matched by config file; the repeat exits with status 1 |
 | `keyboard` | `exclusive` | Layer-shell keyboard mode: `exclusive` (always has keys), `on-demand` (focus like a normal window), `none` |
 
 ## `[opacity]`
