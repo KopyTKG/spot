@@ -132,6 +132,15 @@
   color: #fafaf9;
 }
 
+/* collapsible lists: group headers and the rows under them */
+.spot-group-header {
+  font-weight: bold;
+  opacity: 0.9;
+}
+.spot-group-row {
+  opacity: 0.95;
+}
+
 /* Tiles — square-ish icon-over-label cards, equal-width via FlowBox. */
 .spot-tiles {
   background: transparent;

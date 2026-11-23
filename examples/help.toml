@@ -1,0 +1,30 @@
+# A help screen with folding sections: collapsible list (docs/toml.md#collapsible-lists).
+#
+#   printf '%s\n' \
+#     $'Yazi\tj / k       move down / up' \
+#     $'Yazi\tq           quit' \
+#     $'mpv\tSPACE       pause' \
+#     $'mpv\t← / →       seek 5 seconds' | spot examples/help.toml
+#
+# Enter / click a header folds it; Left / Right fold and unfold; typing searches
+# inside folded groups ("yazi quit", "seek"). Enter on a row prints the row
+# without its group.
+
+title    = "Help"
+anchor   = "center"
+width    = 640
+style    = "theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type        = "list"
+id          = "row"
+collapsible = true
+collapsed   = true
+match       = "smart"
+stdin       = true
+height      = 420
+placeholder = "Search the help…"
+
+[submit]
+stdout = "{row}"

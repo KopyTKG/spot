@@ -101,9 +101,13 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 	nav := &tileNav{}             // keyboard cursor across all tile sections
 	var textViews []*gtk.TextView // Enter inserts a newline in these; Ctrl+Enter submits
 	multiValues := map[string]func() []string{}
-	var checks []*check // items with required / pattern rules
-	activeID := ""      // id of the last tiles group interacted with ({_active})
-	var submitFn func() // late-bound so tile click handlers can call it
+	var checks []*check                  // items with required / pattern rules
+	activeID := ""                       // id of the last tiles group interacted with ({_active})
+	var submitFn func()                  // late-bound so tile click handlers can call it
+	var groupToggle func(delta int) bool // collapsible list: fold/unfold the selected group; false = not handled
+	var appsRes *appResults              // type = "apps": the index the list shows
+	var appsID string                    // id of that item
+	envOf := envGetter(env)
 
 	for _, it := range cfg.Items {
 		item := it
@@ -167,8 +171,28 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			if firstFocus == nil {
 				firstFocus = dd
 			}
-		case "list":
+		case "list", "apps":
 			opts := item.Options
+			var apps *appResults
+			if item.Type == "apps" {
+				apps = newAppResults(cfg.Apps, envOf, homeOf(envOf))
+				appsRes, appsID = apps, item.ID
+				opts = apps.lines("")
+			}
+			// Collapsible list: the rows shown are the flattened groups; `entries`
+			// says what each shown line is (a header or a row).
+			var gs *groupSet
+			var entries []groupEntry
+			var collapsed map[string]bool
+			if item.Collapsible {
+				gs = parseGroups(opts, item.groupSeparator())
+				collapsed = map[string]bool{}
+				for _, g := range gs.order {
+					collapsed[g] = item.collapsedByDefault()
+				}
+				entries = gs.flatten(collapsed, "", item.Match)
+				opts = entryTexts(entries)
+			}
 			model := gtk.NewStringList(opts)
 
 			search := gtk.NewSearchEntry()
@@ -182,7 +206,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			// (best match first), so the filter lets everything through.
 			ranked := item.Match == "smart" && !item.Multi
 			filt := gtk.NewCustomFilter(func(obj *coreglib.Object) bool {
-				if query == "" || ranked {
+				if query == "" || ranked || gs != nil || apps != nil {
 					return true
 				}
 				so, ok := obj.Cast().(*gtk.StringObject)
@@ -234,11 +258,22 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					return
 				}
 				lbl.SetText(so.String())
+				if gs != nil {
+					lbl.RemoveCSSClass("spot-group-header")
+					lbl.RemoveCSSClass("spot-group-row")
+					if pos := int(li.Position()); pos < len(entries) {
+						if entries[pos].header {
+							lbl.AddCSSClass("spot-group-header")
+						} else {
+							lbl.AddCSSClass("spot-group-row")
+						}
+					}
+				}
 			})
 
 			lv := gtk.NewListView(selModel, &factory.ListItemFactory)
 			lv.AddCSSClass("spot-list")
-			lv.SetSingleClickActivate(false)
+			lv.SetSingleClickActivate(gs != nil) // a click on a group header folds it
 			listView = lv
 
 			scrolled := gtk.NewScrolledWindow()
@@ -252,13 +287,74 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			scrolled.SetVExpand(true)
 			scrolled.AddCSSClass("spot-list-scroll")
 
+			// rebuild redraws a collapsible list; keep, when set, is the group
+			// whose header the selection should land on.
+			rebuild := func(keep string) {
+				entries = gs.flatten(collapsed, query, item.Match)
+				model.Splice(0, model.NItems(), entryTexts(entries))
+				if i := headerIndex(entries, keep); keep != "" && i >= 0 {
+					selection.SetSelected(uint(i))
+					lv.ScrollTo(uint(i), gtk.ListScrollFocus|gtk.ListScrollSelect, nil)
+				} else if len(entries) > 0 {
+					selection.SetSelected(0)
+				}
+			}
+			if gs != nil {
+				groupToggle = func(delta int) bool {
+					pos := int(selection.Selected())
+					if pos < 0 || pos >= len(entries) {
+						return false
+					}
+					e := entries[pos]
+					searching := strings.TrimSpace(query) != ""
+					switch {
+					case e.header && searching:
+						return delta == 0 // matching groups are open; Enter must not submit a header
+					case e.header:
+						switch delta {
+						case 0:
+							collapsed[e.group] = !collapsed[e.group]
+						case -1:
+							collapsed[e.group] = true
+						case 1:
+							collapsed[e.group] = false
+						}
+						rebuild(e.group)
+						return true
+					case delta == -1 && !searching:
+						collapsed[e.group] = true // Left on a row: fold its group, land on the header
+						rebuild(e.group)
+						return true
+					}
+					return false
+				}
+				lv.ConnectActivate(func(pos uint) {
+					if int(pos) < len(entries) && entries[pos].header {
+						selection.SetSelected(pos)
+						groupToggle(0)
+					}
+				})
+			}
+			if apps != nil {
+				lv.ConnectActivate(func(uint) {
+					if submitFn != nil {
+						submitFn()
+					}
+				})
+			}
+
 			search.ConnectSearchChanged(func() {
 				query = search.Text()
-				if ranked {
+				switch {
+				case gs != nil:
+					rebuild("")
+				case apps != nil:
+					model.Splice(0, model.NItems(), apps.lines(query))
+				case ranked:
 					model.Splice(0, model.NItems(), rankSmart(opts, query))
 				}
 				filt.Changed(gtk.FilterChangeDifferent)
-				if selection != nil && filterModel.NItems() > 0 {
+				if gs == nil && selection != nil && filterModel.NItems() > 0 {
 					selection.SetSelected(0)
 				}
 			})
@@ -304,9 +400,21 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					if obj == nil {
 						return ""
 					}
+					switch {
+					case gs != nil: // a row's text without its group; a header has no value
+						if pos := int(selection.Selected()); pos >= 0 && pos < len(entries) && !entries[pos].header {
+							return entries[pos].value
+						}
+						return ""
+					case apps != nil: // the desktop id
+						if e := apps.entryOf(selectedOf(obj)); e != nil {
+							return e.ID
+						}
+						return ""
+					}
 					return selectedOf(obj)
 				}
-				if item.Default != nil {
+				if item.Default != nil && gs == nil && apps == nil {
 					for i, opt := range opts {
 						if opt == item.defaultString() {
 							selection.SetSelected(uint(i))
@@ -620,6 +728,15 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 		}
 		execErr.SetVisible(false)
 
+		// An apps list with no [submit] of its own launches the selected app.
+		if appsRes != nil && cfg.Submit.Exec == "" && cfg.Submit.Stdout == "" && cfg.Submit.Format == "" {
+			if e := appsRes.entryByID(vals[appsID]); e != nil {
+				appsRes.launch(e, env, dir)
+				end(result{submitted: true})
+			}
+			return
+		}
+
 		// What happens once any exec command has succeeded.
 		finish := func() {
 			if cfg.Submit.Stdout != "" {
@@ -697,6 +814,20 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				return true
 			}
 		}
+		// Collapsible lists: Left folds, Right unfolds (when the search is empty,
+		// so the keys still move the cursor while typing).
+		if groupToggle != nil && state&(gdk.ControlMask|gdk.AltMask|gdk.ShiftMask) == 0 {
+			switch keyval {
+			case gdk.KEY_Left, gdk.KEY_KP_Left:
+				if groupToggle(-1) {
+					return true
+				}
+			case gdk.KEY_Right, gdk.KEY_KP_Right:
+				if groupToggle(1) {
+					return true
+				}
+			}
+		}
 		// In a text area plain Enter is a newline; Ctrl+Enter submits.
 		inText := false
 		for _, tv := range textViews {
@@ -738,6 +869,9 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 		case gdk.KEY_Return, gdk.KEY_KP_Enter:
 			if inText && state&gdk.ControlMask == 0 {
 				return false
+			}
+			if groupToggle != nil && groupToggle(0) { // Enter on a group header folds it
+				return true
 			}
 			if nav.active != nil {
 				activeID = nav.choose()

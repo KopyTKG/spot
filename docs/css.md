@@ -76,7 +76,7 @@ The widget inside an `.spot-item`, by `type`:
 | `password` | `.spot-password` |
 | `text` | `.spot-text-scroll` > `.spot-text` (+ `.spot-text-placeholder`) |
 | `select` | `.spot-select` |
-| `list` | `.spot-search` + `.spot-list-scroll` > `.spot-list` > rows (`.spot-list-row` labels) |
+| `list`, `apps` | `.spot-search` + `.spot-list-scroll` > `.spot-list` > rows (`.spot-list-row` labels; a collapsible list adds `.spot-group-header` / `.spot-group-row` to them) |
 | `tiles` | `.spot-tiles` > `.spot-tile` > `.spot-tile-body` > `.spot-tile-icon` + `.spot-tile-label` |
 | `toggle` | `.spot-toggle` |
 | `scale` | `.spot-scale` |
@@ -98,7 +98,9 @@ The widget inside an `.spot-item`, by `type`:
 | `.spot-search` | `list` search entry |
 | `.spot-list-scroll` | `list` scroller |
 | `.spot-list` | `list` view (`GtkListView`) |
-| `.spot-list-row` | A row's label inside the list |
+| `.spot-list-row` | A row's label inside the list (also the lines of an `apps` list) |
+| `.spot-group-header` | A group header of a collapsible list (the `▸` / `▾` line with the count); also carries `.spot-list-row` |
+| `.spot-group-row` | A row inside a group of a collapsible list |
 | `.spot-tiles` | `tiles` grid (`GtkFlowBox`) |
 | `.spot-tile` | One tile (the flow-box child; carries `:selected`) |
 | `.spot-picked` | Each tiles section's selected tile, kept even while the cursor is in another section, so every section shows its pending choice. Default: a light fill; the cursor outline is separate |

@@ -37,6 +37,7 @@ type Config struct {
 	Submit   Submit
 	Opacity  *Opacity
 	Back     *Back
+	Apps     *AppsConfig // [apps]: the application index and how apps are launched (type = "apps")
 
 	// From SPOT_BACK: the caller wants a Back control, and what to run on it.
 	backEnv bool
@@ -61,7 +62,7 @@ type Opacity struct {
 }
 
 type Item struct {
-	Type        string // field | password | text | select | list | tiles | toggle | scale
+	Type        string // field | password | text | select | list | apps | tiles | toggle | scale
 	ID          string
 	Label       string
 	Placeholder string
@@ -75,6 +76,9 @@ type Item struct {
 	Multi       bool     // list: allow several rows to be selected
 	Match       string   // list: "contains" (default) | "smart" (see smartScore)
 	Separator   *string  // list (multi): joins the selected options (default newline)
+	Collapsible bool     // list: options are "GROUP<TAB>ROW"; groups fold and unfold (see groups.go)
+	Collapsed   *bool    // list (collapsible): groups start folded (default true)
+	GroupSep    *string  `toml:"group_separator"` // list (collapsible): what splits group from row (default tab)
 	On          *string  // toggle: value when checked (default "true")
 	Off         *string  // toggle: value when unchecked (default "false")
 	Min         *float64 // scale (default 0)
@@ -150,7 +154,7 @@ func applyEnv(cfg *Config, env func(string) (string, bool)) {
 	if v, ok := env("SPOT_PLACEHOLDER"); ok {
 		for i := range cfg.Items {
 			t := cfg.Items[i].Type
-			if t == "field" || t == "password" || t == "text" || t == "list" {
+			if t == "field" || t == "password" || t == "text" || t == "list" || t == "apps" {
 				cfg.Items[i].Placeholder = v
 				break
 			}
@@ -215,6 +219,26 @@ func (c *Config) validate() error {
 	}
 	for i := range c.Items {
 		it := &c.Items[i]
+		switch it.Type {
+		case "apps":
+			if it.Multi || it.Stdin || len(it.Options) > 0 || it.Collapsible {
+				return fmt.Errorf("item %q: an apps item takes no options, stdin, multi or collapsible", it.ID)
+			}
+			if c.Apps == nil {
+				c.Apps = &AppsConfig{}
+			}
+			if it.Match == "" {
+				it.Match = "smart"
+			}
+		case "list":
+			if it.Collapsible && it.Multi {
+				return fmt.Errorf("item %q: collapsible lists cannot be multi-select", it.ID)
+			}
+		default:
+			if it.Collapsible || it.Collapsed != nil || it.GroupSep != nil {
+				return fmt.Errorf("item %q: collapsible, collapsed and group_separator only apply to lists", it.ID)
+			}
+		}
 		if it.Pattern != "" {
 			re, err := regexp.Compile(it.Pattern)
 			if err != nil {
@@ -278,6 +302,17 @@ func (it *Item) onValue() string {
 		return *it.On
 	}
 	return "true"
+}
+
+// collapsedByDefault: collapsible lists start folded unless collapsed = false.
+func (it *Item) collapsedByDefault() bool { return it.Collapsed == nil || *it.Collapsed }
+
+// groupSeparator is what splits "GROUP<sep>ROW" in a collapsible list.
+func (it *Item) groupSeparator() string {
+	if it.GroupSep == nil || *it.GroupSep == "" {
+		return groupSep
+	}
+	return *it.GroupSep
 }
 
 func (it *Item) offValue() string {

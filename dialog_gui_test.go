@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
@@ -101,5 +102,227 @@ func TestEscapeIsNotBackAndRunsNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(out); err == nil {
 		t.Fatal("Esc must not run the Back command")
+	}
+}
+
+// --- collapsible lists and the apps item ---------------------------------------
+
+// widgetByClass finds the first widget below w that has the CSS class.
+func widgetByClass(w gtk.Widgetter, class string) gtk.Widgetter {
+	var found gtk.Widgetter
+	var walk func(gtk.Widgetter) bool
+	walk = func(x gtk.Widgetter) bool {
+		if x == nil {
+			return false
+		}
+		if gtk.BaseWidget(x).HasCSSClass(class) {
+			found = x
+			return true
+		}
+		for c := gtk.BaseWidget(x).FirstChild(); c != nil; c = gtk.BaseWidget(c).NextSibling() {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	walk(w)
+	return found
+}
+
+// typeInto sets the search text and runs the main loop long enough for the
+// entry's delayed "search-changed" to fire.
+func typeInto(search *gtk.SearchEntry, text string) {
+	search.SetText(text)
+	ctx := glib.MainContextDefault()
+	for end := time.Now().Add(400 * time.Millisecond); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		for ctx.Pending() {
+			ctx.Iteration(false)
+		}
+	}
+}
+
+func listLines(t *testing.T, d *dialog) (lines []string, sel *gtk.SingleSelection, search *gtk.SearchEntry) {
+	t.Helper()
+	lvw := widgetByClass(d.root, "spot-list")
+	sw := widgetByClass(d.root, "spot-search")
+	if lvw == nil || sw == nil {
+		t.Fatal("no list or search entry in the dialog")
+	}
+	lv := lvw.(*gtk.ListView)
+	search = sw.(*gtk.SearchEntry)
+	m := lv.Model()
+	for i := uint(0); i < m.NItems(); i++ {
+		lines = append(lines, m.Item(i).Cast().(*gtk.StringObject).String())
+	}
+	sel, _ = m.Cast().(*gtk.SingleSelection)
+	return
+}
+
+const collapsibleCfg = `
+[[items]]
+type        = "list"
+id          = "row"
+collapsible = true
+match       = "smart"
+options     = ["Yazi\tseek forward", "Yazi\tquit", "mpv\tseek 5 seconds", "mpv\tpause"]
+[submit]
+stdout = "{row}"
+`
+
+func TestCollapsibleListFoldsAndSearches(t *testing.T) {
+	d, ended := guiDialog(t, collapsibleCfg, nil, nil)
+	lines, sel, search := listLines(t, d)
+	if len(lines) != 2 || lines[0] != "▸ Yazi  (2)" || lines[1] != "▸ mpv  (2)" {
+		t.Fatalf("starts folded: %q", lines)
+	}
+	if sel == nil || sel.Selected() != 0 {
+		t.Fatalf("first header should be selected")
+	}
+
+	// Enter on a header unfolds it and does not submit.
+	if !d.onKey(gdk.KEY_Return, 0, nil) {
+		t.Error("Enter on a header should be handled")
+	}
+	lines, sel, _ = listLines(t, d)
+	if len(lines) != 4 || lines[0] != "▾ Yazi  (2)" || lines[1] != "    seek forward" {
+		t.Fatalf("after Enter: %q", lines)
+	}
+	if len(*ended) != 0 {
+		t.Fatalf("a header must not submit: %v", *ended)
+	}
+	// Left on a row folds its group and lands on the header.
+	sel.SetSelected(1)
+	d.onKey(gdk.KEY_Left, 0, nil)
+	lines, sel, _ = listLines(t, d)
+	if len(lines) != 2 || sel.Selected() != 0 {
+		t.Fatalf("Left on a row: %q selected %d", lines, sel.Selected())
+	}
+	// Right unfolds the header it is on; Left folds it again.
+	d.onKey(gdk.KEY_Right, 0, nil)
+	if lines, _, _ = listLines(t, d); len(lines) != 4 {
+		t.Fatalf("Right: %q", lines)
+	}
+	d.onKey(gdk.KEY_Left, 0, nil)
+	if lines, _, _ = listLines(t, d); len(lines) != 2 {
+		t.Fatalf("Left on a header: %q", lines)
+	}
+
+	// Typing searches inside folded groups and opens the matching ones.
+	typeInto(search, "seek")
+	lines, sel, _ = listLines(t, d)
+	want := []string{"▾ Yazi  (1)", "    seek forward", "▾ mpv  (1)", "    seek 5 seconds"}
+	if len(lines) != len(want) {
+		t.Fatalf("search: %q", lines)
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Errorf("search line %d = %q, want %q", i, lines[i], want[i])
+		}
+	}
+	// Enter on a row submits it, without its group.
+	sel.SetSelected(3)
+	d.onKey(gdk.KEY_Return, 0, nil)
+	if len(*ended) != 1 || !(*ended)[0].submitted || d.out.String() != "seek 5 seconds\n" {
+		t.Fatalf("submit: ended=%v out=%q", *ended, d.out.String())
+	}
+	// Clearing the search brings the folds back.
+}
+
+func TestCollapsibleHeaderEnterWhileSearchingDoesNotSubmit(t *testing.T) {
+	d, ended := guiDialog(t, collapsibleCfg, nil, nil)
+	_, sel, search := listLines(t, d)
+	typeInto(search, "seek")
+	sel.SetSelected(0) // a header
+	d.onKey(gdk.KEY_Return, 0, nil)
+	if len(*ended) != 0 {
+		t.Fatalf("Enter on a header while searching must not submit: %v", *ended)
+	}
+}
+
+func TestCollapsibleExpandedStart(t *testing.T) {
+	cfg := "[[items]]\ntype = \"list\"\nid = \"row\"\ncollapsible = true\ncollapsed = false\noptions = [\"A\\tone\", \"A\\ttwo\"]\n"
+	d, _ := guiDialog(t, cfg, nil, nil)
+	if lines, _, _ := listLines(t, d); len(lines) != 3 || lines[0] != "▾ A  (2)" {
+		t.Fatalf("collapsed = false: %q", lines)
+	}
+}
+
+func TestCollapsibleConfigErrors(t *testing.T) {
+	for name, src := range map[string]string{
+		"multi":      "[[items]]\ntype=\"list\"\nid=\"x\"\ncollapsible=true\nmulti=true\noptions=[\"a\"]\n",
+		"not a list": "[[items]]\ntype=\"field\"\nid=\"x\"\ncollapsible=true\n",
+	} {
+		if _, err := parseConfig([]byte(src), func(string) (string, bool) { return "", false }); err == nil {
+			t.Errorf("%s: should be rejected", name)
+		}
+	}
+}
+
+func appsTestDir(t *testing.T) (dir string, marker string) {
+	t.Helper()
+	dir = t.TempDir()
+	marker = filepath.Join(t.TempDir(), "launched")
+	writeDesktop(t, dir, "alpha.desktop", "[Desktop Entry]\nType=Application\nName=Alpha Editor\nComment=Edit things\nExec=alpha-editor --flag %U\n")
+	writeDesktop(t, dir, "beta.desktop", "[Desktop Entry]\nType=Application\nName=Beta Browser\nExec=beta-browser\n")
+	writeDesktop(t, dir, "hidden.desktop", "[Desktop Entry]\nType=Application\nName=Hidden One\nExec=h\nNoDisplay=true\n")
+	return dir, marker
+}
+
+func TestAppsItemSearchesAndLaunches(t *testing.T) {
+	dir, marker := appsTestDir(t)
+	cfg := "[[items]]\ntype = \"apps\"\nid = \"app\"\n[apps]\npaths = [\"" + dir + "\"]\ndesktop = [\"Hyprland\"]\n[apps.launch]\ncommand = \"echo {exec} > " + marker + "\"\n"
+	env := append(os.Environ(), "XDG_STATE_HOME="+t.TempDir())
+	d, ended := guiDialog(t, cfg, nil, env)
+
+	lines, _, search := listLines(t, d)
+	if len(lines) != 2 { // the NoDisplay entry is not listed
+		t.Fatalf("lines = %q", lines)
+	}
+	typeInto(search, "beta")
+	if lines, _, _ = listLines(t, d); len(lines) != 1 || lines[0] != "Beta Browser" {
+		t.Fatalf("search beta: %q", lines)
+	}
+	typeInto(search, "")
+	typeInto(search, "alp")
+	if lines, _, _ = listLines(t, d); len(lines) != 1 || lines[0] != "Alpha Editor  —  Edit things" {
+		t.Fatalf("search alp: %q", lines)
+	}
+	d.onKey(gdk.KEY_Return, 0, nil)
+	if len(*ended) != 1 || !(*ended)[0].submitted {
+		t.Fatalf("Enter should launch and finish: %v", *ended)
+	}
+	var got []byte
+	for i := 0; i < 50; i++ {
+		if got, _ = os.ReadFile(marker); len(got) > 0 {
+			break
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+	// %U is dropped from the Exec line; the command template wraps the rest.
+	if string(got) != "alpha-editor --flag\n" {
+		t.Fatalf("launched command wrote %q", got)
+	}
+}
+
+func TestAppsItemWithSubmitStdoutDoesNotLaunch(t *testing.T) {
+	dir, marker := appsTestDir(t)
+	cfg := "[[items]]\ntype = \"apps\"\nid = \"app\"\n[apps]\npaths = [\"" + dir + "\"]\ndesktop = [\"Hyprland\"]\n[apps.launch]\ncommand = \"echo x > " + marker + "\"\n[submit]\nstdout = \"{app}\"\n"
+	d, ended := guiDialog(t, cfg, nil, append(os.Environ(), "XDG_STATE_HOME="+t.TempDir()))
+	_, _, search := listLines(t, d)
+	typeInto(search, "beta")
+	d.onKey(gdk.KEY_Return, 0, nil)
+	if len(*ended) != 1 || d.out.String() != "beta\n" {
+		t.Fatalf("stdout mode: ended=%v out=%q", *ended, d.out.String())
+	}
+	time.Sleep(150 * time.Millisecond)
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("an explicit [submit] must replace the default launch")
+	}
+}
+
+func TestAppsItemRejectsListOptions(t *testing.T) {
+	if _, err := parseConfig([]byte("[[items]]\ntype=\"apps\"\nid=\"a\"\nmulti=true\n"), func(string) (string, bool) { return "", false }); err == nil {
+		t.Error("apps + multi should be rejected")
 	}
 }
