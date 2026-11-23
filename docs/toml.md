@@ -29,8 +29,10 @@ For a single commented file with every key and its default, see
 - [Items](#items)
   - [Common keys](#common-keys)
   - [`field`](#field) · [`password`](#password) · [`text`](#text) · [`select`](#select)
-  - [`list`](#list) · [`tiles`](#tiles) · [`toggle`](#toggle) · [`scale`](#scale)
+  - [`list`](#list) · [`apps`](#apps) · [`tiles`](#tiles) · [`toggle`](#toggle) · [`scale`](#scale)
+  - [Collapsible lists](#collapsible-lists)
   - [Validation](#validation)
+- [`[apps]`](#apps-1)
 - [`[submit]`](#submit)
 - [Environment overrides](#environment-overrides)
 
@@ -157,7 +159,7 @@ status 1, and no command is run).
 
 | Key | Applies to | Description |
 |-----|------------|-------------|
-| `type` | all | `field`, `password`, `text`, `select`, `list`, `tiles`, `toggle`, `scale`. An unknown type is skipped with a log line |
+| `type` | all | `field`, `password`, `text`, `select`, `list`, `apps`, `tiles`, `toggle`, `scale`. An unknown type is skipped with a log line |
 | `id` | all | Name used in `{id}` templates and as the JSON key |
 | `label` | all | Shown above the widget. For `toggle` it is the checkbox text; for `tiles` it is a section heading |
 | `placeholder` | field, password, text, list | Greyed-out hint text |
@@ -238,6 +240,9 @@ Searchable list: type to filter, Up/Down to move, Enter to pick.
 | `match` | `contains` | How typing filters: `contains` (case-insensitive substring) or `smart` (see below) |
 | `multi` | `false` | Allow selecting several rows |
 | `separator` | newline | Joins the selection of a `multi` list in `{id}` templates |
+| `collapsible` | `false` | Group the options under headers that fold and unfold; see [Collapsible lists](#collapsible-lists) |
+| `collapsed` | `true` | (collapsible) Groups start folded |
+| `group_separator` | tab | (collapsible) What splits `GROUP` from `ROW` in an option |
 
 With `multi = true`: click or Ctrl+click rows; from the search box Up/Down moves
 focus into the list, where Space toggles a row and Shift/Ctrl+arrows extend the
@@ -273,6 +278,76 @@ ignored, and a single-select list is reordered best match first:
 Prefix matches rank above initials, above substrings, above scattered letters;
 ties keep the original order. A `multi` list filters the same way but is not
 reordered (reordering would drop the rows you already selected).
+
+### Collapsible lists
+
+`collapsible = true` turns a `list` into a tree of folding groups, made for help
+screens and long reference tables. Every option line is `GROUP<TAB>ROW`; lines
+without the tab belong to no group and stay at the top. Groups appear in the
+order they first occur, each as a header with a row count:
+
+```
+▸ Hyprland  (160)
+▾ Yazi  (130)
+    j       Move down
+    k       Move up
+▸ mpv  (190)
+```
+
+| Do | Effect |
+|----|--------|
+| Enter, click or double-click a header | Fold / unfold that group |
+| Right / Left on a header (search empty) | Unfold / fold it |
+| Left on a row (search empty) | Fold its group and land on its header |
+| Type | Searches **inside folded groups too**: every group with a match opens, showing only the matches. The group name is part of what a row matches, so `yazi seek` finds the rows of the Yazi group. Clear the search and the folds come back |
+| Enter on a row | Submits it: `{id}` and `stdout` get the row **without** its group |
+
+```toml
+[[items]]
+type        = "list"
+id          = "key"
+collapsible = true
+collapsed   = true          # start with every group folded (the default)
+match       = "smart"
+stdin       = true
+```
+
+```sh
+printf 'Yazi\tj  move down\nYazi\tk  move up\nmpv\tSPACE  pause\n' | spot help.toml
+```
+
+Style the lines with `.spot-group-header` and `.spot-group-row` (see
+[css.md](css.md)). `multi` and `collapsible` cannot be combined. Example:
+[`examples/help.toml`](../examples/help.toml).
+
+### `apps`
+
+An application launcher: the installed applications (freedesktop `.desktop`
+entries) as a searchable list; Enter **launches the selected one** and closes.
+The index is cached by the daemon and rebuilt only when an applications
+directory changes. It is the building block for a launcher menu in any style:
+what is scanned, how apps are started and how it looks are all configuration
+([`[apps]`](#apps-1) + CSS), none of it Go.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `placeholder` | none | Hint text in the search box |
+| `height` | `320` | Minimum list height in px |
+| `match` | `smart` | Matching mode (see `list`); `apps` is always ranked |
+
+The search matches the name first, then the generic name, comment, keywords and
+desktop id (a match there ranks below a name match). With no query the list is
+ordered by how often and how recently you launched things (`frecency`), then by
+name. The item's value is the **desktop id** (`org.mozilla.firefox`), so
+`submit.exec` / `submit.stdout` can use `{app}` (the item id) instead of the
+default launch.
+
+```toml
+[[items]]
+type        = "apps"
+id          = "app"
+placeholder = "Search apps…"
+```
 
 ### `tiles`
 
@@ -371,6 +446,56 @@ required = true
 pattern  = "^[0-9]+$"
 error    = "Port must be a number"
 ```
+
+## `[apps]`
+
+Configures the [`apps`](#apps) item. Every key is optional.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `paths` | XDG data dirs + flatpak exports | Directories scanned for `.desktop` files (`~` works). Earlier directories win when two hold the same desktop id |
+| `exclude` | none | Globs matched against the desktop id **or** the name, case-insensitive: `["*Setup*", "org.kde.kcm_*"]` |
+| `desktop` | `$XDG_CURRENT_DESKTOP` | Desktop names that `OnlyShowIn` / `NotShowIn` are checked against |
+| `show_comment` | `true` | Show `Name  —  comment` |
+| `max_results` | `0` | Cap on the list (`0` = all) |
+| `frecency` | `true` | Rank by launch count and recency, kept in `$XDG_STATE_HOME/spot/frecency.json` |
+
+Hidden entries (`NoDisplay`, `Hidden`), entries whose `TryExec` is missing and
+entries for other desktops are never shown. The default `paths` include the
+flatpak export directories even when the session `XDG_DATA_DIRS` lacks them.
+
+### `[apps.launch]`
+
+How an app is started. It is **not** GIO's launcher: spot runs the command you
+give, so `uwsm-app`, `systemd-run` or any wrapper stays under your control, and
+the app starts detached (its own session, no stdio) so it outlives the dialog.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `command` | `{exec}` | Command template. `{exec}` is the entry's `Exec` line, already resolved and shell-quoted |
+| `terminal` | `xdg-terminal-exec {exec}` | Wraps apps with `Terminal=true`; its result becomes the `{exec}` of `command` |
+| `cwd` | the entry's `Path=`, else the caller's | Working directory (`~` works) |
+| `env` | none | Extra environment, a table of `NAME = "value"` |
+
+The `Exec` field codes are resolved per the Desktop Entry spec: `%f %F %u %U`
+(files, URLs: there are none to hand over) and the deprecated codes disappear,
+`%i` becomes `--icon <Icon>`, `%c` the name, `%k` the `.desktop` path, `%%` a
+percent sign.
+
+### `[[apps.override]]`
+
+Replaces the whole command of one app, by desktop id. `{exec}` still works:
+
+```toml
+[apps.launch]
+command = "uwsm-app -- {exec}"
+
+[[apps.override]]
+id      = "org.mozilla.firefox"
+command = "uwsm-app -- firefox --new-window"
+```
+
+Example: [`examples/launcher.toml`](../examples/launcher.toml).
 
 ## `[submit]`
 

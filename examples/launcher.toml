@@ -1,0 +1,37 @@
+# An application launcher: type = "apps" (docs/toml.md#apps).
+#
+#   spot examples/launcher.toml
+#
+# Search the installed applications, Enter launches the selected one. How the
+# apps are started is the [apps.launch] template, so this is also the place to
+# plug in uwsm-app or another wrapper.
+
+title       = ""
+anchor      = "top"
+width       = 640
+style       = "theme.css"
+keyboard    = "exclusive"
+
+[opacity]
+outside = 100
+
+[[items]]
+type        = "apps"
+id          = "app"
+placeholder = "Search apps…"
+height      = 360
+
+[apps]
+exclude      = ["*Setup*", "org.kde.kcm_*"]   # hide by desktop id or name
+show_comment = true
+max_results  = 12
+frecency     = true                            # most-launched first, learned over time
+
+[apps.launch]
+command  = "{exec}"                            # e.g. "uwsm-app -- {exec}"
+terminal = "xdg-terminal-exec {exec}"          # wraps Terminal=true apps
+
+# One app with its own command:
+# [[apps.override]]
+# id      = "org.mozilla.firefox"
+# command = "firefox --new-window"

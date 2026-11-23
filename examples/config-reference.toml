@@ -59,6 +59,39 @@ height      = 200                          # min list height in px
 match       = "contains"                   # contains | smart (abbreviations: "rmt" finds "Remote")
 
 [[items]]
+type        = "list"           # collapsible list: options are "GROUP<TAB>ROW", groups fold
+id          = "help"
+collapsible = true             # Enter / click a header folds it; typing searches folded groups too
+collapsed   = true             # groups start folded (default true)
+# group_separator = "\t"       # what splits GROUP from ROW (default tab)
+match       = "smart"
+options     = ["Yazi\tj  move down", "Yazi\tk  move up", "mpv\tSPACE  pause"]
+
+[[items]]
+type        = "apps"           # application launcher: Enter launches the selected app (see [apps])
+id          = "app"
+placeholder = "Search apps..."
+
+# The application index and how apps are started (type = "apps"). All optional.
+[apps]
+# paths        = ["~/.local/share/applications", "/usr/share/applications"]   # default: XDG data dirs + flatpak
+exclude        = ["*Setup*"]   # globs on desktop id or name
+# desktop      = ["Hyprland"]  # OnlyShowIn / NotShowIn names (default $XDG_CURRENT_DESKTOP)
+show_comment   = true          # "Name  -  comment"
+max_results    = 0             # 0 = all
+frecency       = true          # rank by launch count and recency
+
+[apps.launch]
+command  = "{exec}"                        # e.g. "uwsm-app -- {exec}"
+terminal = "xdg-terminal-exec {exec}"      # wraps Terminal=true apps
+# cwd    = "~"
+# env    = { GTK_THEME = "Adwaita:dark" }
+
+# [[apps.override]]                        # one app, its own command
+# id      = "org.mozilla.firefox"
+# command = "firefox --new-window"
+
+[[items]]
 type    = "tiles"              # icon + label grid; click/Enter picks and submits
 id      = "action"
 label   = "Action"

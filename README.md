@@ -12,7 +12,7 @@ dialogs). spot is for the dialog: ask, answer, done. A small background daemon
 (see [Daemon](#daemon)) keeps one window alive so chained dialogs hand over
 without flicker; it holds no state of its own and draws nothing ambient.
 
-**Status:** early / v0. Widgets: field, password, text, select, list, tiles, toggle, scale.
+**Status:** early / v0. Widgets: field, password, text, select, list (optionally collapsible), apps (an application launcher), tiles, toggle, scale.
 
 ## Behaviour
 
@@ -175,6 +175,8 @@ More in [`examples/`](examples/):
 | [`menu.toml`](examples/menu.toml) | dmenu-style searchable list from stdin |
 | [`form.toml`](examples/form.toml) | Field + dropdown with an `exec` submit |
 | [`widgets.toml`](examples/widgets.toml) | text, toggle, scale, multi-select list, validation and JSON output |
+| [`help.toml`](examples/help.toml) | **0.5.0** collapsible list: a help screen whose sections fold and unfold, searchable inside folded groups |
+| [`launcher.toml`](examples/launcher.toml) | **0.5.0** `type = "apps"`: an application launcher with a configurable launch command, exclude globs and frecency |
 | [`back.sh`](examples/back.sh) | A menu → submenu → dialog flow with Back, and the same dialog opened directly with none: `--back`, `SPOT_BACK`, exit status 4 |
 | [`demo/`](examples/demo/) | **0.2.0 tour**: `./examples/demo/demo.sh` launches a form with every input widget, two tile sections, a stdin list and a failing `exec` |
 | [`theme.css`](examples/theme.css) | Full theme covering every widget, including validation and error states (used by all but `ssh`) |
@@ -183,7 +185,7 @@ More in [`examples/`](examples/):
 
 Reference docs live in [`docs/`](docs/):
 
-- **[`docs/toml.md`](docs/toml.md)**: every TOML setting. Window keys, `[opacity]`, `[back]`, each widget type (`field`, `password`, `text`, `select`, `list`, `tiles`, `toggle`, `scale`), validation, `[submit]` (`exec`, `stdout`, JSON output, `on_error`, `{_active}`), exit codes and the `SPOT_*` environment overrides.
+- **[`docs/toml.md`](docs/toml.md)**: every TOML setting. Window keys, `[opacity]`, `[back]`, each widget type (`field`, `password`, `text`, `select`, `list`, collapsible lists, `apps`, `tiles`, `toggle`, `scale`), the `[apps]` table, validation, `[submit]` (`exec`, `stdout`, JSON output, `on_error`, `{_active}`), exit codes and the `SPOT_*` environment overrides.
 - **[`docs/css.md`](docs/css.md)**: styling. The class tree, every `.spot-*` class, states and inner GTK nodes, validation styles, how the fade interacts with CSS, and a starter stylesheet.
 
 For every key in one runnable file, see [`examples/config-reference.toml`](examples/config-reference.toml).
@@ -198,7 +200,7 @@ style  = "theme.css"            # GTK CSS, see docs/css.md
 [opacity]                       # optional; fades the dialog when the pointer leaves it
 outside = 85
 
-[[items]]                       # field | password | text | select | list | tiles | toggle | scale
+[[items]]                       # field | password | text | select | list | apps | tiles | toggle | scale
 type     = "field"
 id       = "port"
 label    = "Port"

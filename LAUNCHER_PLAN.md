@@ -192,3 +192,24 @@ Everything about the v0.4.0 release is done. The launcher starts from here.
 - Not done anywhere: the keyboard paths of Back (Enter/Esc/click on the real
   window) have only been exercised by GTK-level tests, not by hand.
 - This file is not shipped by the AUR packages (they install README, docs/, examples/).
+
+## Update 2026-11-23: groundwork for 0.5.0 (branch `feature/0.5.0`)
+
+Built, tested (unit + GTK-level), documented in `docs/toml.md`, with examples:
+
+- **Collapsible lists** (`collapsible = true` on a list): `GROUP<TAB>ROW` options
+  fold under headers, searchable inside folded groups. Logic in `groups.go`.
+- **The apps module** (`type = "apps"` + `[apps]`, `[apps.launch]`,
+  `[[apps.override]]`), i.e. Phase 1 of the plan, in `apps.go`:
+  `.desktop` parser (locale names, Hidden / NoDisplay / OnlyShowIn / NotShowIn /
+  TryExec), Exec field codes per the spec, configurable launch template with a
+  terminal wrapper, per-app override, detached launch (own session, no stdio),
+  index cached in the daemon and rebuilt when an applications directory
+  changes, smart-match ranking over name / generic name / comment / keywords /
+  id, frecency in `$XDG_STATE_HOME/spot/frecency.json`. A cold scan of 98 apps
+  takes about 2 ms.
+
+Not done yet (next phases): icons / subtitle row widget and `layout = "grid"`
+(Phase 2), inotify refresh instead of the directory-mtime check, desktop
+actions (New Window), other sources (calc, emoji, web, files) and clipboard
+history (Phases 3-4), then retiring walker in hypr-setup (Phase 5).
