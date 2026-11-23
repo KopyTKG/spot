@@ -400,3 +400,22 @@ func BenchmarkScanApps(b *testing.B) {
 	}
 	b.ReportMetric(float64(n), "apps")
 }
+
+func TestAppsIconConfig(t *testing.T) {
+	var none *AppsConfig
+	if !none.showIcons() || none.iconSize() != 32 {
+		t.Errorf("defaults: icons=%v size=%d", none.showIcons(), none.iconSize())
+	}
+	off := false
+	c := &AppsConfig{Icons: &off, IconSize: 48}
+	if c.showIcons() || c.iconSize() != 48 {
+		t.Errorf("explicit: icons=%v size=%d", c.showIcons(), c.iconSize())
+	}
+	cfg, err := parseConfig([]byte("[[items]]\ntype=\"apps\"\nid=\"a\"\n[apps]\nicons=false\nicon_size=64\n"), noEnv)
+	if err != nil || cfg.Apps.showIcons() || cfg.Apps.iconSize() != 64 {
+		t.Errorf("parsed: err=%v apps=%+v", err, cfg.Apps)
+	}
+	if _, err := parseConfig([]byte("[[items]]\ntype=\"apps\"\nid=\"a\"\n[apps]\nicon_size=-1\n"), noEnv); err == nil {
+		t.Error("a negative icon_size should be rejected")
+	}
+}

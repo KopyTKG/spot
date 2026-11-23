@@ -26,6 +26,8 @@ type AppsConfig struct {
 	Exclude     []string      `toml:"exclude"`      // globs on the desktop id or the name
 	Desktop     []string      `toml:"desktop"`      // names OnlyShowIn / NotShowIn are checked against (default $XDG_CURRENT_DESKTOP)
 	ShowComment *bool         `toml:"show_comment"` // "Name  —  comment" (default true)
+	Icons       *bool         `toml:"icons"`        // show each app's icon (default true)
+	IconSize    int           `toml:"icon_size"`    // icon size in px (default 32)
 	MaxResults  int           `toml:"max_results"`  // 0 = all
 	Frecency    *bool         `toml:"frecency"`     // rank by how often / recently launched (default true)
 	Launch      AppsLaunch    `toml:"launch"`
@@ -47,6 +49,13 @@ type AppOverride struct {
 }
 
 func (a *AppsConfig) showComment() bool { return a == nil || a.ShowComment == nil || *a.ShowComment }
+func (a *AppsConfig) showIcons() bool   { return a == nil || a.Icons == nil || *a.Icons }
+func (a *AppsConfig) iconSize() int {
+	if a == nil || a.IconSize <= 0 {
+		return 32
+	}
+	return a.IconSize
+}
 func (a *AppsConfig) useFrecency() bool { return a == nil || a.Frecency == nil || *a.Frecency }
 
 // AppEntry is one installed application.
@@ -523,17 +532,22 @@ func dirStamp(paths []string) string {
 	return b.String()
 }
 
-// loadApps returns the visible applications for c, from the cache when nothing
-// changed on disk.
-func loadApps(c *AppsConfig, env func(string) string, home string) []*AppEntry {
-	var paths []string
+// appPaths is the list of directories to scan: [apps].paths, else the defaults.
+func appPaths(c *AppsConfig, env func(string) string, home string) []string {
 	if c != nil && len(c.Paths) > 0 {
+		var paths []string
 		for _, p := range c.Paths {
 			paths = append(paths, expandHome(p, home))
 		}
-	} else {
-		paths = defaultAppPaths(env, home)
+		return paths
 	}
+	return defaultAppPaths(env, home)
+}
+
+// loadApps returns the visible applications for c, from the cache when nothing
+// changed on disk.
+func loadApps(c *AppsConfig, env func(string) string, home string) []*AppEntry {
+	paths := appPaths(c, env, home)
 	desktops := []string(nil)
 	if c != nil {
 		desktops = c.Desktop
@@ -693,6 +707,7 @@ func appLine(e *AppEntry, comment bool) string {
 
 // appResults ties the list lines back to the apps they stand for.
 type appResults struct {
+	paths   []string // the directories scanned (icons are looked up next to them)
 	cfg     *AppsConfig
 	apps    []*AppEntry
 	frec    *frecencyStore
@@ -703,6 +718,7 @@ type appResults struct {
 
 func newAppResults(c *AppsConfig, env func(string) string, home string) *appResults {
 	r := &appResults{cfg: c, home: home, apps: loadApps(c, env, home), byLine: map[string]*AppEntry{}, nowFunc: time.Now}
+	r.paths = appPaths(c, env, home)
 	if c.useFrecency() {
 		r.frec = openFrecency(frecencyPath(env, home))
 	}

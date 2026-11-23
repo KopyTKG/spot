@@ -99,6 +99,7 @@ The widget inside an `.spot-item`, by `type`:
 | `.spot-list-scroll` | `list` scroller |
 | `.spot-list` | `list` view (`GtkListView`) |
 | `.spot-list-row` | A row's label inside the list (also the lines of an `apps` list) |
+| `.spot-app` | One row of an `apps` list (with icons on): also carries `.spot-list-row`. Contains `.spot-app-icon` (the image; its size is `icon_size`) and `.spot-app-text` > `.spot-app-name` + `.spot-app-comment`; the comment label is hidden when the app has none or `show_comment = false` |
 | `.spot-group-header` | A group header of a collapsible list (the `▸` / `▾` line with the count); also carries `.spot-list-row` |
 | `.spot-group-row` | A row inside a group of a collapsible list |
 | `.spot-tiles` | `tiles` grid (`GtkFlowBox`) |

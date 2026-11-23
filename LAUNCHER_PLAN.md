@@ -209,7 +209,11 @@ Built, tested (unit + GTK-level), documented in `docs/toml.md`, with examples:
   id, frecency in `$XDG_STATE_HOME/spot/frecency.json`. A cold scan of 98 apps
   takes about 2 ms.
 
-Not done yet (next phases): icons / subtitle row widget and `layout = "grid"`
-(Phase 2), inotify refresh instead of the directory-mtime check, desktop
+- **Icons and the subtitle row** (Phase 2, first half): `icons` / `icon_size`
+  under `[apps]`; a row is icon + name + comment (`.spot-app*` classes). Icon
+  lookup covers the theme, absolute paths, the flatpak and user icon dirs, with a
+  generic fallback (`appicons.go`).
+
+Not done yet (next phases): `layout = "grid"` (Phase 2), inotify refresh instead of the directory-mtime check, desktop
 actions (New Window), other sources (calc, emoji, web, files) and clipboard
 history (Phases 3-4), then retiring walker in hypr-setup (Phase 5).

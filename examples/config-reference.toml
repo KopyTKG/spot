@@ -77,7 +77,9 @@ placeholder = "Search apps..."
 # paths        = ["~/.local/share/applications", "/usr/share/applications"]   # default: XDG data dirs + flatpak
 exclude        = ["*Setup*"]   # globs on desktop id or name
 # desktop      = ["Hyprland"]  # OnlyShowIn / NotShowIn names (default $XDG_CURRENT_DESKTOP)
-show_comment   = true          # "Name  -  comment"
+icons          = true          # icon + name + comment under it (false: plain "Name - comment" lines)
+icon_size      = 32            # px
+show_comment   = true          # the comment, under the name
 max_results    = 0             # 0 = all
 frecency       = true          # rank by launch count and recency
 

@@ -335,6 +335,13 @@ what is scanned, how apps are started and how it looks are all configuration
 | `height` | `320` | Minimum list height in px |
 | `match` | `smart` | Matching mode (see `list`); `apps` is always ranked |
 
+Icons come from the icon theme by name (`Icon=firefox`) or from an absolute file
+path in the entry. The flatpak icon directories, `~/.local/share/icons` and the
+`icons` folder next to each scanned applications folder are searched even when the
+session's `XDG_DATA_DIRS` does not list them; an icon that cannot be found falls back
+to a generic application icon. Style the rows with `.spot-app`, `.spot-app-icon`,
+`.spot-app-name` and `.spot-app-comment` (see [css.md](css.md)).
+
 The search matches the name first, then the generic name, comment, keywords and
 desktop id (a match there ranks below a name match). With no query the list is
 ordered by how often and how recently you launched things (`frecency`), then by
@@ -456,7 +463,9 @@ Configures the [`apps`](#apps) item. Every key is optional.
 | `paths` | XDG data dirs + flatpak exports | Directories scanned for `.desktop` files (`~` works). Earlier directories win when two hold the same desktop id |
 | `exclude` | none | Globs matched against the desktop id **or** the name, case-insensitive: `["*Setup*", "org.kde.kcm_*"]` |
 | `desktop` | `$XDG_CURRENT_DESKTOP` | Desktop names that `OnlyShowIn` / `NotShowIn` are checked against |
-| `show_comment` | `true` | Show `Name  —  comment` |
+| `icons` | `true` | Show each app's icon: a row is then icon, name and the comment under it. `false` gives plain `Name  —  comment` lines |
+| `icon_size` | `32` | Icon size in px |
+| `show_comment` | `true` | Show the comment (under the name, or after it without icons) |
 | `max_results` | `0` | Cap on the list (`0` = all) |
 | `frecency` | `true` | Rank by launch count and recency, kept in `$XDG_STATE_HOME/spot/frecency.json` |
 

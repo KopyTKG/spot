@@ -13,6 +13,7 @@ import (
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 )
 
 // result is how a dialog ended.
@@ -233,10 +234,40 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				selModel = selection
 			}
 
+			// Apps with icons get a richer row: icon, name and comment.
+			appRows := apps != nil && apps.cfg.showIcons()
+			if appRows {
+				ensureIconPaths(apps.paths, apps.home)
+			}
 			factory := gtk.NewSignalListItemFactory()
 			factory.ConnectSetup(func(obj *coreglib.Object) {
 				li, ok := obj.Cast().(*gtk.ListItem)
 				if !ok {
+					return
+				}
+				if appRows {
+					box := gtk.NewBox(gtk.OrientationHorizontal, 12)
+					box.AddCSSClass("spot-list-row")
+					box.AddCSSClass("spot-app")
+					img := gtk.NewImage()
+					img.AddCSSClass("spot-app-icon")
+					img.SetVAlign(gtk.AlignCenter)
+					text := gtk.NewBox(gtk.OrientationVertical, 0)
+					text.AddCSSClass("spot-app-text")
+					text.SetVAlign(gtk.AlignCenter)
+					name := gtk.NewLabel("")
+					name.AddCSSClass("spot-app-name")
+					name.SetXAlign(0)
+					name.SetEllipsize(pango.EllipsizeEnd)
+					comment := gtk.NewLabel("")
+					comment.AddCSSClass("spot-app-comment")
+					comment.SetXAlign(0)
+					comment.SetEllipsize(pango.EllipsizeEnd)
+					text.Append(name)
+					text.Append(comment)
+					box.Append(img)
+					box.Append(text)
+					li.SetChild(box)
 					return
 				}
 				lbl := gtk.NewLabel("")
@@ -247,6 +278,29 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			factory.ConnectBind(func(obj *coreglib.Object) {
 				li, ok := obj.Cast().(*gtk.ListItem)
 				if !ok {
+					return
+				}
+				if appRows {
+					box, ok := li.Child().(*gtk.Box)
+					so, ok2 := li.Item().Cast().(*gtk.StringObject)
+					if !ok || !ok2 {
+						return
+					}
+					img := box.FirstChild().(*gtk.Image)
+					text := img.NextSibling().(*gtk.Box)
+					name := text.FirstChild().(*gtk.Label)
+					comment := name.NextSibling().(*gtk.Label)
+					e := apps.entryOf(so.String())
+					if e == nil { // not an app line: show it as it is
+						setAppIcon(img, "", apps.cfg.iconSize())
+						name.SetText(so.String())
+						comment.SetVisible(false)
+						return
+					}
+					setAppIcon(img, e.Icon, apps.cfg.iconSize())
+					name.SetText(e.Name)
+					comment.SetText(e.Comment)
+					comment.SetVisible(apps.cfg.showComment() && e.Comment != "")
 					return
 				}
 				lbl, ok := li.Child().(*gtk.Label)

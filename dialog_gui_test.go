@@ -8,6 +8,8 @@ package main
 //	go test -tags gui -run Back ./...
 
 import (
+	"image"
+	png_ "image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -324,5 +326,43 @@ func TestAppsItemWithSubmitStdoutDoesNotLaunch(t *testing.T) {
 func TestAppsItemRejectsListOptions(t *testing.T) {
 	if _, err := parseConfig([]byte("[[items]]\ntype=\"apps\"\nid=\"a\"\nmulti=true\n"), func(string) (string, bool) { return "", false }); err == nil {
 		t.Error("apps + multi should be rejected")
+	}
+}
+
+func TestSetAppIcon(t *testing.T) {
+	gtk.Init()
+	if gdk.DisplayGetDefault() == nil {
+		t.Skip("no display")
+	}
+	// A theme icon name.
+	img := gtk.NewImage()
+	setAppIcon(img, "folder", 32)
+	if img.PixelSize() != 32 || img.IconName() == "" {
+		t.Errorf("theme icon: size=%d name=%q", img.PixelSize(), img.IconName())
+	}
+	// An absolute file path.
+	dir := t.TempDir()
+	png := filepath.Join(dir, "i.png")
+	f, err := os.Create(png)
+	if err != nil {
+		t.Fatal(err)
+	}
+	im := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	if err := png_.Encode(f, im); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	img = gtk.NewImage()
+	setAppIcon(img, png, 48)
+	if img.PixelSize() != 48 || img.StorageType() == gtk.ImageEmpty {
+		t.Errorf("file icon: size=%d storage=%v", img.PixelSize(), img.StorageType())
+	}
+	// Unknown names and missing files fall back to a generic icon.
+	for _, bad := range []string{"", "definitely-not-an-icon-name", "/no/such/file.png"} {
+		img = gtk.NewImage()
+		setAppIcon(img, bad, 32)
+		if img.IconName() != "application-x-executable" {
+			t.Errorf("fallback for %q: %q", bad, img.IconName())
+		}
 	}
 }
