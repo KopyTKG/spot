@@ -1,5 +1,8 @@
 # Styling with CSS
 
+> Styling a launcher (the `.spot-app*` rows, equal row heights, a bigger selected row)? See [`launcher.md`](launcher.md#styling-the-rows).
+
+
 spot is a GTK4 app, so styling is **GTK CSS**: a subset of web CSS with GTK's
 own widget nodes. Layout comes from the TOML (widget order, `columns`, `width`...);
 CSS only changes how things look: colours, borders, radii, fonts, padding.

@@ -328,6 +328,8 @@ Style the lines with `.spot-group-header` and `.spot-group-row` (see
 
 ### `apps`
 
+> A step-by-step guide with recipes is in [`launcher.md`](launcher.md); this section is the reference.
+
 An application launcher: the installed applications (freedesktop `.desktop`
 entries) as a searchable list; Enter **launches the selected one** and closes.
 The index is cached by the daemon and rebuilt only when an applications
@@ -514,6 +516,8 @@ command = "uwsm-app -- firefox --new-window"
 Example: [`examples/launcher.toml`](../examples/launcher.toml).
 
 ## `[[sources]]`
+
+> The guide, with ready-made calculator, file, web-search and run sources, is [`launcher.md`](launcher.md#sources).
 
 Prefixes that hand the launcher's search to a **command**. When the text in an
 [`apps`](#apps) item starts with a source's prefix, the prefix is stripped, the

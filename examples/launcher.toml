@@ -1,62 +1,76 @@
-# An application launcher: type = "apps" (docs/toml.md#apps).
+# An application launcher: type = "apps" (docs/launcher.md, docs/toml.md#apps).
 #
 #   spot examples/launcher.toml
 #
-# Search the installed applications, Enter launches the selected one. How the
-# apps are started is the [apps.launch] template, so this is also the place to
-# plug in uwsm-app or another wrapper.
+# Type to search the installed applications; Enter launches the selected one. A prefix
+# hands the search to a command instead, see [[sources]] below: "= 2+2" calculates,
+# ". report" finds files, "@ gtk4" searches the web, "> htop" runs a command. The four
+# commands are the scripts in examples/sources/: copy them somewhere on your PATH (or put
+# their full paths in `exec`). Without those scripts the launcher still lists apps.
 
-title       = ""
-anchor      = "top"
-width       = 640
-style       = "theme.css"
-keyboard    = "exclusive"
+title    = ""
+anchor   = "center"
+width    = 640
+style    = "theme.css"
+keyboard = "exclusive"
+toggle   = true                 # a launcher is bound to a key: pressing it again closes it
 
 [opacity]
 outside = 100
 
+[back]
+show = "never"                  # a top-level thing: never offer Back
+
 [[items]]
 type        = "apps"
 id          = "app"
-placeholder = "Search apps…"
+placeholder = "Search apps…   = calc · . files · @ web · > run"
 height      = 360
 
 [apps]
-exclude      = ["*Setup*", "org.kde.kcm_*"]   # hide by desktop id or name
+exclude      = ["*Setup*", "org.kde.kcm_*"]   # hide by desktop id or name (globs)
 show_comment = true
+icon_size    = 32
+# icon_size_selected = 44       # a bigger icon on the selected row
 max_results  = 12
-frecency     = true                            # most-launched first, learned over time
+frecency     = true             # most-launched first, learned over time
 
 [apps.launch]
-command  = "{exec}"                            # e.g. "uwsm-app -- {exec}"
-terminal = "xdg-terminal-exec {exec}"          # wraps Terminal=true apps
+command  = "{exec}"                        # e.g. "uwsm-app -- {exec}" to start apps in a systemd scope
+terminal = "xdg-terminal-exec {exec}"      # wraps apps that declare Terminal=true
 
 # One app with its own command:
 # [[apps.override]]
 # id      = "org.mozilla.firefox"
 # command = "firefox --new-window"
 
-# --- sources: a prefix hands the search to a command (docs/toml.md#sources) ---------
-# "= 2+2" calculates, ". report" finds files, "> htop" runs a command. A source's
-# command prints rows as  label[<TAB>value[<TAB>comment]]; Enter runs `activate`.
+# --- sources: a prefix hands the search to a command (docs/launcher.md#sources) -------
+# A command prints rows as  label[<TAB>value[<TAB>comment]];  Enter runs `activate`.
 
 [[sources]]
 name     = "calc"
 prefix   = "="
 icon     = "accessories-calculator"
-exec     = "qalc -t -- {query} | head -n 1"
+exec     = "calc.sh {query}"
 activate = "wl-copy {value}"
 
 [[sources]]
 name     = "files"
 prefix   = "."
 icon     = "system-file-manager"
-exec     = "fd --max-results 40 -- {query} \"$HOME\" | awk '{ print $0 \"\\t\" $0 }'"
+exec     = "files.sh {query}"
+activate = "xdg-open {value}"
+
+[[sources]]
+name     = "web"
+prefix   = "@"
+icon     = "web-browser"
+exec     = "web.sh {query}"
 activate = "xdg-open {value}"
 
 [[sources]]
 name     = "run"
 prefix   = ">"
 icon     = "utilities-terminal"
-exec     = "bash -c 'compgen -c | sort -u | grep -i -m 30 -- \"$0\"' {query}"
+exec     = "run.sh {query}"
 activate = "sh -c {value}"
