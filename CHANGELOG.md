@@ -3,6 +3,15 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## Unreleased
+
+- **Docs and examples overhaul** (no changes to spot itself). A rewritten README; a launcher guide
+  ([`docs/launcher.md`](docs/launcher.md)); a guide to tying spot to the system
+  ([`docs/os-integration.md`](docs/os-integration.md)); a roadmap replacing the old planning notes; this
+  changelog; an examples index; runnable source scripts in `examples/sources/`; and `examples/os/`, shell
+  scripts that connect spot to a desktop (power menu, clipboard history, emoji picker, sockets table,
+  window switcher, a `sudo` / `ssh` askpass).
+
 ## 0.7.0 — 2026-11-24
 
 - **Run bar.** `default = true` on a `[[sources]]` entry makes it take everything typed without
@@ -10,8 +19,6 @@ AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [
   Together: a config that is just a search box (`examples/run.toml`).
 - **Placement.** `margin_top`, `margin_bottom`, `margin_left`, `margin_right` and `offset_x`,
   `offset_y` position any dialog from its anchor. All optional; nothing set means centred as before.
-- **Docs and examples overhaul.** A launcher guide ([`docs/launcher.md`](docs/launcher.md)), a
-  roadmap, an examples index, and runnable source scripts in `examples/sources/`.
 
 ## 0.6.0 — 2026-11-23
 

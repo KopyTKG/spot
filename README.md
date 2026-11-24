@@ -103,8 +103,10 @@ activate = "wl-copy {value}"
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("spot launcher"))     -- Hyprland
 ```
 
-More in [`examples/`](examples/) (indexed in its [README](examples/README.md)), including a help
-screen with folding sections, a run bar and the source scripts.
+More in [`examples/`](examples/) (indexed in its [README](examples/README.md)): a help screen with
+folding sections, a run bar, the launcher source scripts, and [`examples/os/`](examples/os/), runnable
+scripts that tie spot to a desktop: a power menu, clipboard history, an emoji picker, a window switcher,
+a `sudo` askpass.
 
 ## Using it
 
@@ -147,6 +149,7 @@ walk-through.
 |-|-|
 | **[`docs/toml.md`](docs/toml.md)** | Reference: every TOML setting, from the window and its placement to each widget, `apps`, `[[sources]]`, `[submit]` and the `SPOT_*` environment variables |
 | **[`docs/launcher.md`](docs/launcher.md)** | Guide: build a launcher, a run bar or any search-and-run picker; recipes, keybinds, styling, troubleshooting |
+| **[`docs/os-integration.md`](docs/os-integration.md)** | Guide: tie spot to your system with shell scripts (power menu, clipboard, window switcher, `sudo` askpass…), keybinds for Hyprland and sway |
 | **[`docs/css.md`](docs/css.md)** | Styling: the class tree, every `.spot-*` class, states, a starter stylesheet |
 | **[`docs/daemon.md`](docs/daemon.md)** | The daemon: on demand, the systemd user service, `daemon.toml`, control flags, troubleshooting |
 | [`docs/roadmap.md`](docs/roadmap.md) · [`CHANGELOG.md`](CHANGELOG.md) | Where it is going · what changed in each release |

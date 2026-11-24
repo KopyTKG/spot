@@ -4,6 +4,7 @@
 |------|--------------|
 | [`toml.md`](toml.md) | **Reference** for every TOML setting: window and placement, `[opacity]`, `[back]`, each widget type, collapsible lists, `apps`, `[apps]`, `[[sources]]`, validation, `[submit]`, environment overrides |
 | [`launcher.md`](launcher.md) | **Guide** to building a launcher, a run bar or any search-and-run picker: apps, sources, recipes, keybinds, placement, styling, troubleshooting |
+| [`os-integration.md`](os-integration.md) | **Guide** to tying spot to the system: the shape of a script, patterns (lists, tiles, tables, folding groups, askpass), compositor keybinds, Back, testing without a screen |
 | [`css.md`](css.md) | **Styling**: the class tree, every `.spot-*` class, states, per-widget notes, a starter stylesheet |
 | [`daemon.md`](daemon.md) | **The daemon**: on demand, systemd user service, autostart, `daemon.toml`, control flags, troubleshooting |
 | [`roadmap.md`](roadmap.md) | Where spot is going, and what it is not |

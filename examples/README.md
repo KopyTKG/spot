@@ -34,6 +34,16 @@ be run as they are: `spot examples/<name>.toml`. They share one stylesheet,
 
 The guide for all of this is [`docs/launcher.md`](../docs/launcher.md).
 
+## Tying spot to the system
+
+Runnable scripts for a real desktop (power menu, clipboard history, emoji picker, sockets table,
+window switcher, a password dialog for `sudo` / `ssh`), each with its config. See
+[`os/`](os/) and the guide, [`docs/os-integration.md`](../docs/os-integration.md).
+
+| Folder | Shows |
+|--------|-------|
+| [`os/`](os/) | Seven scripts that connect spot to systemd, the clipboard, the compositor, `ss` and `sudo` |
+
 ## Daemon and styling
 
 | File | Shows |

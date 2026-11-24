@@ -2,8 +2,10 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
@@ -313,6 +315,8 @@ func TestExamplesParse(t *testing.T) {
 	}
 	demos, _ := filepath.Glob("examples/demo/*.toml")
 	files = append(files, demos...)
+	osCfgs, _ := filepath.Glob("examples/os/*.toml")
+	files = append(files, osCfgs...)
 	if len(files) == 0 {
 		t.Fatal("no examples found")
 	}
@@ -607,5 +611,26 @@ func TestPlacementConfig(t *testing.T) {
 	}
 	if _, err := parseConfig([]byte("margin_left = -5\n"), noEnv); err == nil {
 		t.Error("a negative margin should be rejected")
+	}
+}
+
+// examples/os/sockets.sh prints the column header that sockets.toml repeats as the
+// list's label (that is what keeps the columns aligned); the two must stay equal.
+func TestSocketsExampleHeaderMatchesItsLabel(t *testing.T) {
+	out, err := exec.Command("bash", "examples/os/sockets.sh", "header").Output()
+	if err != nil {
+		t.Skipf("cannot run sockets.sh: %v", err)
+	}
+	data, err := os.ReadFile("examples/os/sockets.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parseConfig(data, noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := " " + strings.TrimRight(string(out), "\n") // the label has one leading space (the row padding)
+	if got := cfg.Items[0].Label; got != want {
+		t.Errorf("label %q != header %q", got, want)
 	}
 }

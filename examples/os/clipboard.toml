@@ -1,0 +1,18 @@
+# The list for clipboard.sh: stdin supplies one preview per line.
+title       = ""
+anchor      = "center"
+width       = 720
+style       = "../theme.css"
+keyboard    = "exclusive"
+toggle      = true
+
+[[items]]
+type        = "list"
+id          = "entry"
+match       = "smart"            # every word you type must match
+stdin       = true
+height      = 420
+placeholder = "Search clipboard history…"
+
+[submit]
+stdout = "{entry}"

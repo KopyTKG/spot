@@ -1,0 +1,41 @@
+# Tiles for power-menu.sh. The chosen tile's value is printed to stdout.
+title    = "Power"
+anchor   = "center"
+width    = 640
+style    = "../theme.css"
+keyboard = "exclusive"
+toggle   = true            # bound to a key: pressing it again closes the menu
+
+[[items]]
+type    = "tiles"
+id      = "action"
+columns = 5
+default = "lock"
+
+[[items.tiles]]
+icon  = "🔒"
+label = "Lock"
+value = "lock"
+
+[[items.tiles]]
+icon  = "💤"
+label = "Suspend"
+value = "suspend"
+
+[[items.tiles]]
+icon  = "🚪"
+label = "Log out"
+value = "logout"
+
+[[items.tiles]]
+icon  = "🔄"
+label = "Restart"
+value = "reboot"
+
+[[items.tiles]]
+icon  = "⏻"
+label = "Shut down"
+value = "poweroff"
+
+[submit]
+stdout = "{action}"

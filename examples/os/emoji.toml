@@ -1,0 +1,21 @@
+# The picker for emoji.sh: a collapsible list. Each stdin line is  GROUP<TAB>ROW;
+# groups start folded, typing searches inside all of them (docs/toml.md#collapsible-lists).
+title       = ""
+anchor      = "center"
+width       = 640
+style       = "../theme.css"
+keyboard    = "exclusive"
+toggle      = true
+
+[[items]]
+type        = "list"
+id          = "emoji"
+collapsible = true
+collapsed   = true
+match       = "smart"
+stdin       = true
+height      = 440
+placeholder = "Search emoji…  grin · :rofl: · flag cz"
+
+[submit]
+stdout = "{emoji}"       # the row without its group

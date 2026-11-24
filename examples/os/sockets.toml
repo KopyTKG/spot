@@ -1,0 +1,25 @@
+# The table for sockets.sh: a list fed from stdin whose `label` is the column header.
+# The label MUST equal `sockets.sh header` (same fixed column widths); the font is
+# monospace (theme.css sets it), which is what keeps the columns aligned.
+# SPOT_TITLE (the count) is supplied by the script.
+
+anchor   = "center"
+width    = 960
+style    = "../theme.css"
+keyboard = "exclusive"
+toggle   = true
+
+[opacity]
+outside = 100
+
+[[items]]
+type        = "list"
+id          = "row"
+label       = " PROTO STATE       LOCAL                        PEER                         PROCESS"
+placeholder = "Filter…  tcp listen 22 · ssh estab · docker"
+match       = "smart"
+stdin       = true
+height      = 520
+
+[submit]
+stdout = "{row}"

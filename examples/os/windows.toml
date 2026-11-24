@@ -1,0 +1,20 @@
+# The list for windows.sh: one "app — title" label per line from stdin.
+anchor      = "center"
+width       = 760
+style       = "../theme.css"
+keyboard    = "exclusive"
+toggle      = true
+
+[opacity]
+outside = 100
+
+[[items]]
+type        = "list"
+id          = "window"
+match       = "smart"
+stdin       = true
+height      = 360
+placeholder = "Switch to…"
+
+[submit]
+stdout = "{window}"

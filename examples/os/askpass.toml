@@ -1,0 +1,15 @@
+# A password prompt for askpass.sh. Title and footer come from the script (SPOT_TITLE,
+# SPOT_FOOTER); the password is printed to stdout and nowhere else.
+anchor   = "center"
+width    = 460
+style    = "../theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type        = "password"
+id          = "pw"
+placeholder = "Password"
+required    = true
+
+[submit]
+stdout = "{pw}"
