@@ -26,20 +26,26 @@ const (
 )
 
 type Config struct {
-	Title    string
-	Anchor   string // center (default) | top | bottom | left | right
-	Width    int
-	Height   int
-	Style    string // path to CSS, relative to TOML file
-	Footer   string
-	Keyboard string // exclusive (default) | on-demand | none
-	Toggle   bool   // a keybind dialog: asking for it again closes it, and repeats do not queue up
-	Items    []Item
-	Submit   Submit
-	Opacity  *Opacity
-	Back     *Back
-	Apps     *AppsConfig    // [apps]: the application index and how apps are launched (type = "apps")
-	Sources  []SourceConfig // [[sources]]: prefixes that hand the launcher's search to a command (see sources.go)
+	Title        string
+	Anchor       string // center (default) | top | bottom | left | right
+	MarginTop    int    `toml:"margin_top"`    // px kept free above the dialog
+	MarginBottom int    `toml:"margin_bottom"` // ... below it
+	MarginLeft   int    `toml:"margin_left"`   // ... to its left
+	MarginRight  int    `toml:"margin_right"`  // ... to its right
+	OffsetX      int    `toml:"offset_x"`      // px to shift the dialog from where the anchor puts it; + is right, - left
+	OffsetY      int    `toml:"offset_y"`      // ... + is down, - up
+	Width        int
+	Height       int
+	Style        string // path to CSS, relative to TOML file
+	Footer       string
+	Keyboard     string // exclusive (default) | on-demand | none
+	Toggle       bool   // a keybind dialog: asking for it again closes it, and repeats do not queue up
+	Items        []Item
+	Submit       Submit
+	Opacity      *Opacity
+	Back         *Back
+	Apps         *AppsConfig    // [apps]: the application index and how apps are launched (type = "apps")
+	Sources      []SourceConfig // [[sources]]: prefixes that hand the launcher's search to a command (see sources.go)
 
 	// From SPOT_BACK: the caller wants a Back control, and what to run on it.
 	backEnv bool
@@ -79,6 +85,7 @@ type Item struct {
 	Match       string   // list: "contains" (default) | "smart" (see smartScore)
 	Separator   *string  // list (multi): joins the selected options (default newline)
 	Query       string   // list, apps: text the search box starts with (SPOT_QUERY overrides it)
+	HideEmpty   bool     `toml:"hide_empty"` // list, apps: the results list is hidden while it has no rows (a bare search bar)
 	Collapsible bool     // list: options are "GROUP<TAB>ROW"; groups fold and unfold (see groups.go)
 	Collapsed   *bool    // list (collapsible): groups start folded (default true)
 	GroupSep    *string  `toml:"group_separator"` // list (collapsible): what splits group from row (default tab)
@@ -240,6 +247,9 @@ func (c *Config) validate() error {
 	if err := validateSources(c.Sources); err != nil {
 		return err
 	}
+	if c.MarginTop < 0 || c.MarginBottom < 0 || c.MarginLeft < 0 || c.MarginRight < 0 {
+		return errors.New("margin_top, margin_bottom, margin_left and margin_right must not be negative (use offset_x / offset_y to shift)")
+	}
 	if c.Apps != nil && (c.Apps.IconSize < 0 || c.Apps.IconSizeSel < 0) {
 		return fmt.Errorf("apps.icon_size and apps.icon_size_selected must not be negative")
 	}
@@ -261,6 +271,9 @@ func (c *Config) validate() error {
 				return fmt.Errorf("item %q: collapsible lists cannot be multi-select", it.ID)
 			}
 		default:
+			if it.HideEmpty {
+				return fmt.Errorf("item %q: hide_empty only applies to lists and apps", it.ID)
+			}
 			if it.Collapsible || it.Collapsed != nil || it.GroupSep != nil {
 				return fmt.Errorf("item %q: collapsible, collapsed and group_separator only apply to lists", it.ID)
 			}
@@ -456,6 +469,41 @@ func parseAnchor(anchor string) (hAlign, vAlign) {
 		}
 	}
 	return h, v
+}
+
+// placementMargins turns margins and offsets into the four GTK margins of the
+// dialog, for its alignment. An offset moves the dialog from its anchor: right /
+// down when positive. Margins cannot be negative in GTK, so a shift toward an edge
+// is the margin on that side growing, a shift away from it the margin shrinking
+// (never below zero). On a centred axis the dialog sits in the middle of what the
+// margins leave free, so shifting by n px takes a margin difference of 2n.
+func placementMargins(h hAlign, v vAlign, top, bottom, left, right, ox, oy int) (t, b, l, r int) {
+	t, b, l, r = top, bottom, left, right
+	switch h {
+	case hStart:
+		l += ox
+	case hEnd:
+		r -= ox
+	default:
+		if ox > 0 {
+			l += 2 * ox
+		} else {
+			r += -2 * ox
+		}
+	}
+	switch v {
+	case vStart:
+		t += oy
+	case vEnd:
+		b -= oy
+	default:
+		if oy > 0 {
+			t += 2 * oy
+		} else {
+			b += -2 * oy
+		}
+	}
+	return max(t, 0), max(b, 0), max(l, 0), max(r, 0)
 }
 
 // parseKeyboard normalises the layer-shell keyboard mode.

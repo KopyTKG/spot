@@ -220,6 +220,10 @@ Built, tested (unit + GTK-level), documented in `docs/toml.md`, with examples:
   comment]]`; Enter runs `activate`. `query` / `SPOT_QUERY` pre-fill the search box.
   Calculator, file search, web search and a command runner are all just configs.
 
+- **Run bar** (0.7.0): `default = true` on a source makes it own everything typed
+  without a prefix (no app list), and `hide_empty = true` hides the results list
+  until it has rows, so a config can be a bare search bar (`examples/run.toml`).
+
 Not done yet (next phases): `layout = "grid"` (Phase 2), inotify refresh instead of the directory-mtime check, desktop
 actions (New Window), other sources (calc, emoji, web, files) and clipboard
 history (Phases 3-4), then retiring walker in hypr-setup (Phase 5).

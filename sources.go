@@ -24,7 +24,8 @@ import (
 // SourceConfig is one [[sources]] entry.
 type SourceConfig struct {
 	Name       string `toml:"name"`
-	Prefix     string `toml:"prefix"`      // typed first to select this source ("=", ".", "@", ">")
+	Prefix     string `toml:"prefix"`      // typed first to select this source ("=", ".", "@", ">"); not used by a default source
+	Default    bool   `toml:"default"`     // the source for everything typed without another source's prefix (at most one); the app list is not shown
 	Exec       string `toml:"exec"`        // run with `sh -c`; the query is in $SPOT_QUERY and as {query}
 	Activate   string `toml:"activate"`    // run on Enter; {value} {label} {query} are shell-quoted; empty = print the value
 	Icon       string `toml:"icon"`        // icon theme name shown on every row (none by default)
@@ -72,14 +73,28 @@ type sourceRow struct {
 // validateSources rejects entries that could never work.
 func validateSources(src []SourceConfig) error {
 	seen := map[string]string{}
+	defaults := 0
 	for i, s := range src {
 		name := s.Name
 		if name == "" {
 			name = fmt.Sprintf("#%d", i+1)
 		}
+		if s.Default {
+			defaults++
+			if defaults > 1 {
+				return fmt.Errorf("sources %s: only one source can be the default", name)
+			}
+			if s.Prefix != "" {
+				return fmt.Errorf("sources %s: a default source takes no prefix", name)
+			}
+			if strings.TrimSpace(s.Exec) == "" {
+				return fmt.Errorf("sources %s: exec is required", name)
+			}
+			continue
+		}
 		switch {
 		case s.Prefix == "":
-			return fmt.Errorf("sources %s: prefix is required", name)
+			return fmt.Errorf("sources %s: prefix is required (or set default = true)", name)
 		case strings.TrimSpace(s.Prefix) != s.Prefix || strings.ContainsAny(s.Prefix, " \t"):
 			return fmt.Errorf("sources %s: prefix %q must not contain whitespace", name, s.Prefix)
 		case strings.TrimSpace(s.Exec) == "":
@@ -108,9 +123,24 @@ func matchSource(sources []SourceConfig, query string) (*SourceConfig, string) {
 		}
 	}
 	if best == nil {
+		for i := range sources { // no prefix typed: the default source takes the whole query
+			if sources[i].Default {
+				return &sources[i], strings.TrimLeft(query, " ")
+			}
+		}
 		return nil, query
 	}
 	return best, strings.TrimLeft(q[len(best.Prefix):], " ")
+}
+
+// hasDefaultSource reports whether one of the sources is the default.
+func hasDefaultSource(sources []SourceConfig) bool {
+	for _, s := range sources {
+		if s.Default {
+			return true
+		}
+	}
+	return false
 }
 
 // parseSourceRows reads a command's output into rows, keeping at most max.

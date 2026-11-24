@@ -856,6 +856,16 @@ func (r *appResults) finishSource(seq int, rows []sourceRow) (lines []string, ok
 	return lines, true
 }
 
+// startLines are the lines a new dialog opens with: the apps, or nothing when a
+// default source owns the search (the list fills once something is typed).
+func (r *appResults) startLines() []string {
+	if hasDefaultSource(r.sources) {
+		r.setQuery("")
+		return nil
+	}
+	return r.lines("")
+}
+
 // pickedRow is the selected source row, nil when there is none.
 func (r *appResults) pickedRow() *sourceRow {
 	if r.src == nil || r.pick == nil {

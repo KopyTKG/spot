@@ -451,3 +451,92 @@ func TestSpotQueryStartsTheSearchBox(t *testing.T) {
 		t.Fatalf("preset query: %q", lines)
 	}
 }
+
+func runBarCfg(dir string, hide bool) string {
+	h := ""
+	if hide {
+		h = "hide_empty = true\n"
+	}
+	return "[[items]]\ntype = \"apps\"\nid = \"app\"\n" + h +
+		"[apps]\npaths = [\"" + dir + "\"]\ndesktop = [\"Hyprland\"]\n" +
+		"[[sources]]\nname = \"run\"\ndefault = true\ndelay = 0\n" +
+		"exec = \"printf 'run: %s\\\\t%s\\\\n' \\\"$SPOT_QUERY\\\" \\\"$SPOT_QUERY\\\"\"\n" +
+		"[[sources]]\nname = \"term\"\nprefix = \">>\"\ndelay = 0\n" +
+		"exec = \"printf 'in a terminal: %s\\\\t%s\\\\n' \\\"$SPOT_QUERY\\\" \\\"$SPOT_QUERY\\\"\"\n"
+}
+
+func TestDefaultSourceOwnsTheSearchAndHidesTheApps(t *testing.T) {
+	dir, _ := appsTestDir(t)
+	d, _ := guiDialog(t, runBarCfg(dir, true), nil, append(os.Environ(), "XDG_STATE_HOME="+t.TempDir()))
+	lines, _, search := listLines(t, d)
+	if len(lines) != 0 {
+		t.Fatalf("a default source means no app list: %q", lines)
+	}
+	scroll := widgetByClass(d.root, "spot-list-scroll")
+	if gtk.BaseWidget(scroll).Visible() {
+		t.Error("hide_empty: the list must be hidden while it is empty")
+	}
+	typeInto(search, "htop -x")
+	lines, _, _ = listLines(t, d)
+	if len(lines) != 1 || lines[0] != "run: htop -x" {
+		t.Fatalf("no prefix typed: %q", lines)
+	}
+	if !gtk.BaseWidget(scroll).Visible() {
+		t.Error("the list must appear once there are rows")
+	}
+	typeInto(search, ">> htop")
+	if lines, _, _ = listLines(t, d); len(lines) != 1 || lines[0] != "in a terminal: htop" {
+		t.Fatalf("a real prefix still wins: %q", lines)
+	}
+	typeInto(search, "")
+	if lines, _, _ = listLines(t, d); len(lines) != 0 || gtk.BaseWidget(scroll).Visible() {
+		t.Fatalf("empty again: %q visible=%v", lines, gtk.BaseWidget(scroll).Visible())
+	}
+}
+
+func TestListStaysVisibleWithoutHideEmpty(t *testing.T) {
+	dir, _ := appsTestDir(t)
+	d, _ := guiDialog(t, runBarCfg(dir, false), nil, append(os.Environ(), "XDG_STATE_HOME="+t.TempDir()))
+	if scroll := widgetByClass(d.root, "spot-list-scroll"); !gtk.BaseWidget(scroll).Visible() {
+		t.Error("without hide_empty the list is always shown")
+	}
+}
+
+func TestHideEmptyOnAPlainList(t *testing.T) {
+	cfg := "[[items]]\ntype = \"list\"\nid = \"c\"\nhide_empty = true\nmatch = \"contains\"\noptions = [\"alpha\", \"beta\"]\n"
+	d, _ := guiDialog(t, cfg, nil, nil)
+	_, _, search := listLines(t, d)
+	scroll := widgetByClass(d.root, "spot-list-scroll")
+	if !gtk.BaseWidget(scroll).Visible() {
+		t.Fatal("rows present: visible")
+	}
+	typeInto(search, "zzz")
+	if gtk.BaseWidget(scroll).Visible() {
+		t.Error("no match: hidden")
+	}
+	typeInto(search, "alp")
+	if !gtk.BaseWidget(scroll).Visible() {
+		t.Error("a match: visible again")
+	}
+	if _, err := parseConfig([]byte("[[items]]\ntype=\"field\"\nid=\"x\"\nhide_empty=true\n"), func(string) (string, bool) { return "", false }); err == nil {
+		t.Error("hide_empty on a field should be rejected")
+	}
+}
+
+func TestDialogPlacementMarginsAreApplied(t *testing.T) {
+	cfg := "anchor = \"top left\"\nmargin_left = 30\noffset_x = 20\noffset_y = 90\n[[items]]\ntype = \"list\"\nid = \"c\"\noptions = [\"a\"]\n"
+	d, _ := guiDialog(t, cfg, nil, nil)
+	root := gtk.BaseWidget(d.root)
+	if root.HAlign() != gtk.AlignStart || root.VAlign() != gtk.AlignStart {
+		t.Errorf("anchor: %v %v", root.HAlign(), root.VAlign())
+	}
+	if got := [4]int{root.MarginTop(), root.MarginBottom(), root.MarginStart(), root.MarginEnd()}; got != [4]int{90, 0, 50, 0} {
+		t.Errorf("margins (top, bottom, start, end) = %v, want [90 0 50 0]", got)
+	}
+	// A centred dialog shifted up 50 px keeps a 100 px margin below it.
+	d, _ = guiDialog(t, "offset_y = -50\n[[items]]\ntype = \"list\"\nid = \"c\"\noptions = [\"a\"]\n", nil, nil)
+	root = gtk.BaseWidget(d.root)
+	if got := [2]int{root.MarginTop(), root.MarginBottom()}; got != [2]int{0, 100} {
+		t.Errorf("centred, up 50: top/bottom = %v, want [0 100]", got)
+	}
+}

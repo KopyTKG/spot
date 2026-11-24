@@ -84,6 +84,8 @@ click outside the dialog cancels it.
 |-----|---------|-------------|
 | `title` | none | Heading shown at the top, also the window title |
 | `anchor` | `center` | Where the dialog sits: `center`, `top`, `bottom`, `left`, `right`. Combine with spaces: `top right` |
+| `margin_top`, `margin_bottom`, `margin_left`, `margin_right` | `0` | Pixels kept free between the dialog and that screen edge. They only matter on an edge the anchor sits on (`anchor = "top"` + `margin_top = 120` puts it 120 px from the top) |
+| `offset_x`, `offset_y` | `0` | Shift the dialog from where the anchor puts it, in pixels; **+ is right / down, − left / up**, whatever the anchor. Works on a centred axis too (`offset_y = -80` lifts a centred dialog 80 px above the middle). It is added to the margins and never pushes the dialog past an edge |
 | `width` | natural | Dialog width in px |
 | `height` | natural | Dialog height in px |
 | `style` | none | CSS file, relative to this TOML (or absolute). See [css.md](css.md) |
@@ -166,6 +168,7 @@ status 1, and no command is run).
 | `label` | all | Shown above the widget. For `toggle` it is the checkbox text; for `tiles` it is a section heading |
 | `placeholder` | field, password, text, list | Greyed-out hint text |
 | `query` | list, apps | Text the search box starts with (`SPOT_QUERY` overrides it) |
+| `hide_empty` | list, apps | Hide the results list while it has no rows: just a search bar until you type something that matches (a Spotlight / run-dialog look) |
 | `default` | field, text, select, list, tiles, toggle, scale | Initial value. For `tiles` it is a tile `value`; for `toggle` `true` or `false`; for `scale` a number; for a multi `list` the options joined by `separator` |
 | `required` | field, password, text, select, list | An empty value blocks submission |
 | `pattern` | field, password, text, select, list | A non-empty value must match this [Go regexp](https://pkg.go.dev/regexp/syntax). Unanchored: write `^...$` |
@@ -520,7 +523,8 @@ replaces the app list. Each `[[sources]]` table is one source:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `name` | none | A label for messages, and `$SPOT_SOURCE` |
-| `prefix` | required | What you type first: `=`, `.`, `@`, `>`. No whitespace. The longest matching prefix wins, so `=` and `==` can coexist |
+| `prefix` | required, unless `default` | What you type first: `=`, `.`, `@`, `>`. No whitespace. The longest matching prefix wins, so `=` and `==` can coexist |
+| `default` | `false` | The source for everything typed **without** another source's prefix (at most one, and it takes no prefix). With a default source the dialog does not list apps at all: it is a bar that feeds your command, like a run dialog. See [`examples/run.toml`](../examples/run.toml) |
 | `exec` | required | Run with `sh -c` in the caller's environment. The query is in `$SPOT_QUERY` and as `{query}` (shell-quoted). A non-zero exit is fine: whatever it printed is the answer |
 | `activate` | print the value | Run when you press Enter on a row. `{value}`, `{label}` and `{query}` are shell-quoted. The command starts detached, then the dialog closes. Empty: the value is printed to stdout and the dialog closes |
 | `icon` | none | Icon theme name shown on every row of this source (no icon column without it) |

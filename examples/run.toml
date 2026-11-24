@@ -1,0 +1,33 @@
+# A run bar: nothing but a search box (docs/toml.md#sources). Everything you type goes to
+# the default source (a command runner); the results appear under the bar only when there
+# are some (hide_empty). ">> htop" is a second source that forces a terminal.
+#
+#   spot examples/run.toml            (bind it to ALT+F2, say)
+
+title    = ""
+anchor   = "top"
+width    = 640
+style    = "theme.css"
+keyboard = "exclusive"
+toggle   = true                 # the key again closes it
+
+[opacity]
+outside = 100
+
+[[items]]
+type        = "apps"
+id          = "run"
+placeholder = "Run…"
+hide_empty  = true              # no list until there is something to show
+
+[[sources]]
+name     = "run"
+default  = true                 # no prefix: everything typed is a command line
+exec     = "printf 'run: %s\\t%s\\t%s\\n' \"$SPOT_QUERY\" \"$SPOT_QUERY\" 'as typed'"
+activate = "sh -c {value}"
+
+[[sources]]
+name     = "terminal"
+prefix   = ">>"
+exec     = "printf 'in a terminal: %s\\t%s\\n' \"$SPOT_QUERY\" \"$SPOT_QUERY\""
+activate = "xdg-terminal-exec sh -c {value}"

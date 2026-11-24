@@ -145,3 +145,46 @@ func TestRunSourceCapsRows(t *testing.T) {
 		t.Errorf("max_results: %d rows", len(rows))
 	}
 }
+
+func TestDefaultSource(t *testing.T) {
+	src := []SourceConfig{{Name: "term", Prefix: ">>"}, {Name: "run", Default: true}}
+	for _, c := range []struct{ query, source, rest string }{
+		{"htop", "run", "htop"},         // no prefix: the default takes everything
+		{"  htop -x", "run", "htop -x"}, // leading spaces dropped
+		{">> htop", "term", "htop"},     // a real prefix still wins
+		{"", "run", ""},                 // empty: still the default, with nothing to run
+		{"a >> b", "run", "a >> b"},     // only a leading prefix counts
+	} {
+		got, rest := matchSource(src, c.query)
+		if got == nil || got.Name != c.source || rest != c.rest {
+			name := ""
+			if got != nil {
+				name = got.Name
+			}
+			t.Errorf("matchSource(%q) = (%q, %q), want (%q, %q)", c.query, name, rest, c.source, c.rest)
+		}
+	}
+	// Without a default source plain text is plain app search.
+	if got, rest := matchSource([]SourceConfig{{Name: "t", Prefix: ">>"}}, "htop"); got != nil || rest != "htop" {
+		t.Errorf("no default: %v %q", got, rest)
+	}
+	if !hasDefaultSource(src) || hasDefaultSource(src[:1]) {
+		t.Error("hasDefaultSource")
+	}
+}
+
+func TestValidateDefaultSource(t *testing.T) {
+	ok := []SourceConfig{{Name: "run", Default: true, Exec: "x"}, {Name: "t", Prefix: ">>", Exec: "y"}}
+	if err := validateSources(ok); err != nil {
+		t.Errorf("valid: %v", err)
+	}
+	for name, bad := range map[string][]SourceConfig{
+		"two defaults":       {{Name: "a", Default: true, Exec: "x"}, {Name: "b", Default: true, Exec: "y"}},
+		"default and prefix": {{Name: "a", Default: true, Prefix: "=", Exec: "x"}},
+		"default no exec":    {{Name: "a", Default: true}},
+	} {
+		if err := validateSources(bad); err == nil {
+			t.Errorf("%s should be rejected", name)
+		}
+	}
+}

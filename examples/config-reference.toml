@@ -5,6 +5,9 @@
 # --- window ---------------------------------------------------------------
 title    = "Reference"        # heading + window title (SPOT_TITLE overrides)
 anchor   = "center"           # center | top | bottom | left | right (combine: "top right")
+# margin_top = 120              # px from the screen edge the anchor sits on (also _bottom / _left / _right)
+# offset_x = 0                  # shift from the anchor: + right, - left (px)
+# offset_y = -80                # + down, - up: a centred dialog 80 px above the middle
 width    = 420                # dialog width in px (omit for natural size)
 height   = 0                  # dialog height in px (0 = natural)
 style    = "theme.css"        # CSS file, relative to this TOML (or absolute)

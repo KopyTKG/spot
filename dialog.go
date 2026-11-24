@@ -66,7 +66,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 		}
 		root.SetSizeRequest(w, h)
 	}
-	placeRoot(root, cfg.Anchor)
+	placeRoot(root, cfg)
 
 	if back != nil {
 		// Header row: the Back button on the left, the title truly centred (a
@@ -179,7 +179,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			if item.Type == "apps" {
 				apps = newAppResults(cfg.Apps, cfg.Sources, envOf, homeOf(envOf))
 				appsRes, appsID = apps, item.ID
-				opts = apps.lines("")
+				opts = apps.startLines()
 			}
 			// Collapsible list: the rows shown are the flattened groups; `entries`
 			// says what each shown line is (a header or a row).
@@ -479,6 +479,10 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				}
 			})
 
+			if item.HideEmpty { // a bare search bar until there is something to list
+				scrolled.SetVisible(filterModel.NItems() > 0) // the model the list shows, after filtering
+				filterModel.ConnectItemsChanged(func(_, _, _ uint) { scrolled.SetVisible(filterModel.NItems() > 0) })
+			}
 			row.Append(search)
 			row.Append(scrolled)
 			if item.Query != "" { // the search box starts with this text (a prefix, say)
@@ -1229,10 +1233,15 @@ func moveSelection(sel *gtk.SingleSelection, lv *gtk.ListView, delta int) {
 	}
 }
 
-func placeRoot(root *gtk.Box, anchor string) {
-	h, v := parseAnchor(anchor)
+func placeRoot(root *gtk.Box, cfg *Config) {
+	h, v := parseAnchor(cfg.Anchor)
 	root.SetHAlign([]gtk.Align{gtk.AlignCenter, gtk.AlignStart, gtk.AlignEnd}[h])
 	root.SetVAlign([]gtk.Align{gtk.AlignCenter, gtk.AlignStart, gtk.AlignEnd}[v])
+	t, b, l, r := placementMargins(h, v, cfg.MarginTop, cfg.MarginBottom, cfg.MarginLeft, cfg.MarginRight, cfg.OffsetX, cfg.OffsetY)
+	root.SetMarginTop(t)
+	root.SetMarginBottom(b)
+	root.SetMarginStart(l)
+	root.SetMarginEnd(r)
 }
 
 // backspaceGoesBack reports whether Backspace, with focus where it is, means

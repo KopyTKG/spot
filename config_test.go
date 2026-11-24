@@ -569,3 +569,43 @@ exec = "fd {query}"
 		}
 	}
 }
+
+func TestPlacementMargins(t *testing.T) {
+	type m struct{ t, b, l, r int }
+	for _, c := range []struct {
+		name      string
+		h         hAlign
+		v         vAlign
+		top, bot  int
+		left, rgt int
+		ox, oy    int
+		want      m
+	}{
+		{"nothing set", hCenter, vCenter, 0, 0, 0, 0, 0, 0, m{0, 0, 0, 0}},
+		{"top-left margins", hStart, vStart, 20, 0, 30, 0, 0, 0, m{20, 0, 30, 0}},
+		{"top-left offset moves right/down", hStart, vStart, 0, 0, 0, 0, 40, 60, m{60, 0, 40, 0}},
+		{"top-left offset negative stops at the edge", hStart, vStart, 10, 0, 10, 0, -50, -50, m{0, 0, 0, 0}},
+		{"bottom-right offset down/right shrinks the margin", hEnd, vEnd, 0, 100, 0, 100, 30, 30, m{0, 70, 0, 70}},
+		{"bottom-right offset up/left grows it", hEnd, vEnd, 0, 0, 0, 0, -30, -30, m{0, 30, 0, 30}},
+		{"centred, shifted down 100", hCenter, vCenter, 0, 0, 0, 0, 0, 100, m{200, 0, 0, 0}},
+		{"centred, shifted up 100", hCenter, vCenter, 0, 0, 0, 0, 0, -100, m{0, 200, 0, 0}},
+		{"centred, shifted right 50 and left 50", hCenter, vCenter, 0, 0, 0, 0, 50, 0, m{0, 0, 100, 0}},
+		{"centred, shifted left", hCenter, vCenter, 0, 0, 0, 0, -50, 0, m{0, 0, 0, 100}},
+		{"margins and offset add up", hCenter, vStart, 80, 0, 0, 0, 25, 20, m{100, 0, 50, 0}},
+	} {
+		t0, b, l, r := placementMargins(c.h, c.v, c.top, c.bot, c.left, c.rgt, c.ox, c.oy)
+		if got := (m{t0, b, l, r}); got != c.want {
+			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPlacementConfig(t *testing.T) {
+	cfg, err := parseConfig([]byte("anchor = \"top\"\nmargin_top = 120\noffset_x = -40\noffset_y = 10\n"), noEnv)
+	if err != nil || cfg.MarginTop != 120 || cfg.OffsetX != -40 || cfg.OffsetY != 10 {
+		t.Fatalf("parsed: err=%v cfg=%+v", err, cfg)
+	}
+	if _, err := parseConfig([]byte("margin_left = -5\n"), noEnv); err == nil {
+		t.Error("a negative margin should be rejected")
+	}
+}
