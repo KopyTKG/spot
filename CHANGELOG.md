@@ -3,8 +3,11 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
-## Unreleased
+## 0.7.1 — 2026-11-25
 
+- **A hidden pointer no longer highlights anything.** While the cursor is hidden (a dialog just
+  opened, or the keyboard is in use), the tile, row or button under it gets no hover style, and
+  collapsible lists no longer move their selection there.
 - **Docs and examples overhaul** (no changes to spot itself). A rewritten README; a launcher guide
   ([`docs/launcher.md`](docs/launcher.md)); a guide to tying spot to the system
   ([`docs/os-integration.md`](docs/os-integration.md)); a roadmap replacing the old planning notes; this

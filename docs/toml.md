@@ -108,7 +108,9 @@ The dialog fades while the pointer is outside it. This is **on by default**
 The dialog starts at `inside` until the pointer first moves.
 
 Pressing a key hides the mouse pointer and stops tracking it: the dialog stays
-at `inside` until the pointer actually moves again.
+at `inside`, and nothing under the pointer is highlighted or selected, until the
+pointer actually moves again (or is clicked or scrolled). Each dialog starts in
+that state.
 
 ```toml
 [opacity]

@@ -540,3 +540,20 @@ func TestDialogPlacementMarginsAreApplied(t *testing.T) {
 		t.Errorf("centred, up 50: top/bottom = %v, want [0 100]", got)
 	}
 }
+
+func TestHiddenPointerDoesNotTargetTheDialog(t *testing.T) {
+	d, _ := guiDialog(t, listCfg, nil, nil)
+	f := newFader(gtk.NewWindow())
+	check := func(when string, want bool) {
+		t.Helper()
+		if got := d.root.CanTarget(); got != want {
+			t.Errorf("%s: CanTarget = %v, want %v", when, got, want)
+		}
+	}
+	f.reset(&Opacity{}, d.root)
+	check("on open", false)
+	f.wake()
+	check("pointer moved", true)
+	f.keyPressed()
+	check("key pressed", false)
+}

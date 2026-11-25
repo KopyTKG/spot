@@ -61,7 +61,7 @@ func (s *shell) init() {
 		gtk4layershell.SetAnchor(&win.Window, e, true)
 	}
 
-	s.fade = newFader(win)
+	s.fade = newFader(&win.Window)
 
 	// Click outside the dialog dismisses it (same as Esc).
 	click := gtk.NewGestureClick()
@@ -244,8 +244,12 @@ func applyKeyboard(win *gtk.Window, mode string) {
 // being shown. keyPressed is called on every key press: the pointer is then
 // hidden and ignored (the dialog counts as "inside") until it really moves
 // again. Each dialog starts in that state.
+//
+// Ignored means the dialog is not a pointer target: hiding the cursor alone
+// would leave GTK highlighting (:hover) whatever lies under it, and collapsible
+// lists would even move their selection there.
 type fader struct {
-	win  *gtk.ApplicationWindow
+	win  *gtk.Window
 	root *gtk.Box // the dialog being shown
 	prov *gtk.CSSProvider
 
@@ -257,7 +261,7 @@ type fader struct {
 	haveLast       bool
 }
 
-func newFader(win *gtk.ApplicationWindow) *fader {
+func newFader(win *gtk.Window) *fader {
 	f := &fader{win: win, in: 1, out: 0.85, ms: 150, inside: true, typing: true}
 	f.prov = gtk.NewCSSProvider()
 	gtk.StyleContextAddProviderForDisplay(
@@ -286,8 +290,7 @@ func newFader(win *gtk.ApplicationWindow) *fader {
 			if !moved {
 				return
 			}
-			f.typing = false
-			win.SetCursor(nil)
+			f.wake()
 		}
 		if f.root == nil {
 			return
@@ -301,6 +304,21 @@ func newFader(win *gtk.ApplicationWindow) *fader {
 		}
 	})
 	win.AddController(motion)
+
+	// A wheel turn or a button press is the pointer in use too, even if it has
+	// not moved.
+	scroll := gtk.NewEventControllerScroll(gtk.EventControllerScrollBothAxes)
+	scroll.SetPropagationPhase(gtk.PhaseCapture)
+	scroll.ConnectScroll(func(_, _ float64) bool {
+		f.wake()
+		return false
+	})
+	win.AddController(scroll)
+	press := gtk.NewGestureClick()
+	press.SetButton(0)
+	press.SetPropagationPhase(gtk.PhaseCapture)
+	press.ConnectPressed(func(int, float64, float64) { f.wake() })
+	win.AddController(press)
 	return f
 }
 
@@ -320,9 +338,30 @@ func (f *fader) reset(o *Opacity, root *gtk.Box) {
 		f.ms = *o.Transition
 	}
 	f.root = root
-	f.inside, f.typing = true, true
-	f.win.SetCursorFromName("none")
+	f.inside = true
+	f.sleep()
 	f.set(f.in)
+}
+
+// sleep hides the pointer and stops the dialog reacting to it.
+func (f *fader) sleep() {
+	f.typing = true
+	f.win.SetCursorFromName("none")
+	if f.root != nil {
+		f.root.SetCanTarget(false)
+	}
+}
+
+// wake gives the pointer back.
+func (f *fader) wake() {
+	if !f.typing {
+		return
+	}
+	f.typing = false
+	f.win.SetCursor(nil)
+	if f.root != nil {
+		f.root.SetCanTarget(true)
+	}
 }
 
 func (f *fader) set(a float64) {
@@ -346,7 +385,6 @@ func (f *fader) keyPressed() {
 	if f.typing {
 		return
 	}
-	f.typing = true
-	f.win.SetCursorFromName("none")
+	f.sleep()
 	f.update(true)
 }
