@@ -17,10 +17,11 @@ import (
 // daemon reads it once, at start; clients read it on every call, because they
 // need the socket and log paths too.
 type DaemonConfig struct {
-	Socket string `toml:"socket"` // listen here (SPOT_SOCKET wins)
-	Log    string `toml:"log"`    // stdout/stderr of a daemon a client starts
-	Grace  *int   `toml:"grace"`  // ms the surface waits for a follow-up dialog (default graceMs)
-	Chain  *int   `toml:"chain"`  // ms an answered --chain dialog stays up (default chainMs)
+	Socket string  `toml:"socket"` // listen here (SPOT_SOCKET wins)
+	Log    string  `toml:"log"`    // stdout/stderr of a daemon a client starts
+	Grace  *int    `toml:"grace"`  // ms the surface waits for a follow-up dialog (default graceMs)
+	Chain  *int    `toml:"chain"`  // ms an answered --chain dialog stays up (default chainMs)
+	Notify *string `toml:"notify"` // command reporting a failure nobody would see; "" = off (default notify-send)
 }
 
 // daemonConfigPath is where daemon.toml is looked for.

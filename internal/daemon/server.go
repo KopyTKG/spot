@@ -121,7 +121,7 @@ func show(conn net.Conn, sh *ui.Shell, req protocol.Request, reply func(protocol
 	}
 	j, err := scheduler.BuildJob(req)
 	if err != nil {
-		reply(protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err)})
+		reply(protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true})
 		return
 	}
 

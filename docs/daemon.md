@@ -119,6 +119,7 @@ socket = "$XDG_RUNTIME_DIR/spot.sock"
 log    = "~/.local/state/spot/daemon.log"
 grace  = 120
 chain  = 1500
+# notify = ""        # no notification when a dialog fails to open
 ```
 
 | Key | Default | Description |
@@ -127,6 +128,7 @@ chain  = 1500
 | `log` | `$XDG_STATE_HOME/spot/daemon.log` | Output of a daemon a client starts on demand. Truncated at each start. A daemon run by systemd logs to the journal and does not use it. |
 | `grace` | `120` | Milliseconds the window stays mapped, empty, after a dialog closes, waiting for the next one. `0` releases it at once. |
 | `chain` | `1500` | Milliseconds an answered `--chain` dialog (or one left with Back) stays on screen while the next dialog starts. |
+| `notify` | `notify-send` | How to report a dialog that did not open, [see below](#when-a-dialog-does-not-open). `""` turns it off; any other value is a `sh -c` command. |
 
 - Paths expand `$VARS` and a leading `~/`; a relative path is relative to the
   file's directory.
@@ -146,6 +148,24 @@ When to change the timing:
   vanish and come back: raise `grace`, or call the first dialog with `--chain`.
 - A `--chain` dialog that is followed by nothing stays on screen for `chain` ms;
   lower it, or end such flows with `--last`.
+
+### When a dialog does not open
+
+Started from a keybind, a bar or a menu, a dialog with a broken config used to fail silently: the
+error went to a stderr nobody reads. When a config cannot be read or is invalid, or the dialog cannot
+be shown, **and stderr is not a terminal**, spot also sends a notification naming the file and the
+error. stderr and the exit status (3) are the same either way, so scripts are unaffected. Cancelling
+a dialog, and a failing command of a dialog, do not notify.
+
+The default is `notify-send` (any notification daemon: mako, dunst, …); without it nothing more
+happens. A command of your own gets the text in `$SPOT_NOTIFY_TITLE` and `$SPOT_NOTIFY_BODY`:
+
+```toml
+notify = 'printf "%s: %s\n" "$SPOT_NOTIFY_TITLE" "$SPOT_NOTIFY_BODY" >> ~/spot-errors.log'
+```
+
+`SPOT_NO_NOTIFY=1` turns it off for one call. A broken `daemon.toml` itself is reported on stderr and
+ignored, so the default applies.
 
 ## Controlling it
 
@@ -190,6 +210,7 @@ the way the calling script would.
 |----------|---------|-|
 | `SPOT_SOCKET` | client, daemon | Socket path; wins over `daemon.toml`. Run a second, separate daemon with it. |
 | `SPOT_NO_DAEMON` | client | Any value: same as `--oneshot` |
+| `SPOT_NO_NOTIFY` | client | Any value: no notification when a dialog does not open |
 | `WAYLAND_DISPLAY` | client, daemon | Without it the client does not try the daemon; the daemon needs it to draw |
 | `XDG_CONFIG_HOME` | client, daemon | Where `spot/daemon.toml` is looked for |
 | `XDG_RUNTIME_DIR` | client, daemon | Default socket directory (else `/tmp/spot-<uid>.sock`) |

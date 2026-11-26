@@ -3,6 +3,13 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.8.1 — 2026-11-26
+
+- **A dialog that does not open says so.** A broken or missing config used to fail silently from a
+  keybind; when stderr is not a terminal spot now also sends a notification (`notify` in
+  `daemon.toml`, `SPOT_NO_NOTIFY`).
+- Without a display spot exits with status 3 and says why, not with 1 (which means cancelled).
+
 ## 0.8.0 — 2026-11-26
 
 - **Controls that apply at once.** `state` and `on_change` on a new `switch` (look: switch, button

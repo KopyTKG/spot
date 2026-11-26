@@ -30,3 +30,8 @@ grace = 120
 # Milliseconds an answered `--chain` dialog (and one left with Back) stays on
 # screen while the next dialog starts. 0-60000.
 chain = 1500
+
+# A dialog that cannot open sends a notification when stderr is not a terminal
+# (a keybind, a bar). Default: notify-send. "" turns it off; another value is a
+# shell command that gets $SPOT_NOTIFY_TITLE and $SPOT_NOTIFY_BODY.
+# notify = ""

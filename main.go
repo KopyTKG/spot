@@ -10,6 +10,7 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/client"
 	"gitlab.com/KopyTKG/spot/internal/config"
 	"gitlab.com/KopyTKG/spot/internal/daemon"
+	"gitlab.com/KopyTKG/spot/internal/notify"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
 )
 
@@ -61,6 +62,19 @@ daemon and service: https://github.com/KopyTKG/spot/blob/main/docs/daemon.md
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "spot: "+format+"\n", args...)
 	os.Exit(protocol.ExitError)
+}
+
+// failDialog is fatal for a dialog that will not open: it also says so where it
+// is seen when stderr is not.
+func failDialog(cfgPath, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(os.Stderr, "spot: %s\n", msg)
+	report(cfgPath, msg)
+	os.Exit(protocol.ExitError)
+}
+
+func report(cfgPath, msg string) {
+	notify.Failure(config.Daemon().Notify, "spot: "+filepath.Base(cfgPath)+" did not open", msg)
 }
 
 func usageError(format string, args ...any) {
@@ -142,11 +156,11 @@ func main() {
 	// we need to know whether the dialog wants stdin.
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
-		fatal("%v", err)
+		failDialog(cfgPath, "%v", err)
 	}
 	cfg, err := config.ParseConfig(data, os.LookupEnv)
 	if err != nil {
-		fatal("%s: %v", cfgPath, err)
+		failDialog(cfgPath, "%s: %v", cfgPath, err)
 	}
 	for _, it := range cfg.Items {
 		if it.Type == "list" && it.Stdin {
@@ -173,5 +187,8 @@ func main() {
 
 	os.Stdout.WriteString(resp.Stdout)
 	os.Stderr.WriteString(resp.Stderr)
+	if resp.Fault {
+		report(cfgPath, strings.TrimPrefix(strings.TrimSpace(resp.Stderr), "spot: "))
+	}
 	os.Exit(resp.Code)
 }

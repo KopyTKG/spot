@@ -26,7 +26,12 @@ func appID(name string, pid int) string {
 func RunOneshot(req protocol.Request) protocol.Response {
 	j, err := scheduler.BuildJob(req)
 	if err != nil {
-		return protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err)}
+		return protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true}
+	}
+	// Without a display GTK would end the process itself, with the status that
+	// means "cancelled" and no word to anyone.
+	if !gtk.InitCheck() {
+		return protocol.Response{Code: protocol.ExitError, Stderr: "spot: the dialog could not be shown: no Wayland display\n", Fault: true}
 	}
 	// Per-invocation app ID so concurrent `spot` calls don't dedupe.
 	base := strings.TrimSuffix(filepath.Base(req.Config), filepath.Ext(req.Config))
@@ -42,6 +47,6 @@ func RunOneshot(req protocol.Request) protocol.Response {
 	case r := <-j.Reply:
 		return r
 	default:
-		return protocol.Response{Code: protocol.ExitError}
+		return protocol.Response{Code: protocol.ExitError, Stderr: "spot: the dialog could not be shown\n", Fault: true}
 	}
 }

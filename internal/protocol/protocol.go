@@ -62,6 +62,9 @@ type Response struct {
 	Stderr  string `json:"stderr,omitempty"`
 	Version string `json:"version,omitempty"` // the daemon's build
 	Stale   bool   `json:"stale,omitempty"`   // daemon and client builds differ: restart the daemon
+	// Fault: spot itself could not show the dialog (as opposed to a command of
+	// the dialog failing). The client tells the user when stderr goes unseen.
+	Fault bool `json:"fault,omitempty"`
 }
 
 // RoundTrip sends req on conn and returns the daemon's answer.
