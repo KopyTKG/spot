@@ -14,6 +14,8 @@ be run as they are: `spot examples/<name>.toml`. They share one stylesheet,
 | [`password.toml`](password.toml) | A password prompt printed to stdout |
 | [`confirm.toml`](confirm.toml) | Yes / No tiles; `SPOT_TITLE`, `SPOT_DEFAULT` |
 | [`widgets.toml`](widgets.toml) | `text`, `toggle`, `scale`, a multi-select list, validation and JSON output |
+| [`settings.toml`](settings.toml) | live `switch`, `segmented`, `scale` and `button` that apply at once |
+| [`switches.toml`](switches.toml) | a searchable list mixing switches and ordinary choices |
 
 ## Menus and lists
 

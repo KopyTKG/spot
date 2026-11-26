@@ -1,0 +1,28 @@
+# A searchable list mixing switches and ordinary choices (spot >= 0.8.0).
+#
+#   spot examples/switches.toml
+#
+# Rows are "LABEL<TAB>KEY<TAB>on|off". Enter on a row with a state flips it and the
+# list stays; Enter on a row without one prints its key and closes.
+
+title    = "Toggles"
+width    = 340
+style    = "theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type      = "list"
+id        = "choice"
+match     = "smart"
+switches  = true
+options   = [
+  "Nightlight\tnightlight\toff",
+  "Notifications\tnotifications\ton",
+  "Idle lock\tidle\ton",
+  "Display\tdisplay",
+]
+state     = "for f in /tmp/spot-demo-row-*; do [ -f \"$f\" ] && printf '%s\\t%s\\n' \"${f##*-}\" \"$(cat \"$f\")\"; done; true"
+on_change = "echo {value} > /tmp/spot-demo-row-{key}"
+
+[submit]
+stdout = "{choice}"

@@ -124,7 +124,7 @@ func TestResolvedExecQuoting(t *testing.T) {
 	if got != want {
 		t.Errorf("resolvedExec = %s, want %s", got, want)
 	}
-	if got := shellQuote("plain-word_1.0/x"); got != "plain-word_1.0/x" {
+	if got := ShellQuote("plain-word_1.0/x"); got != "plain-word_1.0/x" {
 		t.Errorf("plain word quoted: %s", got)
 	}
 }

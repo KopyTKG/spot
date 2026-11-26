@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -61,7 +62,16 @@ func (b *builder) scale(item config.Item, row *gtk.Box) {
 	sc.SetValue(item.ScaleDefault())
 	row.Append(sc)
 	b.values[item.ID] = func() string { return config.FormatNumber(roundTo(sc.Value(), item.StepValue())) }
+	if item.State != "" || item.OnChange != "" {
+		b.liveScale(item, sc)
+	}
 	b.focus(sc)
+}
+
+// parseNumber reads a slider value printed by a command.
+func parseNumber(s string) (float64, bool) {
+	v, err := strconv.ParseFloat(s, 64)
+	return v, err == nil && !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
 // digitsFor is the number of decimals a slider with this step needs.

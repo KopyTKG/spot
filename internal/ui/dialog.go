@@ -114,8 +114,16 @@ func newDialog(cfg *config.Config, env []string, dir string, back *config.BackSp
 		root.Append(t)
 	}
 
+	// Shown when an exec command fails and on_error = "show", or a control's does.
+	execErr := gtk.NewLabel("")
+	execErr.AddCSSClass("spot-error")
+	execErr.SetXAlign(0)
+	execErr.SetWrap(true)
+	execErr.SetVisible(false)
+
 	b := &builder{
-		d: d, cfg: cfg, env: env, dir: dir,
+		errLabel: execErr,
+		d:        d, cfg: cfg, env: env, dir: dir,
 		envOf:       launcher.EnvGetter(env),
 		values:      map[string]func() string{},
 		multiValues: map[string]func() []string{},
@@ -135,12 +143,6 @@ func newDialog(cfg *config.Config, env []string, dir string, back *config.BackSp
 		root.Append(f)
 	}
 
-	// Shown when an exec command fails and on_error = "show".
-	execErr := gtk.NewLabel("")
-	execErr.AddCSSClass("spot-error")
-	execErr.SetXAlign(0)
-	execErr.SetWrap(true)
-	execErr.SetVisible(false)
 	root.Append(execErr)
 	d.root = root
 	d.firstFocus = b.firstFocus
@@ -172,7 +174,9 @@ func newDialog(cfg *config.Config, env []string, dir string, back *config.BackSp
 		}
 	}
 
+	b.end = end
 	b.submit = b.submitter(root, execErr, end)
 	d.onKey = b.keys(back, goBack, end)
+	b.refreshAll()
 	return d
 }

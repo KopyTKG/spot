@@ -61,7 +61,7 @@ type Opacity struct {
 }
 
 type Item struct {
-	Type        string // field | password | text | select | list | apps | tiles | toggle | scale
+	Type        string // field | password | text | select | list | apps | tiles | toggle | scale | switch | button | segmented | separator
 	ID          string
 	Label       string
 	Placeholder string
@@ -88,6 +88,16 @@ type Item struct {
 	Required    bool     // field, password, text, select, list: must not be empty
 	Pattern     string   // field, password, text: regexp the value must match
 	Error       string   // message shown when the item is invalid
+
+	// Live controls: they apply at once and the dialog stays open (see live.go).
+	State    string   // switch, segmented, scale, list (switches): command printing the current value
+	OnChange string   `toml:"on_change"` // ... and the command that applies a new one
+	Look     string   // switch: "switch" (default) | "button" | "checkbox"
+	Labels   []string // segmented: what each option shows (default: the option)
+	Exec     string   // button: the command it runs
+	Close    bool     // button: start the command and close the dialog
+	Timeout  int      // ms a control's command may take (default 10000)
+	Switches bool     // list: rows are "LABEL<TAB>KEY<TAB>on|off"; rows with a state are switches
 
 	pattern *regexp.Regexp
 }
@@ -208,7 +218,7 @@ func applyEnv(cfg *Config, env func(string) (string, bool)) {
 // takesDefault reports whether an item type has a default value.
 func takesDefault(t string) bool {
 	switch t {
-	case "field", "text", "select", "list", "tiles", "toggle", "scale":
+	case "field", "text", "select", "list", "tiles", "toggle", "scale", "switch", "segmented":
 		return true
 	}
 	return false
@@ -280,6 +290,9 @@ func (c *Config) validate() error {
 		case "", "contains", "smart":
 		default:
 			return fmt.Errorf("item %q: match: unknown mode %q (want \"contains\" or \"smart\")", it.ID, it.Match)
+		}
+		if err := it.validateLive(); err != nil {
+			return err
 		}
 		if it.Type == "scale" {
 			if it.MinValue() > it.MaxValue() {

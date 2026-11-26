@@ -35,6 +35,12 @@ type builder struct {
 	appsRes  *launcher.Results // type = "apps": the index the list shows
 	appsID   string            // id of that item
 	submit   func()            // set once every item is built; tile and list clicks call it
+	end      func(result)      // set with it; a closing button calls it
+
+	// live controls (see live.go)
+	refreshers  []func()    // re-read each state
+	errLabel    *gtk.Label  // where a failed command is reported
+	rowActivate func() bool // list with switches: flip the selected row; false = not a switch
 }
 
 // focus makes w the widget the dialog starts on, unless an earlier one is.
@@ -49,7 +55,7 @@ func (b *builder) focus(w gtk.Widgetter) {
 func (b *builder) item(item config.Item) *gtk.Box {
 	row := gtk.NewBox(gtk.OrientationVertical, 4)
 	row.AddCSSClass("spot-item")
-	if item.Label != "" && item.Type != "toggle" {
+	if item.Label != "" && item.Type != "toggle" && item.Type != "switch" && item.Type != "button" {
 		lbl := gtk.NewLabel(item.Label)
 		lbl.AddCSSClass("spot-label")
 		lbl.SetXAlign(0)
@@ -74,6 +80,14 @@ func (b *builder) item(item config.Item) *gtk.Box {
 		b.toggle(item, row)
 	case "scale":
 		b.scale(item, row)
+	case "switch":
+		b.switchItem(item, row)
+	case "segmented":
+		b.segmented(item, row)
+	case "button":
+		b.button(item, row)
+	case "separator":
+		b.separator(row)
 	default:
 		log.Printf("unknown item type: %q (skipping)", item.Type)
 		return nil

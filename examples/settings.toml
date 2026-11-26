@@ -1,0 +1,54 @@
+# Controls that apply at once (spot >= 0.8.0). The dialog stays open; Esc closes it.
+#
+#   spot examples/settings.toml
+#
+# Nothing on your system is changed: each "setting" is a file in /tmp. Replace the
+# state and on_change commands with your own.
+
+title    = "Settings"
+width    = 380
+style    = "theme.css"
+keyboard = "exclusive"
+
+[[items]]
+type      = "switch"
+id        = "nightlight"
+label     = "Nightlight"
+state     = "cat /tmp/spot-demo-nightlight 2>/dev/null || echo off"
+on_change = "echo {value} > /tmp/spot-demo-nightlight"
+on        = "on"
+off       = "off"
+
+[[items]]
+type      = "switch"
+id        = "dnd"
+label     = "Do not disturb"
+look      = "button"
+state     = "cat /tmp/spot-demo-dnd 2>/dev/null || echo off"
+on_change = "echo {value} > /tmp/spot-demo-dnd"
+
+[[items]]
+type  = "separator"
+label = "Power profile"
+
+[[items]]
+type      = "segmented"
+id        = "profile"
+options   = ["saver", "balanced", "performance"]
+labels    = ["Saver", "Balanced", "Performance"]
+state     = "cat /tmp/spot-demo-profile 2>/dev/null || echo balanced"
+on_change = "echo {value} > /tmp/spot-demo-profile"
+
+[[items]]
+type      = "scale"
+id        = "volume"
+label     = "Volume"
+step      = 5
+state     = "cat /tmp/spot-demo-volume 2>/dev/null || echo 50"
+on_change = "echo {value} > /tmp/spot-demo-volume"
+
+[[items]]
+type  = "button"
+id    = "reset"
+label = "Reset"
+exec  = "rm -f /tmp/spot-demo-*"

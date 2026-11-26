@@ -166,6 +166,54 @@
   border-color: rgba(122, 162, 247, 0.55);
 }
 
+/* Live controls: switch, segmented, button, separator. */
+.spot-control:focus-visible {
+  outline: 2px solid rgba(122, 162, 247, 0.9);
+  outline-offset: 2px;
+}
+
+.spot-button,
+.spot-segment,
+.spot-switch-button {
+  background: rgba(0, 0, 0, 0.25);
+  color: #e7e5e4;
+  border: 1px solid rgba(245, 245, 244, 0.08);
+  padding: 8px 12px;
+}
+
+.spot-segment.spot-on,
+.spot-switch-button.spot-on {
+  background: rgba(122, 162, 247, 0.22);
+  border-color: rgba(122, 162, 247, 0.6);
+}
+
+.spot-separator {
+  background: rgba(245, 245, 244, 0.12);
+}
+
+/* Switches (GTK's own node names): the "switch" look and the list rows. */
+.spot-root switch {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(245, 245, 244, 0.1);
+}
+
+.spot-root switch:checked {
+  background: rgba(122, 162, 247, 0.55);
+  border-color: rgba(122, 162, 247, 0.7);
+}
+
+.spot-root switch slider {
+  background: #a8a29e;
+}
+
+.spot-root switch:checked slider {
+  background: #fafaf9;
+}
+
+.spot-busy {
+  opacity: 0.6;
+}
+
 /* Keyboard cursor: the tile arrow keys are on, across all sections. */
 .spot-tile.spot-cursor {
   outline: 2px solid rgba(122, 162, 247, 0.9);

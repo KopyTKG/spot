@@ -62,6 +62,28 @@ value = "a"
 type     = "field"
 id       = "f"
 required = true
+[[items]]
+type  = "switch"
+id    = "s"
+label = "s"
+[[items]]
+type    = "segmented"
+id      = "g"
+options = ["a", "b"]
+[[items]]
+type  = "button"
+id    = "b"
+label = "b"
+exec  = "true"
+[[items]]
+type      = "scale"
+id        = "v"
+on_change = "true"
+[[items]]
+type     = "list"
+id       = "w"
+switches = true
+options  = ["a\ta\ton"]
 [submit]
 stdout = "{c}"
 `

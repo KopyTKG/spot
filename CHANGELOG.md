@@ -3,6 +3,13 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.8.0 — 2026-11-26
+
+- **Controls that apply at once.** `state` and `on_change` on a new `switch` (look: switch, button
+  or checkbox), a new `segmented` control and `scale`; a new `button` and `separator`; and
+  `switches = true` on lists. The dialog stays open, states are read again after each change, and a
+  failed change is not shown as done.
+
 ## 0.7.4 — 2026-11-26
 
 - **Open a file or URL with the picked app.** `SPOT_TARGET=<path or URL> spot launcher` fills the

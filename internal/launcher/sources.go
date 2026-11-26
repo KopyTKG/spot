@@ -79,9 +79,9 @@ func parseSourceRows(out string, max int) []sourceRow {
 // Each is shell-quoted, so a query cannot break out of the command.
 func ExpandSource(tmpl string, row sourceRow, query string) string {
 	return strings.NewReplacer(
-		"{value}", shellQuote(row.Value),
-		"{label}", shellQuote(row.Label),
-		"{query}", shellQuote(query),
+		"{value}", ShellQuote(row.Value),
+		"{label}", ShellQuote(row.Label),
+		"{query}", ShellQuote(query),
 	).Replace(tmpl)
 }
 

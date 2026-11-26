@@ -41,14 +41,12 @@ What mid and big tools need, and widgets alone do not give:
 
 | Release | Adds | Proven by building |
 |---------|------|--------------------|
-| 0.8 | `state` / `on_change`; switch, button and segmented controls; separators ([#14](https://github.com/KopyTKG/spot/issues/14)) | settings toggles |
 | 0.9 | Pages and menu trees, searchable across every level | a whole system menu in one config |
 | 0.10 | Layout containers; live lists and tables; row actions | sockets and firewall tools |
 | 0.11 | Window mode; a long-running backend exchanging JSON lines with the window | a small control centre |
 
 Open design questions, to settle before the release that needs them:
 
-- 0.8: how a control learns that its value changed elsewhere (re-read on open, poll, or signal).
 - 0.9: whether a menu tree is one file or includes others.
 - 0.10: how containers nest in TOML without becoming unreadable.
 - 0.11: the backend protocol, its versioning, and what happens when the backend dies.
@@ -57,6 +55,9 @@ Open design questions, to settle before the release that needs them:
 
 Not tied to a release above:
 
+- **Left from 0.8** ([#14](https://github.com/KopyTKG/spot/issues/14)): a meter, switch state on
+  tiles, per-tile CSS classes. States are read on open and after each change; noticing a change made
+  elsewhere (polling or a signal) waits for live data in 0.10.
 - **"Open With" by file type** ([#13](https://github.com/KopyTKG/spot/issues/13)); its extra keys
   should come from the general row actions.
 - **A grid layout** (`layout = "grid"`, `columns`) for the apps list.
@@ -77,6 +78,8 @@ Not tied to a release above:
 | 0.6 | `[[sources]]`: a prefix hands the search to a command (calculator, files, web search, run) |
 | 0.7 | Default sources and `hide_empty` (a bare run bar); per-dialog `margin_*` and `offset_*` placement |
 | 0.7.1–0.7.3 | A hidden pointer no longer highlights; the daemon memory leak fixed; source split into `internal/` |
+| 0.7.4 | `SPOT_TARGET`: open a file or URL with the picked app; `MimeType=` in the index |
+| 0.8 | Controls that apply at once (`state` / `on_change`): `switch`, `segmented`, `button`, `separator`, live `scale`, switch rows in lists |
 
 ## Not planned
 

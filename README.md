@@ -25,7 +25,8 @@ ambient widgets; [eww](https://github.com/elkowar/eww) and Waybar do that.
 ## What it does
 
 - **Dialogs.** `field`, `password`, `text`, `select`, searchable `list` (smart abbreviation
-  matching, multi-select, collapsible groups), icon `tiles`, `toggle`, `scale`; validation with
+  matching, multi-select, collapsible groups), icon `tiles`, `toggle`, `scale`; live `switch`, `segmented` and `button` controls and switch rows
+  that apply at once; validation with
   `pattern` / `required`; submit to stdout, JSON, or a command.
 - **Launchers.** `type = "apps"` lists the installed applications with icons and starts them through
   a template you control (`uwsm-app -- {exec}`); **sources** hand the search to your own commands

@@ -74,6 +74,21 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 				return true
 			}
 		}
+		// A focused switch, segment or button takes Enter itself; Up and Down walk
+		// between controls (a slider needs them for itself).
+		if w := focusedControl(focus); w != nil {
+			switch keyval {
+			case gdk.KEY_Return, gdk.KEY_KP_Enter:
+				w.Activate()
+				return true
+			case gdk.KEY_Up, gdk.KEY_KP_Up:
+				d.root.ChildFocus(gtk.DirTabBackward)
+				return true
+			case gdk.KEY_Down, gdk.KEY_KP_Down:
+				d.root.ChildFocus(gtk.DirTabForward)
+				return true
+			}
+		}
 		switch keyval {
 		case gdk.KEY_Escape:
 			end(result{})
@@ -83,6 +98,9 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 				return false
 			}
 			if b.groupToggle != nil && b.groupToggle(0) { // Enter on a group header folds it
+				return true
+			}
+			if b.rowActivate != nil && b.rowActivate() { // a switch row flips and stays
 				return true
 			}
 			if b.nav.active != nil {
@@ -113,6 +131,17 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 		}
 		return false
 	}
+}
+
+// focusedControl is the live control that has the keyboard, or nil.
+func focusedControl(focus gtk.Widgetter) *gtk.Widget {
+	if focus == nil {
+		return nil
+	}
+	if w := gtk.BaseWidget(focus); w.HasCSSClass("spot-control") {
+		return w
+	}
+	return nil
 }
 
 func moveSelection(sel *gtk.SingleSelection, lv *gtk.ListView, delta int) {

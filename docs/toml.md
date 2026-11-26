@@ -165,13 +165,13 @@ status 1, and no command is run).
 
 | Key | Applies to | Description |
 |-----|------------|-------------|
-| `type` | all | `field`, `password`, `text`, `select`, `list`, `apps`, `tiles`, `toggle`, `scale`. An unknown type is skipped with a log line |
+| `type` | all | `field`, `password`, `text`, `select`, `list`, `apps`, `tiles`, `toggle`, `scale`, `switch`, `segmented`, `button`, `separator`. An unknown type is skipped with a log line |
 | `id` | all | Name used in `{id}` templates and as the JSON key |
-| `label` | all | Shown above the widget. For `toggle` it is the checkbox text; for `tiles` it is a section heading |
+| `label` | all | Shown above the widget. For `toggle`, `switch` and `button` it is the text of the control; for `tiles` it is a section heading |
 | `placeholder` | field, password, text, list | Greyed-out hint text |
 | `query` | list, apps | Text the search box starts with (`SPOT_QUERY` overrides it) |
 | `hide_empty` | list, apps | Hide the results list while it has no rows: just a search bar until you type something that matches (a Spotlight / run-dialog look) |
-| `default` | field, text, select, list, tiles, toggle, scale | Initial value. For `tiles` it is a tile `value`; for `toggle` `true` or `false`; for `scale` a number; for a multi `list` the options joined by `separator` |
+| `default` | field, text, select, list, tiles, toggle, scale, switch, segmented | Initial value. For `tiles` it is a tile `value`; for `toggle` `true` or `false`; for `scale` a number; for a multi `list` the options joined by `separator` |
 | `required` | field, password, text, select, list | An empty value blocks submission |
 | `pattern` | field, password, text, select, list | A non-empty value must match this [Go regexp](https://pkg.go.dev/regexp/syntax). Unanchored: write `^...$` |
 | `error` | any validated item | Message shown under the item when it is invalid |
@@ -447,6 +447,79 @@ step    = 5
 default = 50
 ```
 
+### Live controls
+
+`switch`, `segmented`, `scale` and list rows with switches can **apply at once**, with the dialog
+staying open. `toggle` is different: it only changes what is submitted.
+
+| Key | Description |
+|-----|-------------|
+| `state` | Command that prints the current value. Run when the dialog opens and again after every change made in it (of any control: one setting may change another) |
+| `on_change` | Command that applies a new value. `{value}`, `{id}` and `{key}` are shell-quoted; the value is also in `$SPOT_VALUE` |
+| `timeout` | ms a command may take before it is killed and reported (default `10000`) |
+
+- Commands run with `sh -c` in the caller's environment and directory, off the UI thread.
+- The value is the **last line** printed. For a switch, `on` / `off`, `true` / `false`, `1` / `0`,
+  `yes` / `no` and the item's own `on` / `off` all count.
+- If `on_change` fails (non-zero exit), the control goes back to what it showed and the error
+  output appears under the dialog.
+- Without `state`, `on_change` may print the value it settled on.
+- A control keeps its value for `[submit]`, if there is one. Enter on a focused switch, segment or
+  button activates it rather than submitting; Up and Down move between controls (not off a slider).
+- A change made elsewhere while the dialog is open is not noticed until the next change in it.
+
+Complete examples: [`settings.toml`](../examples/settings.toml), [`switches.toml`](../examples/switches.toml).
+
+### `switch`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `look` | `"switch"` | `"switch"` (a sliding switch after the label), `"button"` (a button that stays pressed while on) or `"checkbox"` |
+| `on`, `off` | `"true"`, `"false"` | Value for each position |
+| `default` | `false` | Position until `state` has been read |
+
+```toml
+[[items]]
+type      = "switch"
+id        = "dnd"
+label     = "Do not disturb"
+look      = "button"
+state     = "my-settings get dnd"
+on_change = "my-settings set dnd {value}"
+```
+
+### `segmented`
+
+A few options side by side, one of them chosen.
+
+| Key | Description |
+|-----|-------------|
+| `options` | Values (required) |
+| `labels` | What each shows, as many as `options` (default: the value) |
+
+### `button`
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `label` | required | Its text |
+| `exec` | required | The command |
+| `close` | `false` | `true`: start the command detached and close the dialog (status 0, nothing printed). `false`: wait for it, keep the dialog and read every state again |
+| `timeout` | `10000` | ms, only for `close = false` |
+
+### `separator`
+
+A line between groups of items, under its `label` if it has one.
+
+### Lists with switches
+
+`switches = true` on a plain `list` takes rows `LABEL<TAB>KEY<TAB>STATE`. A row whose state is on or
+off shows a switch: Enter or a click flips it and the list stays open, with the search and the
+selection as they were. A row without a state is an ordinary choice; `{id}` is the selected row's
+`KEY` (the label when there is none).
+
+`on_change` gets the row's `{key}` and the new `{value}`. `state`, if set, prints `KEY<TAB>on|off`
+lines for the rows to follow. Not with `multi` or `collapsible`.
+
 ### Validation
 
 On submit, every item with `required` or `pattern` is checked. If any fails,
@@ -635,7 +708,7 @@ Let one shared config be parameterised per call.
 | `SPOT_PLACEHOLDER` | Placeholder of the first field, password, text, list or apps item |
 | `SPOT_QUERY` | Text the search box of the first list or apps item starts with: `SPOT_QUERY="= " spot launcher` opens the launcher already in calculator mode |
 | `SPOT_TARGET` | A file or URL to open with the application picked in an `apps` item: [details](#opening-a-file-or-url) |
-| `SPOT_DEFAULT` | Default of the first item that takes one (field, text, select, list, tiles, toggle, scale) |
+| `SPOT_DEFAULT` | Default of the first item that takes one (field, text, select, list, tiles, toggle, scale, switch, segmented) |
 | `SPOT_CURRENT_<ID>` | `current` of the `tiles` item with that `id`, same naming as `SPOT_DEFAULT_<ID>` |
 | `SPOT_BACK` | Show [Back](#back) and run this command when it is used. Empty means unset |
 | `SPOT_DEFAULT_<ID>` | Default of the item with that `id`, upper-cased with non-alphanumerics as `_` (`battery-mode` becomes `SPOT_DEFAULT_BATTERY_MODE`). Wins over `SPOT_DEFAULT` |

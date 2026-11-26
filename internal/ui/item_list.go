@@ -37,6 +37,11 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 		entries = gs.Flatten(collapsed, "", item.Match)
 		opts = match.EntryTexts(entries)
 	}
+	var sw *switchRows
+	if item.Switches {
+		sw = parseSwitchRows(&item, opts)
+		opts = sw.labels
+	}
 	model := gtk.NewStringList(opts)
 
 	search := gtk.NewSearchEntry()
@@ -126,6 +131,10 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 		lbl := gtk.NewLabel("")
 		lbl.AddCSSClass("spot-list-row")
 		lbl.SetXAlign(0)
+		if sw != nil {
+			li.SetChild(newSwitchRow(lbl))
+			return
+		}
 		li.SetChild(lbl)
 	}))
 	d.hook(factory, factory.ConnectBind(func(obj *coreglib.Object) {
@@ -176,6 +185,12 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 			comment.SetVisible(apps.Cfg.CommentShown() && e.Comment != "")
 			return
 		}
+		if sw != nil {
+			if so, ok := li.Item().Cast().(*gtk.StringObject); ok {
+				sw.bind(li.Child(), so.String())
+			}
+			return
+		}
 		lbl, ok := li.Child().(*gtk.Label)
 		if !ok {
 			return
@@ -200,7 +215,7 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 
 	lv := gtk.NewListView(selModel, &factory.ListItemFactory)
 	lv.AddCSSClass("spot-list")
-	lv.SetSingleClickActivate(gs != nil) // a click on a group header folds it
+	lv.SetSingleClickActivate(gs != nil || sw != nil) // a click on a group header folds it, on a switch flips it
 	b.listView = lv
 
 	scrolled := gtk.NewScrolledWindow()
@@ -262,6 +277,9 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 				b.groupToggle(0)
 			}
 		}))
+	}
+	if sw != nil {
+		b.switchList(item, sw, selection, lv)
 	}
 	if apps != nil {
 		d.hook(lv, lv.ConnectActivate(func(uint) {
@@ -387,6 +405,8 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 					return row.Value
 				}
 				return ""
+			case sw != nil: // the row's key
+				return sw.key(selectedOf(obj))
 			case apps != nil: // the desktop id
 				if e := apps.EntryOf(selectedOf(obj)); e != nil {
 					return e.ID

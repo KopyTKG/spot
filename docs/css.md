@@ -83,6 +83,10 @@ The widget inside an `.spot-item`, by `type`:
 | `tiles` | `.spot-tiles` > `.spot-tile` > `.spot-tile-body` > `.spot-tile-icon` + `.spot-tile-label` |
 | `toggle` | `.spot-toggle` |
 | `scale` | `.spot-scale` |
+| `switch` | `.spot-switch.spot-switch-<look>`: a box (label + `switch`), a toggle button, or a check button |
+| `segmented` | `.spot-segmented.linked` > `.spot-segment` buttons |
+| `button` | `.spot-button` |
+| `separator` | `.spot-separator` |
 
 ## Class reference
 
@@ -119,6 +123,14 @@ The widget inside an `.spot-item`, by `type`:
 | `.spot-text-placeholder` | `text` placeholder label |
 | `.spot-toggle` | `toggle` check button |
 | `.spot-scale` | `scale` slider |
+| `.spot-switch` | A `switch` item (the sliding part is GTK's `switch` node with a `slider` inside; `switch:checked` when on); also `.spot-switch-switch`, `-button` or `-checkbox` for its `look` |
+| `.spot-segmented`, `.spot-segment` | A `segmented` control and each of its buttons |
+| `.spot-button` | A `button` item |
+| `.spot-separator` | A `separator` line |
+| `.spot-switch-row` | A row of a list with `switches`; its switch is `.spot-row-switch` |
+| `.spot-control` | Every focusable switch, segment and button: style `:focus-visible` to see where the keyboard is |
+| `.spot-on` | A switch, segment or switch row that is on |
+| `.spot-busy` | A control or row whose command is running |
 | `.spot-invalid` | Added to an item's input when `required` / `pattern` fails |
 | `.spot-item-error` | An item's `error` message |
 | `.spot-error` | Failed `exec` message (`on_error = "show"`) |

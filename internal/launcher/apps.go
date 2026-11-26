@@ -340,8 +340,8 @@ func execArgs(exec string, e *AppEntry, t target) []string {
 	return out
 }
 
-// shellQuote makes s one safe word for sh.
-func shellQuote(s string) string {
+// ShellQuote makes s one safe word for sh.
+func ShellQuote(s string) string {
 	if s != "" && strings.IndexFunc(s, func(r rune) bool {
 		return !(r == '_' || r == '-' || r == '.' || r == '/' || r == ':' || r == '=' || r == '+' || r == ',' || r == '@' ||
 			r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
@@ -356,7 +356,7 @@ func (e *AppEntry) resolvedExec(t target) string {
 	args := execArgs(e.Exec, e, t)
 	q := make([]string, len(args))
 	for i, a := range args {
-		q[i] = shellQuote(a)
+		q[i] = ShellQuote(a)
 	}
 	return strings.Join(q, " ")
 }
