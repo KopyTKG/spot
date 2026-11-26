@@ -167,6 +167,15 @@ notify = 'printf "%s: %s\n" "$SPOT_NOTIFY_TITLE" "$SPOT_NOTIFY_BODY" >> ~/spot-e
 `SPOT_NO_NOTIFY=1` turns it off for one call. A broken `daemon.toml` itself is reported on stderr and
 ignored, so the default applies.
 
+### Who can use the socket
+
+Only your own user. The daemon and the client each check the user at the other end of every
+connection before sending or running anything, so it does not rest on file permissions alone. Without
+`XDG_RUNTIME_DIR` the socket sits in `/tmp/spot-<uid>/`, which is refused unless it is a real
+directory of yours that nobody else can enter. When the socket cannot be trusted, spot says so,
+leaves the daemon alone and shows the dialog itself. A daemon run as another user (`sudo` pointed at
+your socket, say) is refused for the same reason.
+
 ## Controlling it
 
 | Command | |
@@ -213,7 +222,7 @@ the way the calling script would.
 | `SPOT_NO_NOTIFY` | client | Any value: no notification when a dialog does not open |
 | `WAYLAND_DISPLAY` | client, daemon | Without it the client does not try the daemon; the daemon needs it to draw |
 | `XDG_CONFIG_HOME` | client, daemon | Where `spot/daemon.toml` is looked for |
-| `XDG_RUNTIME_DIR` | client, daemon | Default socket directory (else `/tmp/spot-<uid>.sock`) |
+| `XDG_RUNTIME_DIR` | client, daemon | Default socket directory (else `/tmp/spot-<uid>/`, a folder of your own with mode 0700) |
 | `XDG_STATE_HOME` | client | Default log directory |
 
 ## Files

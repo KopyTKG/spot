@@ -3,6 +3,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/KopyTKG/spot/internal/config"
+	"gitlab.com/KopyTKG/spot/internal/notify"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
 )
 
@@ -48,8 +50,14 @@ func ViaDaemon(req protocol.Request) (resp protocol.Response, ok bool) {
 // first if needed.
 func dialDaemon(start bool) (net.Conn, error) {
 	sock := config.SocketPath()
-	conn, err := net.Dial("unix", sock)
-	if err == nil || !start {
+	if err := config.PrepareSocket(sock); err != nil {
+		return nil, untrusted(err)
+	}
+	conn, err := dialOwn(sock)
+	if err == nil || !start || errors.Is(err, protocol.ErrForeignPeer) {
+		if errors.Is(err, protocol.ErrForeignPeer) {
+			err = untrusted(err)
+		}
 		return conn, err
 	}
 	if err := spawnDaemon(); err != nil {
@@ -58,7 +66,7 @@ func dialDaemon(start bool) (net.Conn, error) {
 	// The first start has to bring up GTK; give it a moment.
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		if conn, err = net.Dial("unix", sock); err == nil {
+		if conn, err = dialOwn(sock); err == nil {
 			return conn, nil
 		}
 		if time.Now().After(deadline) {
@@ -66,6 +74,29 @@ func dialDaemon(start bool) (net.Conn, error) {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+}
+
+// dialOwn connects to the socket and makes sure a process of ours answers,
+// before anything is sent to it.
+func dialOwn(sock string) (net.Conn, error) {
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return nil, err
+	}
+	if err := protocol.CheckPeer(conn); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+// untrusted reports a socket that must not be used: someone else's doing, so it
+// is said where it will be seen. The dialog is then shown without the daemon.
+func untrusted(err error) error {
+	msg := fmt.Sprintf("not using the daemon socket: %v", err)
+	fmt.Fprintf(os.Stderr, "spot: %s\n", msg)
+	notify.Failure(config.Daemon().Notify, "spot: the daemon socket cannot be trusted", msg)
+	return err
 }
 
 // spawnDaemon starts `spot daemon` detached from this process and terminal.

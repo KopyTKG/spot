@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -123,7 +122,7 @@ func SocketPath() string {
 	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
 		return filepath.Join(dir, "spot.sock")
 	}
-	return filepath.Join(os.TempDir(), "spot-"+strconv.Itoa(os.Getuid())+".sock")
+	return filepath.Join(sharedSocketDir(), "spot.sock")
 }
 
 // LogPath is where a daemon started by a client writes its output, or "" for

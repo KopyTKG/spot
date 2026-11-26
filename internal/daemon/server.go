@@ -26,6 +26,10 @@ func onMain(f func()) { coreglib.IdleAdd(f) }
 // RunDaemon serves dialogs until told to quit. It returns the process exit status.
 func RunDaemon() int {
 	sock := config.SocketPath()
+	if err := config.PrepareSocket(sock); err != nil {
+		fmt.Fprintf(os.Stderr, "spot: %v\n", err)
+		return protocol.ExitError
+	}
 	lock, err := os.OpenFile(sock+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "spot: %v\n", err)
@@ -87,6 +91,10 @@ func serve(ln net.Listener, sh *ui.Shell) {
 
 func handle(conn net.Conn, sh *ui.Shell) {
 	defer conn.Close()
+	if err := protocol.CheckPeer(conn); err != nil {
+		fmt.Fprintf(os.Stderr, "spot: refused a connection: %v\n", err)
+		return
+	}
 	reply := func(r protocol.Response) {
 		r.Version = protocol.Version
 		json.NewEncoder(conn).Encode(r)

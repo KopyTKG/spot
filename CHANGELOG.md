@@ -3,6 +3,12 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.8.2 — 2026-11-26
+
+- **Security: the daemon socket is checked.** The client and the daemon verify that the other end is
+  your own user, and the fallback socket used without `XDG_RUNTIME_DIR` moved into a private folder
+  (`/tmp/spot-<uid>/`) whose ownership is checked.
+
 ## 0.8.1 — 2026-11-26
 
 - **A dialog that does not open says so.** A broken or missing config used to fail silently from a
