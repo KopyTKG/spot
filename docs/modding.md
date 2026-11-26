@@ -28,7 +28,7 @@ and are not covered here. The work for 0.9 is tracked in the [milestone](https:/
 | Type | Does | May | Runs |
 |------|------|-----|------|
 | `parser` | turns text into data | compute only: no commands, files, timers or publishing | in a locked Lua state of its own, inside the mod host that uses it |
-| `provider` | gets data (usually with a parser), publishes it, answers requests | everything in [the API](#the-api) | in its own mod host, as long as the daemon runs |
+| `provider` | gets data (usually with a parser), publishes it, answers requests | read and write files, run commands: everything in [the API](#the-api) | in its own mod host, as long as the daemon runs |
 
 A mod says what it is in `mod.toml` next to its `init.lua`, so spot knows what it may do before
 running any of it. Without the file a mod is a provider; a parser must have one, with
@@ -48,9 +48,10 @@ version     = "1.0.0"
 description = "Sockets from ss"
 input       = "output of `ss -H -tuna`"
 
-[returns]
-type   = "list"
-fields = { label = "string", key = "string", comment = "string?" }
+[returns]                                # the fields of each record
+label   = "string"
+key     = "string"
+comment = "string?"
 ```
 
 Its `init.lua` returns exactly one function:
@@ -117,7 +118,8 @@ shape and cannot do anything but parse.
 
 ### The parser contract
 
-**One function.** `init.lua` returns it and nothing else:
+**One function.** `init.lua` returns it and nothing else. A parser is that one file; what it shares
+with others it gets from another parser through `spot.use`, declared in `uses`:
 
 ```lua
 return function(input, options) ... return output end
@@ -127,24 +129,34 @@ return function(input, options) ... return output end
 |---|---|
 | `input` | a string: the text to parse |
 | `options` | a table of plain data, empty when none are given |
-| `output` | plain data matching `[returns]` |
+| `output` | a **list of records**, whose fields are declared in `[returns]` |
 | Failure | `error("what was wrong")`, the same for every parser |
 
-**Plain data** is strings, numbers, booleans and tables of those. Functions, threads and tables that
-contain themselves or nest more than 32 deep are refused.
+**Always a list of records.** A record is a table with named fields. There is no other kind of
+output, so every parser is used the same way: loop over what it returns.
 
-**A declared shape.** `mod.toml` of a parser must have `api`, `version`, `description`, `input` and
-`[returns]`:
+| Case | The parser returns |
+|------|--------------------|
+| Many things (sockets, firewall rules) | one record each |
+| One thing (a battery level) | a list of one: `{ { percent = 87 } }` |
+| Nothing found | an empty list: `{}` |
+| The input could not be parsed | `error()`, so that it never looks like "nothing found" |
 
-| In `[returns]` | |
-|---|---|
-| `type` | `"list"`, `"map"`, `"string"`, `"number"` or `"boolean"` |
-| `fields` | for a list, what each item has; for a map, what it has. Each is a type, with `?` when it may be missing |
+A table that is not a list, a list holding anything but records, or a bare string or number is an
+error. A fixed outer type also settles what Lua leaves open: an empty result is an empty list, never
+an empty map.
 
-Only what is declared is checked, as deep as the author chooses to promise: further fields and
-whatever is nested in them pass through. Output that does not match is an error, so a user of the
-parser can rely on the declaration without reading the code. A change that breaks it needs a new
-major `version`.
+**Plain data.** Field values are strings, numbers, booleans and tables of those. Functions, threads
+and tables that contain themselves or nest more than 32 deep are refused.
+
+**Declared fields.** `mod.toml` of a parser must have `api`, `version`, `description`, `input` and
+`[returns]`. Each line of `[returns]` is a field of a record and its type: `"string"`, `"number"`,
+`"boolean"`, `"list"` or `"map"`, with `?` when it may be missing.
+
+Only what is declared is checked, as deep as the author chooses to promise: undeclared fields, and
+whatever is inside a `list` or `map`, pass through. A record that does not match is an error, so a
+user of the parser can rely on the declaration without reading the code. A change that breaks it
+needs a new major `version`.
 
 ### Calling it
 
@@ -156,7 +168,7 @@ local rows  = parse(text, { listening = true })
 ```
 
 ```sh
-ss -H -tuna | spot parse ss                  # in a shell, prints JSON
+ss -H -tuna | spot parse ss                  # in a shell, prints a JSON array
 ```
 
 ```toml
@@ -165,7 +177,7 @@ ss -H -tuna | spot parse ss                  # in a shell, prints JSON
 type  = "list"
 id    = "socket"
 run   = "ss -H -tuna"
-parse = "ss"                                  # needs a list with a label
+parse = "ss"                                  # its records need a label
 ```
 
 So a tool can start as a command and a parser, and become a provider only when it needs to keep
@@ -194,7 +206,7 @@ It shows that the parser does what it claims on that input, not that it is corre
 
 | | |
 |---|---|
-| A mod | a folder `<name>/` with `init.lua` and optionally `mod.toml`; `spot.require` loads other files from that folder only |
+| A mod | a folder `<name>/` with `init.lua` and `mod.toml` (optional for a provider). A provider can load other files of its folder with `spot.require` |
 | Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `daemon.toml` |
 | Name | `[a-z][a-z0-9_-]*`; it prefixes everything the mod publishes |
 | Enabled | a provider: listed in `mods` in `daemon.toml`, otherwise it never runs. A parser: when something uses it |
@@ -202,24 +214,29 @@ It shows that the parser does what it claims on that input, not that it is corre
 
 ## The API
 
-This is what a **provider** gets: one global, `spot`, and the Lua environment below.
+This is what a **provider** gets. (A parser gets far less: see [locked down](#locked-down).)
+
+A provider has all your rights, through one global, `spot`. Lua's own `io` and `os` are not loaded:
+`spot` offers what they would, in one way, with a time limit on every command and its normal memory
+limit restored. Lua libraries that expect `io` or `os` therefore do not work. They may be added
+later, which would break no mod; taking them away later would.
 
 ### The Lua environment
 
-Lua 5.1. Every mod gets an **allow-list**; everything else is removed before any mod code runs:
+Lua 5.1. Parsers and providers start from the same **allow-list**; everything else is removed before
+any mod code runs:
 
 `assert` `error` `getmetatable` `ipairs` `next` `pairs` `pcall` `rawequal` `rawget` `rawset`
 `select` `setmetatable` `tonumber` `tostring` `type` `unpack` `xpcall`, and the libraries `string`,
 `table`, `math`, `coroutine`.
 
-- `io`, `os`, `package` and `debug` are not loaded. A blocking call there could not be timed out;
-  the helpers below take their place.
+- A provider adds its `spot` to this. A parser adds a very small one and loses `math.random` and
+  `math.randomseed`.
+- `io`, `os`, `package` and `debug` are not loaded.
 - The Lua library's base functions include some that read files, `dofile` and `loadfile`, even with
   `io` left out. An allow-list keeps them out, and also whatever a later version of the library adds.
-- Code is shared with `spot.use` (parsers) and `spot.require` (other files of the same mod's
-  folder), both done by spot, which only reads from the mods folder.
-- A provider gets the same list plus its `spot`; parsers also lose `math.random` and
-  `math.randomseed`.
+- Code is loaded only by spot, and only from the mods folder: `spot.use` (parsers) and
+  `spot.require` (a provider's own files).
 
 ### Publishing
 
@@ -256,11 +273,15 @@ message on stderr, and in a dialog the control goes back to what it showed.
 | `spot.run(argv, options)` | `{ status, stdout, stderr }`. `argv` is a list, **no shell**. Options: `timeout` (ms, default 5000), `stdin`, `env`, `dir` |
 | `spot.sh(command, options)` | The same through `sh -c`, for pipes. Values are not quoted for you |
 | `spot.read(path)`, `spot.write(path, text)` | Whole files; `nil, message` on failure |
-| `spot.watch_file(path, fn)` | `fn` when it changes |
+| `spot.lines(path)` | Iterate over a file line by line |
+| `spot.list(path)` | The names in a folder |
+| `spot.exists(path)` | `"file"`, `"dir"` or `nil` |
 | `spot.every(ms, fn)`, `spot.after(ms, fn)` | Timers |
 | `spot.json.encode(v)`, `spot.json.decode(s)` | JSON |
 | `spot.env(name)`, `spot.time()` | An environment variable; seconds since 1970 |
+| `spot.use(name)`, `spot.require(file)` | A parser's function; another file of this mod |
 | `spot.log(message)` | To the daemon log, with the mod's name |
+| `spot.watch_file(path, fn)` | `fn` when the file changes (**later**, not in the first version) |
 
 Mods run in the **daemon's** environment, not that of whoever asks.
 
@@ -306,7 +327,7 @@ that updates by itself while open comes with live lists (0.11).
 | `spot call <mod.request> [args…]` | Run a request, print what it returns |
 | `spot mods` | List mods: running, failing or disabled, with the last error |
 | `spot mods reload [name]` | Load the files again |
-| `spot parse <parser>` | Run a parser on standard input, print JSON |
+| `spot parse <parser>` | Run a parser on standard input, print its records as a JSON array |
 | `spot mods check [name]` | Check a mod's contract and sample |
 
 `--json` prints `get` and `watch` as one JSON value per line, which is what a bar wants.
@@ -317,7 +338,7 @@ that updates by itself while open comes with live lists (0.11).
 
 | Case | What happens |
 |------|--------------|
-| A parser breaks its contract (more than a function, no `[returns]`, wrong shape) | The call fails and names what did not match |
+| A parser breaks its contract (not one function, no `[returns]`, not a list of records, a wrong field) | The call fails and names what did not match |
 | A mod fails to load | It is marked failing; the others and all dialogs work |
 | A `value` function errors | Readers get the last good result and the error is logged; `get` exits non-zero if there is none |
 | Three errors in a row | The value stops being recomputed until the mod is reloaded or asked again after a pause |
@@ -411,7 +432,7 @@ The limit tests were on Linux. The transfer figures cover one hop, not drawing t
 
 ### First version
 
-In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, `run` / `parse` in dialogs, `value` / `publish` / `on`, `spot.require`, `run`, `read`, `every`, `json`, `log`,
+In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
@@ -428,7 +449,8 @@ The API is **experimental** until menu trees (0.10) have used it.
    for a mod?
 4. **Sharing mods.** Should there be a convention for installing someone else's mod (a git folder
    in `mods/`), or is that out of scope?
-5. **`io` and `os`.** Is leaving them out acceptable, or will mods need libraries that expect them?
+5. **`io` and `os`.** Providers start with `spot`'s helpers only. Is anything missing from them, and
+   is there a Lua library you need that expects `io` or `os`?
 6. **Commands as lists.** `spot.run` takes a list to avoid quoting bugs. Too strict for how you
    write scripts?
 7. **Parsers in dialogs.** Are `run` and `parse` the right keys for using a parser without a
