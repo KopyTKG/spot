@@ -3,6 +3,11 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.7.3 — 2026-11-26
+
+- Releases are built in an Arch Linux container (`.jenkins/Dockerfile`): the bindings 0.7.2 moved to need
+  GLib 2.88 or newer. The release binary needs the same. 0.7.2 was tagged but never released.
+
 ## 0.7.2 — 2026-11-26
 
 - **The daemon no longer leaks memory.** Closed dialogs and their list rows are freed.

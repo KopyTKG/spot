@@ -4,26 +4,31 @@
 // - Publish and Release run only for a tag (v0.1.0 and so on). A tag build skips
 //   Build: Publish compiles the same code in release mode.
 //
-// spot links gtk4 and gtk4-layer-shell through cgo, so the agent needs their
-// development headers, installed from the distro (Debian: build-essential
-// pkg-config libgtk-4-dev libgirepository1.0-dev libgtk4-layer-shell-dev), plus curl, git and mise on
-// PATH. Go, just and jq come from mise.toml (an agent that already has the
-// pinned Go installed reuses it). Tag builds also need a "Secret text"
-// credential `spot-github-token` with contents:write on KopyTKG/spot (not
-// `github-token`: that one belongs to Sleepy and is scoped to that repo only).
+// The stages run in a container built from .jenkins/Dockerfile (Arch Linux with
+// gtk4, gtk4-layer-shell, go, just and jq), so the agent only needs Docker, a
+// user allowed to use it, and the Docker Pipeline plugin. Tag builds also need a
+// "Secret text" credential `spot-github-token` with contents:write on
+// KopyTKG/spot (not `github-token`: that one belongs to Sleepy and is scoped to
+// that repo only).
 //
 // Compiling the gotk4 cgo bindings is the slow part (they build one after
 // another, so extra CPUs don't help). The Go build and module caches therefore
-// live under the agent user's ~/.cache/spot/, shared by every branch and tag,
-// instead of in the per-tag workspace: only the first build is cold.
+// live in the Docker volume `spot-go-cache`, shared by every branch and tag: only
+// the first build is cold.
 
 pipeline {
-    agent any
+    agent {
+        dockerfile {
+            dir '.jenkins'
+            additionalBuildArgs '--pull'
+            args '-v spot-go-cache:/cache'
+        }
+    }
 
     options {
         timestamps()
         disableConcurrentBuilds(abortPrevious: true)
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 60, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '5'))
     }
 
@@ -33,61 +38,29 @@ pipeline {
     }
 
     stages {
-        stage('Prepare') {
-            steps {
-                // Caches outside the workspace, so they survive across tags.
-                script {
-                    def home = sh(returnStdout: true, script: 'echo "$HOME"').trim()
-                    env.GOCACHE = "${home}/.cache/spot/go-build"
-                    env.GOPATH = "${home}/.cache/spot/go"
-                }
-                sh 'mkdir -p "$GOCACHE" "$GOPATH"'
-
-                // Trust this checkout's mise.toml, then install what it pins.
-                sh '''
-                    mise trust --quiet "$WORKSPACE/mise.toml"
-                    mise install
-                '''
-            }
-        }
-
-        stage('Toolchain') {
-            steps {
-                // cgo needs a C compiler and the gtk4 headers; fail with a clear
-                // message instead of Go's "build constraints exclude all Go files".
-                sh '''
-                    command -v gcc >/dev/null || { echo "gcc missing: apt install build-essential"; exit 1; }
-                    command -v pkg-config >/dev/null || { echo "pkg-config missing: apt install pkg-config"; exit 1; }
-                    pkg-config --exists gtk4 || { echo "gtk4 headers missing: apt install libgtk-4-dev"; exit 1; }
-                    pkg-config --exists gobject-introspection-1.0 || { echo "gobject-introspection headers missing: apt install libgirepository1.0-dev"; exit 1; }
-                    pkg-config --exists gtk4-layer-shell-0 || { echo "gtk4-layer-shell headers missing: apt install libgtk4-layer-shell-dev"; exit 1; }
-                '''
-            }
-        }
-
         stage('Lint') {
             steps {
-                sh 'mise exec -- just lint'
+                sh 'just lint'
             }
         }
 
         stage('Test') {
             steps {
-                sh 'mise exec -- just test'
+                sh 'just test'
             }
         }
 
         stage('Build') {
             when { not { buildingTag() } }
             steps {
-                sh 'mise exec -- just build'
+                sh 'just build'
             }
         }
 
         stage('Publish') {
             when { buildingTag() }
             steps {
-                sh 'rm -rf dist && mise exec -- just package'
+                sh 'rm -rf dist && just package'
                 archiveArtifacts artifacts: 'dist/spot-linux-x64', fingerprint: true
             }
         }
@@ -96,7 +69,7 @@ pipeline {
             when { buildingTag() }
             steps {
                 withCredentials([string(credentialsId: 'spot-github-token', variable: 'GH_TOKEN')]) {
-                    sh 'mise exec -- ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
+                    sh 'ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
                 }
             }
         }
