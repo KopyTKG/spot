@@ -18,6 +18,10 @@ default:
 build_version := `git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev`
 ldflags := "-X main.version=" + build_version
 
+# The last release tag without the v, what the AUR recipes publish by default.
+# (build_version also counts commits since it, which no release is named after.)
+release_version := `git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//' || true`
+
 # Build ./spot for this machine (needs gtk4, gtk4-layer-shell, go).
 build:
     go build -ldflags "{{ldflags}}" -o spot .
@@ -67,10 +71,11 @@ release version: (tag version)
 # AUR (spot-bin from the release binary, spot-git from the repo head)
 # --------------------------------------------------------------------------
 
-# Point spot-bin at a released version, checksums and all.
-aur version:
+# Point spot-bin at a released version (default: the last tag), checksums and all.
+aur version=release_version:
     #!/usr/bin/env bash
     set -euo pipefail
+    [[ -n "{{version}}" ]] || { echo "no release tag found; pass a version"; exit 1; }
     release="https://github.com/{{repo}}/releases/download/v{{version}}"
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
@@ -96,7 +101,7 @@ aur version:
     echo "$file -> $gitver"
 
 # Push both AUR packages from this machine, after the release exists. Needs an AUR SSH key.
-aur-publish version:
+aur-publish version=release_version:
     #!/usr/bin/env bash
     set -euo pipefail
     just aur {{version}}

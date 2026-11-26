@@ -18,10 +18,14 @@ The PKGBUILDs here are the source of truth. A tag build on Jenkins (`.jenkins/Je
 ```sh
 just release 0.1.0        # tag, push tag to the `github` remote, build, gh release create
 just aur-check            # makepkg both packages locally
-just aur-publish 0.1.0    # fill spot-bin version + checksums, push both to the AUR
+just aur-publish          # fill spot-bin version + checksums, push both to the AUR
 ```
 
-`just aur 0.1.0` does the version/checksum edit alone so the diff can be
+Both `aur` recipes take the last release tag; pass a version to publish another one
+(`just aur-publish 0.1.0`). Commit the PKGBUILDs afterwards: their checksums only exist once
+the release does.
+
+`just aur` does the version/checksum edit alone so the diff can be
 inspected first. `spot-git` needs no version bump: its `pkgver()` follows git,
 but it is pushed alongside so PKGBUILD changes reach the AUR.
 
@@ -35,13 +39,14 @@ by `just aur-publish` via `makepkg --printsrcinfo`.
 ## Jenkins
 
 Job config: pipeline from SCM, Script Path `.jenkins/Jenkinsfile`, build tags
-too. The agent (Debian) needs `build-essential pkg-config libgtk-4-dev
-libgirepository1.0-dev libgtk4-layer-shell-dev curl git` and `mise` on PATH; Go, just and jq come from
-`mise.toml`, so any Jenkins can build it. One credential: `spot-github-token` (secret text, contents:write on
-KopyTKG/spot). The Go build and module caches live in the Jenkins user's `~/.cache/spot/` (shared by all tags and branches, a few hundred MB), so only the first build compiles the GTK bindings from scratch; delete that directory to force a cold build. Re-running a failed tag build is safe: the release script
+too. The stages run in a container built from
+`.jenkins/Dockerfile` (Arch Linux), so the agent only needs Docker, a Jenkins user allowed to use it
+and the Docker Pipeline plugin. One credential: `spot-github-token` (secret text, contents:write on
+KopyTKG/spot). The Go build and module caches live in the Docker volume `spot-go-cache` (shared by all tags
+and branches), so only the first build compiles the GTK bindings from scratch; remove the volume to
+force a cold build. Re-running a failed tag build is safe: the release script
 replaces assets instead of duplicating them. If Jenkins is down,
 `just release <ver>` does the same from your machine (needs `gh`).
 
-The release binary is linked against Debian's gtk4 / gtk4-layer-shell and runs
-against Arch's (same sonames). If a release ever misbehaves on Arch after a
-gtk4-layer-shell bump, rebuild it locally with `just package`.
+The release binary is linked against the Arch libraries of the build container and needs GLib 2.88 or
+newer. If a release ever misbehaves after a library update, rebuild it locally with `just package`.
