@@ -312,7 +312,7 @@ message on stderr, and in a dialog the control goes back to what it showed.
 | Call | Returns / does |
 |------|----------------|
 | `spot.run(argv, options)` | `{ status, stdout, stderr }`. `argv` is a list; **there is no shell**. Options: `timeout` (ms, default 5000), `stdin`, `env`, `dir` |
-| `spot.pipe(argv1, argv2, …)` | The same for a pipeline: each list is one command, connected without a shell |
+| `spot.pipe(argv1, argv2, …, options)` | The same for a [pipeline](#pipelines): each list is one command, connected without a shell |
 | `spot.read(path)`, `spot.write(path, text)` | Whole files; `nil, message` on failure |
 | `spot.lines(path)` | Iterate over a file line by line |
 | `spot.list(path)` | The names in a folder |
@@ -324,7 +324,28 @@ message on stderr, and in a dialog the control goes back to what it showed.
 | `spot.log(message)` | To the daemon log, with the mod's name |
 | `spot.watch_file(path, fn)` | `fn` when the file changes (**later**, not in the first version) |
 
-Mods run in the **daemon's** environment, not that of whoever asks.
+Mods run in the **daemon's** environment, not that of whoever asks. `spot.env` reads only variables
+the mod has permission for, and programs it starts get a small environment of their own
+([S11](#the-security-contract)), not the daemon's.
+
+### Pipelines
+
+```lua
+local r = spot.pipe({ "ss", "-H", "-tuna" }, { "grep", "LISTEN" }, { timeout = 2000 })
+```
+
+| | |
+|---|---|
+| `status` | that of the last command that failed, 0 if none did (a shell's `pipefail`) |
+| `statuses` | each command's own, in order |
+| `stdout` | of the last command |
+| `stderr` | collected from every command |
+| Options | `timeout` for the whole pipeline, `stdin` for the first command, `env` and `dir` for all |
+| Permissions | **every** command must be allowed; if one is not, none is started |
+| Cleanup | on a timeout, or when one cannot start, all of them are killed |
+
+A non-zero status is not an error by itself: `grep` exits 1 when it finds nothing. The mod decides
+what it means. There is no redirection of any kind: to keep output, use `spot.write`.
 
 ### Limits
 
@@ -339,7 +360,78 @@ not start under the host's. Their memory is therefore **not limited**.
 
 ## Security
 
-Two different dangers, with different answers.
+### The security contract
+
+These are requirements, not intentions. **Code for mods is not accepted without a test for each rule
+that tries to break it.** The sections after the list explain them.
+
+**What is defended against:** data chosen by others (names, files, network and program output); a
+parser or provider written by someone else, or changed by them after you approved it; another user on
+the machine. **Not** against something already running as you or as root.
+
+**Data and commands**
+
+| # | Rule |
+|---|------|
+| S1 | No part of the API runs a command given as one string: there is no `spot.sh` |
+| S2 | Every command of a pipeline needs permission, or none of them starts |
+| S3 | Text from mods is data wherever it is shown: markup is escaped in dialogs, notifications and bar output, and control characters, terminal escape sequences included, are removed before printing to a terminal |
+
+**What a mod can reach**
+
+| # | Rule |
+|---|------|
+| S4 | A parser has no access to files, commands, network, environment, clock or its caller |
+| S5 | A provider acts only through `spot`; `io`, `os`, `package`, `debug` and every way of loading code are absent (allow-list) |
+| S6 | Nothing is granted without a permission that states its reason |
+| S7 | A mod can never run `spot`, nor write the mods folder, spot's configuration, approvals or logs |
+| S8 | File permissions are checked on the file that is actually opened, so that a symlink swapped in between does not pass |
+| S9 | `spot.require` stays inside the mod's own folder, links included |
+| S10 | A program is found in a fixed `PATH` of system folders. One in a folder your user can write, such as your own scripts, must be listed by full path; its hash is then part of the approval, and it is flagged |
+| S11 | A program started by a mod gets a small environment (`HOME`, `LANG`, the runtime folder, the fixed `PATH`) plus the variables the mod has `env` permission for, **not the daemon's**, which may hold secrets |
+| S12 | A program started by a mod inherits no open files, and never the channel to the daemon |
+
+**Approval**
+
+| # | Rule |
+|---|------|
+| S13 | No provider runs without approval; none is exempt |
+| S14 | Approval needs a terminal and typing each dangerous permission; there is no `--yes` and no approve-all |
+| S15 | Approval covers a hash of every file of the mod, its `mod.toml`, the parsers it uses and the programs of S10. What is hashed is what is loaded |
+| S16 | A changed mod does not start, and you are told what is new |
+| S17 | spot refuses a mods folder, mod file or approval record that is not yours or that others can write |
+| S18 | spot never downloads or updates a mod |
+
+**Daemon, hosts and clients**
+
+| # | Rule |
+|---|------|
+| S19 | A host publishes and answers only under its own mod's name; the daemon enforces it, whatever the host says |
+| S20 | Everything from a host is checked: size, form, names. Garbled messages kill it |
+| S21 | Socket connections are accepted only from your own user, checked on both ends |
+| S22 | Neither the daemon nor a mod host runs as root; they refuse to start if they would |
+| S23 | A mod cannot exhaust spot: limits on time, memory, rows, message size, how many programs run at once, log size, and how often it can notify |
+| S24 | Every command, file access and refusal is logged where mods cannot write, readable only by you |
+
+**Requests are open to your programs.** Any program of yours can `spot call` any request of an
+approved mod, so a request that does something drastic is a way for other programs to do it. A mod
+must check the arguments it gets, and `spot mods show` lists the requests a mod offers.
+
+#### Not promised
+
+- Permissions control **which programs start**, not what those programs then do or touch.
+- An approved mod can misuse what it was granted.
+- A reason shown at approval may be a lie.
+- spot, gopher-lua or the kernel may have bugs.
+
+#### To be settled before coding
+
+| Question | Why it matters |
+|----------|----------------|
+| Can Landlock bind a mod host and its programs to the `read` and `write` lists? | It would make those lists true for programs too. Untried |
+| Should a `run` permission be able to limit arguments, for example `systemctl` only with `--user`? | `run = systemctl` alone grants a great deal |
+| How are S8 and S12 done in Go? | Both are easy to get subtly wrong |
+| Can approvals be writable only by root? | Raises the bar against a partly compromised account |
 
 ### Data must not become commands
 
@@ -375,12 +467,17 @@ XDG_CURRENT_DESKTOP = "know which compositor runs"
 
 - **Nothing is granted by default.** Anything not listed is refused, logged and **reported to you**:
   a mod that tries what it never asked for is exactly what you want to hear about.
-- Programs are matched by name, found in a fixed `PATH`; paths are matched after symlinks and `..`
-  are resolved.
+- A system program is given and matched by bare name (`"ss"`) and found in a fixed `PATH`; a program
+  your user can write, such as your own script, by its full path (S10). File permissions are matched
+  after symlinks and `..` are resolved. The same rules hold for `spot.run` and
+  for every command of `spot.pipe`.
+- **`read` and `write` limit only `spot`'s own file functions, not the programs a mod runs.** A
+  program does whatever your user can: a mod allowed to run `cat` can read any file, and one allowed
+  `tee` can write any file, whatever `read` and `write` say.
 - The `env` option of `spot.run` cannot set `PATH`, `LD_*` or similar variables, which would turn an
   allowed program into any program.
 - **Never granted, whatever is listed:** running `spot`; writing to the mods folder, to spot's
-  configuration or to its record of approvals. A mod cannot widen its own permissions.
+  configuration, to its logs or to its record of approvals. A mod cannot widen its own permissions.
 
 #### Approval
 
@@ -411,7 +508,8 @@ Type the name of each dangerous permission to accept it (ssh), or press Enter to
   untrue.
 - **Dangers are named**, from a list spot keeps: other machines and the network (`ssh`, `scp`,
   `curl`, `wget`, `nc`, `rsync`), everything (`sh`, `bash`, `fish`, `python`, other interpreters),
-  more rights (`sudo`, `pkexec`), private data (`~/.ssh`, keyrings, browser profiles), running code
+  more rights (`sudo`, `pkexec`), any file despite `read` and `write` (`cat`, `cp`, `mv`, `rm`,
+  `tee`, `dd`, `tar`, `sed`, `awk`), private data (`~/.ssh`, keyrings, browser profiles), running code
   later (shell startup files, systemd user units, autostart, compositor config).
 - **Combinations are pointed out**, such as reading private data together with reaching the network.
 - **Accepting takes effort.** Each dangerous permission is accepted by typing its name; the prompt
@@ -432,6 +530,7 @@ or written, and everything refused, with times. The log cannot be written by mod
 
 **Permissions do not make a stranger's provider safe.**
 
+- `read` and `write` do not bind allowed programs, as above.
 - An allowed program can be abused: many (`systemctl`, `git`, `find`, …) can start others, and a
   file a mod may write can be a file that is run.
 - A reason can be a lie, and a list of danger names is never complete.
@@ -585,7 +684,7 @@ publish. Parsers a mod uses run in its process, so a bad parser takes that mod's
 ## Trust
 
 See [security](#security). A provider can do what you approved, and what the programs you allowed it
-can do; the separate process protects the daemon from a broken mod, not you from a malicious one.
+can do (which is more than its `read` and `write` list); the separate process protects the daemon from a broken mod, not you from a malicious one.
 
 A parser is given no way to run or write anything and shares nothing with its caller, which is what
 makes one from a stranger reasonable to use. What it returns is still data from that stranger: a
@@ -680,7 +779,4 @@ The API is **experimental** until menu trees (0.10) have used it.
 9. **One host per provider, or one for all?** Separate hosts isolate better and cost about 7 MB
    each in the test.
 10. **Limits.** Are 256 MB of memory and 10,000 rows the right defaults?
-11. **Approvals only root can write?** Keeping the record where your user cannot change it
-    (approving through `sudo`) would stop something that only has your rights from approving a
-    changed mod. It would not stop it from doing damage in other ways. Worth the friction?
-12. **For whoever asked for modding:** what would you build first, and can this API do it?
+11. **For whoever asked for modding:** what would you build first, and can this API do it?
