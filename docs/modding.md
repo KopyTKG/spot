@@ -4,17 +4,20 @@
 > ([#16](https://github.com/KopyTKG/spot/issues/16)); names and behaviour are all open to change.
 > Questions to answer are [at the end](#open-questions).
 
-A **daemon mod** is a Lua file the spot daemon runs. It loads and parses data once, keeps it, and
-hands it to anything that asks: dialogs, a bar, scripts. It replaces the shell script that is run
-again for every consumer.
+A **daemon mod** is a Lua program the spot daemon looks after. It loads and parses data once, keeps
+it, and hands it to anything that asks: dialogs, a bar, scripts. It replaces the shell script that
+is run again for every consumer.
+
+Mods do **not** run inside the daemon. Each provider runs in its own **mod host** process, so a mod
+that hangs or eats memory can be killed without taking your launcher and menus with it.
 
 ```
-            ┌─────────────── spot daemon ───────────────┐
- ss, ufw,   │  mod "sockets" ──publishes──► sockets.*   │──► dialogs   (from = "sockets.table")
- files  ───►│  mod "idle"    ──publishes──► idle.*      │──► bars      (spot watch sockets.count)
-            │       ▲                                   │──► scripts   (spot get / spot call)
-            └───────┼───────────────────────────────────┘
-                    └──────── requests: spot call idle.set false
+ ss, ufw,    ┌─ mod host ───────┐              ┌─ spot daemon ─┐
+ files  ────►│ mod "sockets"    │◄─ messages ─►│               │──► dialogs  (from = "sockets.table")
+             └──────────────────┘              │  keeps what   │──► bars     (spot watch sockets.count)
+             ┌─ mod host ───────┐              │  mods publish │──► scripts  (spot get / spot call)
+             │ mod "idle"       │◄─ messages ─►│               │◄── requests (spot call idle.set false)
+             └──────────────────┘              └───────────────┘
 ```
 
 **UI mods** (behaviour inside one dialog) are a separate layer, planned for 0.12 and not covered
@@ -24,8 +27,8 @@ here.
 
 | Type | Does | May | Runs |
 |------|------|-----|------|
-| `parser` | turns text into data | compute only: no commands, files, timers or publishing | inside whoever uses it |
-| `provider` | gets data (usually with a parser), publishes it, answers requests | everything in [the API](#the-api) | in the daemon, as long as it does |
+| `parser` | turns text into data | compute only: no commands, files, timers or publishing | inside the mod host that uses it |
+| `provider` | gets data (usually with a parser), publishes it, answers requests | everything in [the API](#the-api) | in its own mod host, as long as the daemon runs |
 | `ui` | behaviour inside one dialog | (0.12, not designed here) | while the dialog is open |
 
 A mod says what it is in `mod.toml` next to its `init.lua`, so the daemon knows what it may do
@@ -110,7 +113,8 @@ caller's own Lua state: using a parser is an ordinary function call, with no wai
 and nothing shared between callers.
 
 A parser gets `string`, `table`, `math`, `spot.json`, `spot.log` and `spot.use` (for other
-parsers), and nothing else. Its functions take text, and optionally a table of options, and return
+parsers), and nothing else: the base functions that load or run code from outside are removed (see
+[the Lua environment](#the-lua-environment)). Its functions take text, and optionally a table of options, and return
 the same values a provider publishes.
 
 A parser also works **without writing a provider**:
@@ -131,13 +135,14 @@ parse = "ss.sockets"
 
 So a tool can start as a command and a parser, and become a provider only when it needs to keep
 data, refresh it or answer requests. Parsers named by a dialog or `spot parse` are found in the
-mods folder and need no enabling: they cannot do anything but compute.
+mods folder and need no enabling: they can only compute. They run in a mod host started for that one
+call, so a bad one costs that call and nothing else.
 
 ## Files and enabling
 
 | | |
 |---|---|
-| A mod | a folder `<name>/` with `init.lua` and optionally `mod.toml`; `require` finds other files in that folder only |
+| A mod | a folder `<name>/` with `init.lua` and optionally `mod.toml`; `spot.require` loads other files from that folder only |
 | Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `daemon.toml` |
 | Name | `[a-z][a-z0-9_-]*`; it prefixes everything the mod publishes |
 | Enabled | a provider: listed in `mods` in `daemon.toml`, otherwise it never runs. A parser: when something uses it |
@@ -145,9 +150,19 @@ mods folder and need no enabling: they cannot do anything but compute.
 
 ## The API
 
-This is what a **provider** gets. A mod sees one global, `spot`, and the Lua 5.1 `string`, `table`, `math` and `coroutine` libraries.
-`io` and `os` are left out: a blocking call there could not be timed out. The helpers below take
-their place.
+This is what a **provider** gets: one global, `spot`, and the Lua environment below.
+
+### The Lua environment
+
+Lua 5.1: the `string`, `table`, `math` and `coroutine` libraries and the harmless base functions.
+
+- `io`, `os`, `package` and `debug` are not loaded. A blocking call there could not be timed out;
+  the helpers below take their place.
+- Removed from the base library: `dofile`, `loadfile`, `load`, `loadstring`, `require`, `module`,
+  `getfenv`, `setfenv`, `newproxy`, `collectgarbage`, `print` and `_printregs`. This matters:
+  `dofile` and `loadfile` read files from disk even with `io` left out.
+- Code is shared with `spot.use` (parsers) and `spot.require` (other files of the same mod's
+  folder), both done by spot, which only reads from the mods folder.
 
 ### Publishing
 
@@ -236,27 +251,44 @@ that updates by itself while open comes with live lists (0.11).
 | A mod fails to load | It is marked failing; the others and all dialogs work |
 | A `value` function errors | Readers get the last good result and the error is logged; `get` exits non-zero if there is none |
 | Three errors in a row | The value stops being recomputed until the mod is reloaded or asked again after a pause |
-| A function runs longer than 5 s | It is interrupted; `spot.run` kills the process group |
+| A function runs longer than 5 s | It is interrupted inside the host; `spot.run` kills the process group |
+| The host does not answer in time (stuck where it cannot be interrupted) | The daemon kills the host, and the commands it started, and starts a new one |
+| A mod uses too much memory | Its host dies; the daemon starts a new one |
+| A host dies three times in a row | The mod is disabled until `spot mods reload`; the error is shown by `spot mods` |
 | A `from` names a mod that is not running | The dialog shows the error under the item |
 
-**Isolation.** Each mod has its own Lua state on its own goroutine, with a queue of work. A slow
-mod delays only itself, and mods cannot read each other's variables; they share only what they
-publish.
+A restarted mod starts empty. The daemon keeps the last values it published, marked as old, until
+new ones arrive.
 
-**Limits we cannot promise.** A mod can use unlimited memory, and the daemon would go down with it.
+**Why a separate process.** Two things cannot be contained inside one program, as a test of the Lua
+library showed:
+
+- A slow string pattern runs in Go code that a time limit cannot interrupt: a short pattern took
+  1.5 s on 200 characters and 23 s on 400.
+- Running out of memory is fatal and cannot be caught: one oversized `string.rep`, or `s = s .. s`
+  in a loop, ended the process.
+
+Mods are isolated from each other in the same way: separate processes, sharing only what they
+publish. Parsers a mod uses run in its process, so a bad parser takes that mod's host down with it.
 
 ## Trust
 
-A provider runs **with all your rights**: it can run any program and write any file you can. It is not a
-sandbox and does not pretend to be. Enable only mods you have read, exactly as with a shell script.
-A parser is given no way to run or write anything, so sharing one is low-risk, though a bad one can
-still waste time or memory. The daemon never runs as root; privileged actions go through your own helper (`sudo`, `pkexec`).
+A provider runs **with all your rights**: it can run any program and write any file you can. The
+separate process protects the daemon from a broken mod, not you from a malicious one. Enable only
+mods you have read, exactly as with a shell script.
+
+A parser is given no way to run or write anything, so sharing one is low-risk; a bad one can still
+waste time and memory until its host is killed. The removal of the base functions has been checked
+by a few tests, not audited.
+
+The daemon never runs as root; privileged actions go through your own helper (`sudo`, `pkexec`).
 
 ## Building it
 
-- A new package `internal/mods`, without GTK, hosted by `internal/daemon`.
+- **The mod host** is a second, small program without GTK (`spot-mod-host`), shipped with spot. The
+  packages and the release have to carry both.
+- A new package `internal/mods`, without GTK, used by the host and by `internal/daemon`.
 - Lua: [gopher-lua](https://github.com/yuin/gopher-lua), written in Go, so no new C dependency.
-  Its support for interrupting a running script and the cost of that **still need checking**.
 - The socket protocol gains `get`, `watch` and `call`. `watch` answers many times on one
   connection, where today every request has one answer.
 - `daemon.toml` gains `mods`, `mods_dir` and `[mod.*]`. Older versions of spot reject unknown keys
@@ -264,8 +296,9 @@ still waste time or memory. The daemon never runs as root; privileged actions go
 
 ### One model for mods and backends
 
-A long-running **external backend** (0.12) should look the same to everything that reads data: it
-publishes values and answers requests, only over JSON lines instead of Lua calls.
+A mod host and a long-running **external backend** (0.12) are the same thing to the daemon: a
+process that publishes values and answers requests in JSON lines. A mod host is simply a backend
+that runs Lua.
 
 ```json
 {"publish": "table", "data": [{"label": "tcp LISTEN", "key": "0.0.0.0:22"}]}
@@ -273,11 +306,27 @@ publishes values and answers requests, only over JSON lines instead of Lua calls
 {"reply": 7, "ok": true, "data": false}
 ```
 
-`from`, `call` and the command line would not know which of the two is behind a name.
+`from`, `call` and the command line do not know which of the two is behind a name.
+
+### What was tested
+
+With gopher-lua 1.1.2, in a throwaway program, not in spot:
+
+| Question | Result |
+|----------|--------|
+| Can a runaway script be stopped? | Yes for Lua code, including loops that catch errors, coroutines and callbacks; **no** inside a slow pattern |
+| Cost of a time limit | About 10 % |
+| A parser like the one above on 5,000 lines | 65 ms |
+| A new Lua state | 40 µs |
+| A separate process running Lua | about 7 MB; 1 ms to start, run and exit |
+
+**Still to test:** how to limit a host's memory (a Go program reserves much more address space than
+it uses, so the limit has to be chosen with care), the cost of sending large values between
+processes, and the real host's size and start time.
 
 ### First version
 
-In: loading and enabling, the `parser` and `provider` types, `spot.use`, `spot parse`, `run` / `parse` in dialogs, `value` / `publish` / `on`, `run`, `read`, `every`, `json`, `log`,
+In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, `spot.use`, `spot parse`, `run` / `parse` in dialogs, `value` / `publish` / `on`, `spot.require`, `run`, `read`, `every`, `json`, `log`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save, UI mods.
@@ -301,4 +350,7 @@ The API is **experimental** until menu trees (0.10) have used it.
    provider, and is that wanted in the first version?
 8. **Types.** Are parser and provider enough, or is a third kind needed, such as one that only
    performs actions?
-9. **For whoever asked for modding:** what would you build first, and can this API do it?
+9. **One host per provider, or one for all?** Separate hosts isolate better and cost about 7 MB
+   each in the test.
+10. **Limits.** What should the default memory limit be, and should a mod be able to raise it?
+11. **For whoever asked for modding:** what would you build first, and can this API do it?
