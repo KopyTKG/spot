@@ -28,7 +28,7 @@ and are not covered here. The work for 0.9 is tracked in the [milestone](https:/
 | Type | Does | May | Runs |
 |------|------|-----|------|
 | `parser` | turns text into data | compute only: no commands, files, timers or publishing | in a locked Lua state of its own, inside the mod host that uses it |
-| `provider` | gets data (usually with a parser), publishes it, answers requests | read and write files, run commands: everything in [the API](#the-api) | in its own mod host, as long as the daemon runs |
+| `provider` | gets data (usually with a parser), publishes it, answers requests | what its [permissions](#permissions) grant: reading and writing files, running commands | in its own mod host, as long as the daemon runs |
 
 A mod says what it is in `mod.toml` next to its `init.lua`, so spot knows what it may do before
 running any of it. Without the file a mod is a provider; a parser must have one, with
@@ -69,8 +69,7 @@ return function(input, options)
 end
 ```
 
-A provider that uses it, `~/.config/spot/mods/sockets/init.lua` (with `uses = ["ss"]` in its
-`mod.toml`):
+A provider that uses it, `~/.config/spot/mods/sockets/init.lua`:
 
 ```lua
 local parse = spot.use("ss")
@@ -89,10 +88,24 @@ spot.value("count", { every = 5000 }, function()
 end)
 ```
 
-Enable the provider in `~/.config/spot/daemon.toml`. The parser it uses comes with it:
+It says what it needs in its `mod.toml`:
+
+```toml
+uses = ["ss"]
+
+[permissions.run]
+ss = "list the open sockets"
+```
+
+Enable the provider in `~/.config/spot/daemon.toml`, and approve what it asks for. The parser it uses
+comes with it:
 
 ```toml
 mods = ["sockets"]
+```
+
+```sh
+spot mods allow sockets
 ```
 
 Use it:
@@ -236,14 +249,15 @@ the wrong column.
 | A mod | a folder `<name>/` with `init.lua` and `mod.toml` (optional for a provider). A provider can load other files of its folder with `spot.require` |
 | Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `daemon.toml` |
 | Name | `[a-z][a-z0-9_-]*`; it prefixes everything the mod publishes |
-| Enabled | a provider: listed in `mods` in `daemon.toml`, otherwise it never runs. A parser: when something uses it |
+| Enabled | a provider: listed in `mods` in `daemon.toml` **and** approved with `spot mods allow`, otherwise it never runs. A parser: when something uses it |
 | Settings | the `[mod.<name>]` table of `daemon.toml`, visible to the mod as `spot.config` |
 
 ## The API
 
 This is what a **provider** gets. (A parser gets far less: see [locked down](#locked-down).)
 
-A provider has all your rights, through one global, `spot`. Lua's own `io` and `os` are not loaded:
+A provider reaches your system only through one global, `spot`, and only as far as its
+[permissions](#permissions) go. Lua's own `io` and `os` are not loaded:
 `spot` offers what they would, in one way, with a time limit on every command and its normal memory
 limit restored. Lua libraries that expect `io` or `os` therefore do not work. They may be added
 later, which would break no mod; taking them away later would.
@@ -297,8 +311,8 @@ message on stderr, and in a dialog the control goes back to what it showed.
 
 | Call | Returns / does |
 |------|----------------|
-| `spot.run(argv, options)` | `{ status, stdout, stderr }`. `argv` is a list, **no shell**. Options: `timeout` (ms, default 5000), `stdin`, `env`, `dir` |
-| `spot.sh(command, options)` | The same through `sh -c`, for pipes. Values are not quoted for you |
+| `spot.run(argv, options)` | `{ status, stdout, stderr }`. `argv` is a list; **there is no shell**. Options: `timeout` (ms, default 5000), `stdin`, `env`, `dir` |
+| `spot.pipe(argv1, argv2, …)` | The same for a pipeline: each list is one command, connected without a shell |
 | `spot.read(path)`, `spot.write(path, text)` | Whole files; `nil, message` on failure |
 | `spot.lines(path)` | Iterate over a file line by line |
 | `spot.list(path)` | The names in a folder |
@@ -322,6 +336,117 @@ Mods run in the **daemon's** environment, not that of whoever asks.
 
 Programs a mod starts get their normal memory limit back before they run: some, such as `node`, do
 not start under the host's. Their memory is therefore **not limited**.
+
+## Security
+
+Two different dangers, with different answers.
+
+### Data must not become commands
+
+A network name, a file name, a process name or a parser's result may be chosen by someone else.
+
+- **There is no `spot.sh`.** No part of the API takes a command as one string, so data cannot grow
+  into extra commands. Pipelines use `spot.pipe`.
+- **A value can still be read as an option.** One starting with `-` changes what a program does, and
+  with some, `ssh` for one, that can run other programs. Put `--` before such values, or check them.
+- Arguments of `spot call` and values from dialogs arrive as strings in a list, never as shell text.
+- A dialog's `run` takes no placeholders.
+
+### A mod from someone else
+
+A provider has no `io`, no `os` and no way to load code, so **everything it does goes through
+`spot`, which can refuse**.
+
+#### Permissions
+
+Every permission comes with **the reason for it**; one without a reason makes the mod invalid.
+
+```toml
+[permissions.run]                    # programs it may start
+systemctl = "start and stop the idle lock"
+
+[permissions.read]                   # files and folders
+"~/.ssh/config" = "list your SSH hosts"
+
+[permissions.write]
+[permissions.env]                    # variables spot.env may read
+XDG_CURRENT_DESKTOP = "know which compositor runs"
+```
+
+- **Nothing is granted by default.** Anything not listed is refused, logged and **reported to you**:
+  a mod that tries what it never asked for is exactly what you want to hear about.
+- Programs are matched by name, found in a fixed `PATH`; paths are matched after symlinks and `..`
+  are resolved.
+- The `env` option of `spot.run` cannot set `PATH`, `LD_*` or similar variables, which would turn an
+  allowed program into any program.
+- **Never granted, whatever is listed:** running `spot`; writing to the mods folder, to spot's
+  configuration or to its record of approvals. A mod cannot widen its own permissions.
+
+#### Approval
+
+The point is to give you **the chance to notice**: a mod about keybinds that wants `ssh` should make
+you ask why, before it ever runs.
+
+```text
+$ spot mods allow keybinds
+
+keybinds 1.2.0 — "Lists your keybindings"
+CHANGED since you approved it on 2026-11-26
+
+  NEW  run  ssh      !! DANGER: reaches other machines
+            the author says: "sync bindings"
+
+       run  hyprctl     the author says: "read the live bindings"
+       read ~/.config/hypr
+                        the author says: "read your config"
+
+  !! It can read files AND reach other machines: it could send them away.
+
+Changed files: init.lua (+14 -2), mod.toml (+1)     see them: spot mods diff keybinds
+
+Type the name of each dangerous permission to accept it (ssh), or press Enter to refuse:
+```
+
+- **What is new comes first**, and is marked. The reason is shown as the author's claim: it can be
+  untrue.
+- **Dangers are named**, from a list spot keeps: other machines and the network (`ssh`, `scp`,
+  `curl`, `wget`, `nc`, `rsync`), everything (`sh`, `bash`, `fish`, `python`, other interpreters),
+  more rights (`sudo`, `pkexec`), private data (`~/.ssh`, keyrings, browser profiles), running code
+  later (shell startup files, systemd user units, autostart, compositor config).
+- **Combinations are pointed out**, such as reading private data together with reaching the network.
+- **Accepting takes effort.** Each dangerous permission is accepted by typing its name; the prompt
+  appears after a short wait and ignores what was typed before it. There is no `--yes`, no "approve
+  all", and no approval without a terminal.
+- **Read the code:** `spot mods show` prints a mod, `spot mods diff` what changed since your approval.
+- The approval is **tied to a hash** of the mod's files, its `mod.toml` and the parsers it uses. After
+  any change the mod does not start, and a notification says what is new: `keybinds changed and now
+  asks to run ssh`. spot hashes and loads the same bytes.
+- **No mod skips approval, your own included.** Your files can be changed by someone else.
+
+#### Afterwards
+
+`spot mods audit <name>` lists what a mod really did: each command with its arguments, each file read
+or written, and everything refused, with times. The log cannot be written by mods.
+
+#### What this does not do
+
+**Permissions do not make a stranger's provider safe.**
+
+- An allowed program can be abused: many (`systemctl`, `git`, `find`, …) can start others, and a
+  file a mod may write can be a file that is run.
+- A reason can be a lie, and a list of danger names is never complete.
+- Warnings only help if they are read.
+- Something already running as you can change spot, its approvals or your shell without any mod.
+  These safeguards are against **mods**, not against an account that is already taken over.
+
+Read a mod before approving it. A sandbox enforced by the kernel (Landlock, seccomp) would be a
+stronger limit; it has not been tried.
+
+### Who may talk to the daemon
+
+Once mods can act, `spot call` makes the daemon's socket a way to cause actions. The daemon accepts
+connections only from your own user, checked on the connection and not by file permissions alone,
+and a client likewise checks who it is talking to.
 
 ## Using mod data
 
@@ -357,6 +482,10 @@ that updates by itself while open comes with live lists (0.11).
 | `spot parse <parser>` | Run a parser on standard input, print its records as a JSON array |
 | `spot mods check [name] [-]` | Check a mod's contract and samples, or live input with `-` |
 | `spot mods log <name>` | A mod's errors and log lines |
+| `spot mods allow <name>` | Show a mod's permissions and dangers, and approve them |
+| `spot mods show <name>`, `diff <name>` | Read a mod; what changed since you approved it |
+| `spot mods audit <name>` | What it ran, read, wrote and was refused |
+| `spot mods revoke <name>` | Withdraw the approval |
 
 `--json` prints `get` and `watch` as one JSON value per line, which is what a bar wants.
 `get`, `watch`, `call`, `parse` and `mods` become reserved words: a config of that name needs a path.
@@ -428,6 +557,8 @@ works.
 
 | Case | What happens |
 |------|--------------|
+| A mod is not approved, or changed since | It does not start; the notification says to run `spot mods allow` |
+| A mod does something it has no permission for | The call fails as a mod error, naming what was refused |
 | A mod fails to load | Marked failing; the others and all dialogs work |
 | A `value` function errors | Readers get the last good result; `get` exits non-zero if there is none |
 | Three errors in a row | The value stops being recomputed until the mod is reloaded or asked again after a pause |
@@ -453,9 +584,8 @@ publish. Parsers a mod uses run in its process, so a bad parser takes that mod's
 
 ## Trust
 
-A provider runs **with all your rights**: it can run any program and write any file you can. The
-separate process protects the daemon from a broken mod, not you from a malicious one. Enable only
-mods you have read, exactly as with a shell script.
+See [security](#security). A provider can do what you approved, and what the programs you allowed it
+can do; the separate process protects the daemon from a broken mod, not you from a malicious one.
 
 A parser is given no way to run or write anything and shares nothing with its caller, which is what
 makes one from a stranger reasonable to use. What it returns is still data from that stranger: a
@@ -520,7 +650,7 @@ The limit tests were on Linux. The transfer figures cover one hop, not drawing t
 
 ### First version
 
-In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, mod health and notifications, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
+In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, mod health and notifications, permissions with reasons, approval and the audit log, the socket checks, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
@@ -539,8 +669,8 @@ The API is **experimental** until menu trees (0.10) have used it.
    in `mods/`), or is that out of scope?
 5. **`io` and `os`.** Providers start with `spot`'s helpers only. Is anything missing from them, and
    is there a Lua library you need that expects `io` or `os`?
-6. **Commands as lists.** `spot.run` takes a list to avoid quoting bugs. Too strict for how you
-   write scripts?
+6. **No shell.** `spot.run` and `spot.pipe` take lists. Is there something your scripts do that
+   they cannot express?
 7. **Parsers in dialogs.** Are `run` and `parse` the right keys for using a parser without a
    provider, and is that wanted in the first version?
    Is the [contract](#the-parser-contract) enough to share parsers by, or is something missing, such
@@ -550,4 +680,7 @@ The API is **experimental** until menu trees (0.10) have used it.
 9. **One host per provider, or one for all?** Separate hosts isolate better and cost about 7 MB
    each in the test.
 10. **Limits.** Are 256 MB of memory and 10,000 rows the right defaults?
-11. **For whoever asked for modding:** what would you build first, and can this API do it?
+11. **Approvals only root can write?** Keeping the record where your user cannot change it
+    (approving through `sudo`) would stop something that only has your rights from approving a
+    changed mod. It would not stop it from doing damage in other ways. Worth the friction?
+12. **For whoever asked for modding:** what would you build first, and can this API do it?
