@@ -79,12 +79,13 @@ it off).
 
 | Key | What for |
 |-----|----------|
-| `command` | Template; `{exec}` is the entry's `Exec` line with its field codes resolved and shell-quoted: `uwsm-app -- {exec}` |
+| `command` | Template; `{exec}` is the entry's `Exec` line with its field codes resolved and shell-quoted (so do not put quotes around it): `uwsm-app -- {exec}` |
 | `terminal` | Wraps apps that declare `Terminal=true`; its result becomes the `{exec}` of `command`: `xdg-terminal-exec {exec}` |
 | `cwd`, `env` | Working directory and extra environment |
 
 Per-app exceptions go in `[[apps.override]]` (`id` + a whole `command`). Field codes follow the
-Desktop Entry spec: `%f %F %u %U` vanish (a launcher has no files to hand over), `%i` becomes
+Desktop Entry spec: `%f %F %u %U` take the file or URL in `SPOT_TARGET`
+([details](toml.md#opening-a-file-or-url)) and vanish without one, `%i` becomes
 `--icon <Icon>`, `%c` the name, `%k` the file path.
 
 ## Sources

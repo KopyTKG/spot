@@ -492,15 +492,35 @@ the app starts detached (its own session, no stdio) so it outlives the dialog.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `command` | `{exec}` | Command template. `{exec}` is the entry's `Exec` line, already resolved and shell-quoted |
+| `command` | `{exec}` | Command template. `{exec}` is the entry's `Exec` line, already resolved and shell-quoted: do not put quotes around it |
 | `terminal` | `xdg-terminal-exec {exec}` | Wraps apps with `Terminal=true`; its result becomes the `{exec}` of `command` |
 | `cwd` | the entry's `Path=`, else the caller's | Working directory (`~` works) |
 | `env` | none | Extra environment, a table of `NAME = "value"` |
 
 The `Exec` field codes are resolved per the Desktop Entry spec: `%f %F %u %U`
-(files, URLs: there are none to hand over) and the deprecated codes disappear,
-`%i` becomes `--icon <Icon>`, `%c` the name, `%k` the `.desktop` path, `%%` a
-percent sign.
+take the [target](#opening-a-file-or-url) and vanish without one, `%i` becomes `--icon <icon>`, `%c` the
+name, `%k` the `.desktop` path and `%%` a percent sign.
+
+#### Opening a file or URL
+
+`SPOT_TARGET` hands a file or URL to the application you pick:
+
+```sh
+SPOT_TARGET=~/notes.md spot launcher
+SPOT_TARGET=https://example.org spot launcher
+```
+
+| In the entry's `Exec` | Gets |
+|---|---|
+| `%f`, `%F` | the absolute path (a `file://` URL is turned back into one; any other URL stays as it is) |
+| `%u`, `%U` | a `file://` URI, percent-encoded; a URL stays as it is |
+| neither | the path, as an extra last argument |
+
+A relative path is relative to the directory `spot` was run in. It arrives as one argument whatever
+characters it contains, provided the templates do not quote `{exec}`: inside `sh -c "{exec}"` a
+file name could run commands. An override whose command has no `{exec}` gets no target. The
+launched application does not inherit `SPOT_TARGET`. The list is not filtered by what can open the
+target.
 
 ### `[[apps.override]]`
 
@@ -614,6 +634,7 @@ Let one shared config be parameterised per call.
 | `SPOT_FOOTER` | Replaces `footer` |
 | `SPOT_PLACEHOLDER` | Placeholder of the first field, password, text, list or apps item |
 | `SPOT_QUERY` | Text the search box of the first list or apps item starts with: `SPOT_QUERY="= " spot launcher` opens the launcher already in calculator mode |
+| `SPOT_TARGET` | A file or URL to open with the application picked in an `apps` item: [details](#opening-a-file-or-url) |
 | `SPOT_DEFAULT` | Default of the first item that takes one (field, text, select, list, tiles, toggle, scale) |
 | `SPOT_CURRENT_<ID>` | `current` of the `tiles` item with that `id`, same naming as `SPOT_DEFAULT_<ID>` |
 | `SPOT_BACK` | Show [Back](#back) and run this command when it is used. Empty means unset |

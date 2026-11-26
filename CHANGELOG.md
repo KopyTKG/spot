@@ -3,6 +3,12 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.7.4 — 2026-11-26
+
+- **Open a file or URL with the picked app.** `SPOT_TARGET=<path or URL> spot launcher` fills the
+  entry's `%f %F %u %U`.
+- The app index reads `MimeType=`.
+
 ## 0.7.3 — 2026-11-26
 
 - Releases are built in an Arch Linux container (`.jenkins/Dockerfile`): the bindings 0.7.2 moved to need

@@ -108,18 +108,18 @@ func TestExecArgs(t *testing.T) {
 		{"app 100%% --flag=%f", []string{"app", "100%", "--flag="}},
 		{`app "" x`, []string{"app", "", "x"}},
 	} {
-		if got := execArgs(c.exec, e); !reflect.DeepEqual(got, c.want) {
+		if got := execArgs(c.exec, e, target{}); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("execArgs(%q) = %q, want %q", c.exec, got, c.want)
 		}
 	}
-	if got := execArgs("app %i", &AppEntry{}); !reflect.DeepEqual(got, []string{"app"}) {
+	if got := execArgs("app %i", &AppEntry{}, target{}); !reflect.DeepEqual(got, []string{"app"}) {
 		t.Errorf("%%i without an icon: %q", got)
 	}
 }
 
 func TestResolvedExecQuoting(t *testing.T) {
 	e := &AppEntry{Exec: `sh -c "echo 'hi there'; ls"`}
-	got := e.resolvedExec()
+	got := e.resolvedExec(target{})
 	want := `sh -c 'echo '\''hi there'\''; ls'`
 	if got != want {
 		t.Errorf("resolvedExec = %s, want %s", got, want)
@@ -132,26 +132,26 @@ func TestResolvedExecQuoting(t *testing.T) {
 func TestBuildLaunch(t *testing.T) {
 	e := &AppEntry{ID: "firefox", Name: "Firefox", Exec: "firefox %u", WorkDir: "/work"}
 	// Defaults: just the command.
-	if s := buildLaunch(e, nil, "/home/u"); s.cmd != "firefox" || s.dir != "/work" {
+	if s := buildLaunch(e, nil, "/home/u", target{}); s.cmd != "firefox" || s.dir != "/work" {
 		t.Errorf("default: %+v", s)
 	}
 	cfg := &config.AppsConfig{Launch: config.AppsLaunch{Command: "uwsm-app -- {exec}", Cwd: "~/x", Env: map[string]string{"B": "2", "A": "1"}}}
-	s := buildLaunch(e, cfg, "/home/u")
+	s := buildLaunch(e, cfg, "/home/u", target{})
 	if s.cmd != "uwsm-app -- firefox" || s.dir != "/home/u/x" || !reflect.DeepEqual(s.env, []string{"A=1", "B=2"}) {
 		t.Errorf("template: %+v", s)
 	}
 	// Terminal apps: the terminal template wraps the app, then the command wraps both.
 	term := &AppEntry{ID: "htop", Name: "htop", Exec: "htop", Terminal: true}
-	if s := buildLaunch(term, cfg, "/h"); s.cmd != "uwsm-app -- xdg-terminal-exec htop" {
+	if s := buildLaunch(term, cfg, "/h", target{}); s.cmd != "uwsm-app -- xdg-terminal-exec htop" {
 		t.Errorf("terminal default: %q", s.cmd)
 	}
 	cfg.Launch.Terminal = "alacritty -e {exec}"
-	if s := buildLaunch(term, cfg, "/h"); s.cmd != "uwsm-app -- alacritty -e htop" {
+	if s := buildLaunch(term, cfg, "/h", target{}); s.cmd != "uwsm-app -- alacritty -e htop" {
 		t.Errorf("terminal custom: %q", s.cmd)
 	}
 	// An override is the whole command.
 	cfg.Override = []config.AppOverride{{ID: "firefox", Command: "firefox --new-window --profile {exec}"}}
-	if s := buildLaunch(e, cfg, "/h"); s.cmd != "firefox --new-window --profile firefox" {
+	if s := buildLaunch(e, cfg, "/h", target{}); s.cmd != "firefox --new-window --profile firefox" {
 		t.Errorf("override: %q", s.cmd)
 	}
 }

@@ -43,6 +43,7 @@ type AppEntry struct {
 	Hidden      bool
 	Keywords    []string
 	Categories  []string
+	MimeTypes   []string // MimeType=: what the application says it can open
 	OnlyShowIn  []string
 	NotShowIn   []string
 }
@@ -128,6 +129,8 @@ func parseDesktopEntry(id, path string, data []byte, locales []string) (*AppEntr
 			e.Hidden = val == "true"
 		case "Categories":
 			e.Categories = splitDesktopList(val)
+		case "MimeType":
+			e.MimeTypes = splitDesktopList(val)
 		case "OnlyShowIn":
 			e.OnlyShowIn = splitDesktopList(val)
 		case "NotShowIn":
@@ -263,10 +266,11 @@ func visibleApp(e *AppEntry, c *config.AppsConfig, desktops []string, lookPath f
 // --- Exec resolution --------------------------------------------------------
 
 // execArgs splits an Exec line into arguments (quoting rules of the Desktop
-// Entry spec) and resolves the field codes. There are no files or URLs to hand
-// over from a launcher, so %f %F %u %U and the deprecated codes vanish; %i
-// becomes --icon <Icon>, %c the name, %k the .desktop path, %% a percent sign.
-func execArgs(exec string, e *AppEntry) []string {
+// Entry spec) and resolves the field codes: %f %F become the target's path and
+// %u %U its URI (both vanish without a target), %i becomes --icon <Icon>, %c the
+// name, %k the .desktop path, %% a percent sign; the deprecated codes vanish. A
+// line with no file or URL code gets the target's path as its last argument.
+func execArgs(exec string, e *AppEntry, t target) []string {
 	var args []string
 	var cur strings.Builder
 	has, quoted := false, false
@@ -295,6 +299,7 @@ func execArgs(exec string, e *AppEntry) []string {
 	flush()
 
 	var out []string
+	placed := false // the line has a file or URL code
 	for _, a := range args {
 		if a == "%i" {
 			if e.Icon != "" {
@@ -316,12 +321,21 @@ func execArgs(exec string, e *AppEntry) []string {
 				b.WriteString(e.Name)
 			case 'k':
 				b.WriteString(e.Path)
+			case 'f', 'F':
+				b.WriteString(t.path)
+				placed = true
+			case 'u', 'U':
+				b.WriteString(t.uri)
+				placed = true
 			}
-			// every other code (%f %F %u %U %d %D %n %N %v %m %i inside an argument) is dropped
+			// every other code (%d %D %n %N %v %m, %i inside an argument) is dropped
 		}
 		if b.Len() > 0 || a == "" { // an argument that was written empty ("") stays; one a code expanded to nothing goes
 			out = append(out, b.String())
 		}
+	}
+	if !placed && !t.empty() {
+		out = append(out, t.path)
 	}
 	return out
 }
@@ -338,8 +352,8 @@ func shellQuote(s string) string {
 }
 
 // resolvedExec is the entry's Exec line as one shell-safe command: {exec}.
-func (e *AppEntry) resolvedExec() string {
-	args := execArgs(e.Exec, e)
+func (e *AppEntry) resolvedExec(t target) string {
+	args := execArgs(e.Exec, e, t)
 	q := make([]string, len(args))
 	for i, a := range args {
 		q[i] = shellQuote(a)
@@ -356,13 +370,13 @@ type launchSpec struct {
 }
 
 // buildLaunch applies the [apps.launch] templates and a per-app override.
-func buildLaunch(e *AppEntry, c *config.AppsConfig, home string) launchSpec {
+func buildLaunch(e *AppEntry, c *config.AppsConfig, home string, t target) launchSpec {
 	var l config.AppsLaunch
 	var overrides []config.AppOverride
 	if c != nil {
 		l, overrides = c.Launch, c.Override
 	}
-	run := e.resolvedExec()
+	run := e.resolvedExec(t)
 	var cmd string
 	for _, o := range overrides {
 		if o.ID == e.ID && o.Command != "" {
@@ -730,8 +744,16 @@ func (r *Results) EntryOf(line string) *AppEntry { return r.byLine[line] }
 
 // Launch starts e as configured and records the launch.
 func (r *Results) Launch(e *AppEntry, callerEnv []string, callerDir string) {
-	spec := buildLaunch(e, r.Cfg, r.Home)
-	env := append(append([]string(nil), callerEnv...), spec.env...)
+	spec := buildLaunch(e, r.Cfg, r.Home, newTarget(EnvGetter(callerEnv)(targetVar), callerDir))
+	// The application must not inherit the target: a launcher opened from it
+	// later would hand the same file to whatever is picked there.
+	var env []string
+	for _, kv := range callerEnv {
+		if !strings.HasPrefix(kv, targetVar+"=") {
+			env = append(env, kv)
+		}
+	}
+	env = append(env, spec.env...)
 	dir := spec.dir
 	if dir == "" {
 		dir = callerDir
