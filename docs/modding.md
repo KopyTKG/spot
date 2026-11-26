@@ -27,31 +27,38 @@ and are not covered here. The work for 0.9 is tracked in the [milestone](https:/
 
 | Type | Does | May | Runs |
 |------|------|-----|------|
-| `parser` | turns text into data | compute only: no commands, files, timers or publishing | inside the mod host that uses it |
+| `parser` | turns text into data | compute only: no commands, files, timers or publishing | in a locked Lua state of its own, inside the mod host that uses it |
 | `provider` | gets data (usually with a parser), publishes it, answers requests | everything in [the API](#the-api) | in its own mod host, as long as the daemon runs |
 
-A mod says what it is in `mod.toml` next to its `init.lua`, so the daemon knows what it may do
-before running any of it:
-
-```toml
-type = "parser"          # "provider" is the default
-uses = []                # parsers this mod needs
-```
+A mod says what it is in `mod.toml` next to its `init.lua`, so spot knows what it may do before
+running any of it. Without the file a mod is a provider; a parser must have one, with
+[its contract](#the-parser-contract).
 
 Splitting them means the parsing of `ss`, `ufw status` or `~/.ssh/config` is written once, shared
 by every tool that needs it, and testable without running anything.
 
 ## A complete example
 
-A parser, `~/.config/spot/mods/ss/init.lua`. It returns its functions:
+A parser, `~/.config/spot/mods/ss/`. Its `mod.toml` says what goes in and what comes out:
+
+```toml
+type        = "parser"
+api         = 1                          # the version of this contract
+version     = "1.0.0"
+description = "Sockets from ss"
+input       = "output of `ss -H -tuna`"
+
+[returns]
+type   = "list"
+fields = { label = "string", key = "string", comment = "string?" }
+```
+
+Its `init.lua` returns exactly one function:
 
 ```lua
-local M = {}
-
--- the output of `ss -H -tuna`
-function M.sockets(text)
+return function(input, options)
   local rows = {}
-  for line in text:gmatch("[^\n]+") do
+  for line in input:gmatch("[^\n]+") do
     local proto, state, _, _, addr, peer = line:match("(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
     if proto then
       rows[#rows + 1] = { label = ("%-4s %-9s %s  %s"):format(proto, state, addr, peer), key = addr }
@@ -59,20 +66,18 @@ function M.sockets(text)
   end
   return rows
 end
-
-return M
 ```
 
 A provider that uses it, `~/.config/spot/mods/sockets/init.lua` (with `uses = ["ss"]` in its
 `mod.toml`):
 
 ```lua
-local ss = spot.use("ss")
+local parse = spot.use("ss")
 
 local function sockets()
   local r = spot.run({ "ss", "-H", "-tuna" })
   if r.status ~= 0 then error(r.stderr) end
-  return ss.sockets(r.stdout)
+  return parse(r.stdout)
 end
 
 spot.value("table", { ttl = 2000 }, sockets)
@@ -107,35 +112,83 @@ match = "smart"
 
 ## Parsers
 
-`spot.use(name)` returns the table the parser's `init.lua` returned. The code is loaded into the
-caller's own Lua state: using a parser is an ordinary function call, with no waiting on another mod
-and nothing shared between callers.
+A parser written by one person has to work for anyone who downloads it, so every parser has the same
+shape and cannot do anything but parse.
 
-A parser gets `string`, `table`, `math`, `spot.json`, `spot.log` and `spot.use` (for other
-parsers), and nothing else: the base functions that load or run code from outside are removed (see
-[the Lua environment](#the-lua-environment)). Its functions take text, and optionally a table of options, and return
-the same values a provider publishes.
+### The parser contract
 
-A parser also works **without writing a provider**:
+**One function.** `init.lua` returns it and nothing else:
+
+```lua
+return function(input, options) ... return output end
+```
+
+| | |
+|---|---|
+| `input` | a string: the text to parse |
+| `options` | a table of plain data, empty when none are given |
+| `output` | plain data matching `[returns]` |
+| Failure | `error("what was wrong")`, the same for every parser |
+
+**Plain data** is strings, numbers, booleans and tables of those. Functions, threads and tables that
+contain themselves or nest more than 32 deep are refused.
+
+**A declared shape.** `mod.toml` of a parser must have `api`, `version`, `description`, `input` and
+`[returns]`:
+
+| In `[returns]` | |
+|---|---|
+| `type` | `"list"`, `"map"`, `"string"`, `"number"` or `"boolean"` |
+| `fields` | for a list, what each item has; for a map, what it has. Each is a type, with `?` when it may be missing |
+
+Only what is declared is checked, as deep as the author chooses to promise: further fields and
+whatever is nested in them pass through. Output that does not match is an error, so a user of the
+parser can rely on the declaration without reading the code. A change that breaks it needs a new
+major `version`.
+
+### Calling it
+
+Every parser is called the same way, by the name of its folder:
+
+```lua
+local parse = spot.use("ss")                 -- in a mod
+local rows  = parse(text, { listening = true })
+```
 
 ```sh
-ss -H -tuna | spot parse ss.sockets          # try it, or use it from a script
-spot parse ss.sockets < saved-output.txt     # check it against a saved sample
+ss -H -tuna | spot parse ss                  # in a shell, prints JSON
 ```
 
 ```toml
-# a dialog that only needs to run a command and show the result
+# in a dialog: run a command, show what the parser makes of it
 [[items]]
 type  = "list"
 id    = "socket"
 run   = "ss -H -tuna"
-parse = "ss.sockets"
+parse = "ss"                                  # needs a list with a label
 ```
 
 So a tool can start as a command and a parser, and become a provider only when it needs to keep
-data, refresh it or answer requests. Parsers named by a dialog or `spot parse` are found in the
-mods folder and need no enabling: they can only compute. They run in a mod host started for that one
-call, so a bad one costs that call and nothing else.
+data, refresh it or answer requests. A parser named by a dialog or `spot parse` needs no enabling:
+it runs in a mod host started for that one call.
+
+### Locked down
+
+- **Its own Lua state.** Text and options are copied in and plain data is copied out. No function,
+  table or `spot` is ever shared with the mod that calls it. This is the barrier: loaded into the
+  caller's state instead, a test parser wrote a file through the caller's `spot.write`, and even
+  with its own table of globals it replaced the caller's `string.format`.
+- **An allow-list of globals**, below. What is not on it is not there.
+- **No way out:** no commands, files, network, environment, timers or publishing.
+- **Same input, same output:** no clock and no `math.random`.
+- Its `spot` has only `spot.use` (other parsers, in the same locked state), `spot.json` and
+  `spot.log`.
+
+### Checking a shared parser
+
+A parser can carry a sample: `example/input.txt` and the `example/output.json` it should give.
+`spot mods check ss` runs it, checks the contract and the shape, and says so when there is no sample.
+It shows that the parser does what it claims on that input, not that it is correct on all inputs.
 
 ## Files and enabling
 
@@ -153,15 +206,20 @@ This is what a **provider** gets: one global, `spot`, and the Lua environment be
 
 ### The Lua environment
 
-Lua 5.1: the `string`, `table`, `math` and `coroutine` libraries and the harmless base functions.
+Lua 5.1. Every mod gets an **allow-list**; everything else is removed before any mod code runs:
+
+`assert` `error` `getmetatable` `ipairs` `next` `pairs` `pcall` `rawequal` `rawget` `rawset`
+`select` `setmetatable` `tonumber` `tostring` `type` `unpack` `xpcall`, and the libraries `string`,
+`table`, `math`, `coroutine`.
 
 - `io`, `os`, `package` and `debug` are not loaded. A blocking call there could not be timed out;
   the helpers below take their place.
-- Removed from the base library: `dofile`, `loadfile`, `load`, `loadstring`, `require`, `module`,
-  `getfenv`, `setfenv`, `newproxy`, `collectgarbage`, `print` and `_printregs`. This matters:
-  `dofile` and `loadfile` read files from disk even with `io` left out.
+- The Lua library's base functions include some that read files, `dofile` and `loadfile`, even with
+  `io` left out. An allow-list keeps them out, and also whatever a later version of the library adds.
 - Code is shared with `spot.use` (parsers) and `spot.require` (other files of the same mod's
   folder), both done by spot, which only reads from the mods folder.
+- A provider gets the same list plus its `spot`; parsers also lose `math.random` and
+  `math.randomseed`.
 
 ### Publishing
 
@@ -248,7 +306,8 @@ that updates by itself while open comes with live lists (0.11).
 | `spot call <mod.request> [args…]` | Run a request, print what it returns |
 | `spot mods` | List mods: running, failing or disabled, with the last error |
 | `spot mods reload [name]` | Load the files again |
-| `spot parse <mod.function>` | Run a parser on standard input |
+| `spot parse <parser>` | Run a parser on standard input, print JSON |
+| `spot mods check [name]` | Check a mod's contract and sample |
 
 `--json` prints `get` and `watch` as one JSON value per line, which is what a bar wants.
 `get`, `watch`, `call`, `parse` and `mods` become reserved words: a config of that name needs a path.
@@ -258,6 +317,7 @@ that updates by itself while open comes with live lists (0.11).
 
 | Case | What happens |
 |------|--------------|
+| A parser breaks its contract (more than a function, no `[returns]`, wrong shape) | The call fails and names what did not match |
 | A mod fails to load | It is marked failing; the others and all dialogs work |
 | A `value` function errors | Readers get the last good result and the error is logged; `get` exits non-zero if there is none |
 | Three errors in a row | The value stops being recomputed until the mod is reloaded or asked again after a pause |
@@ -288,9 +348,14 @@ A provider runs **with all your rights**: it can run any program and write any f
 separate process protects the daemon from a broken mod, not you from a malicious one. Enable only
 mods you have read, exactly as with a shell script.
 
-A parser is given no way to run or write anything, so sharing one is low-risk; a bad one can still
-waste time and memory until its host is killed. The removal of the base functions has been checked
-by a few tests, not audited.
+A parser is given no way to run or write anything and shares nothing with its caller, which is what
+makes one from a stranger reasonable to use. What it returns is still data from that stranger: a
+provider should not paste it into a shell command. It can also waste time and memory until its host
+is killed, and with it the provider using it.
+
+This protection is spot's, not the operating system's: it rests on the allow-list, the separate
+state and the Lua library having no bugs. It has been checked by a few tests, not audited. Denying
+parser-only hosts file access in the kernel (Landlock) is a possible second layer, not yet tried.
 
 The daemon never runs as root; privileged actions go through your own helper (`sudo`, `pkexec`).
 
@@ -328,6 +393,9 @@ With gopher-lua 1.1.2, in a throwaway program, not in spot:
 | Can a runaway script be stopped? | Yes for Lua code, including loops that catch errors, coroutines and callbacks; **no** inside a slow pattern |
 | Cost of a time limit | About 10 % |
 | A parser like the one above on 5,000 lines | 65 ms |
+| A parser loaded into its caller's state | could use the caller's `spot`; with own globals it still replaced the caller's `string.format`; in a separate state, neither |
+| An allow-list of globals | left only the names listed above |
+| Copying rows from a parser's state to its caller's | 100: 0.2 ms; 1,000: 1.2 ms; 10,000: 15 ms |
 | A new Lua state | 40 µs |
 | A separate process running Lua | about 7 MB; 1 ms to start, run and exit |
 | Limiting its address space (`RLIMIT_AS`) | unusable: Go failed normal work even at 1 GB |
@@ -343,7 +411,7 @@ The limit tests were on Linux. The transfer figures cover one hop, not drawing t
 
 ### First version
 
-In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, `spot.use`, `spot parse`, `run` / `parse` in dialogs, `value` / `publish` / `on`, `spot.require`, `run`, `read`, `every`, `json`, `log`,
+In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, `run` / `parse` in dialogs, `value` / `publish` / `on`, `spot.require`, `run`, `read`, `every`, `json`, `log`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
@@ -365,6 +433,8 @@ The API is **experimental** until menu trees (0.10) have used it.
    write scripts?
 7. **Parsers in dialogs.** Are `run` and `parse` the right keys for using a parser without a
    provider, and is that wanted in the first version?
+   Is the [contract](#the-parser-contract) enough to share parsers by, or is something missing, such
+   as declared options?
 8. **Types.** Are parser and provider enough, or is a third kind needed, such as one that only
    performs actions?
 9. **One host per provider, or one for all?** Separate hosts isolate better and cost about 7 MB
