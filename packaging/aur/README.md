@@ -51,7 +51,7 @@ too. The stages run in a container built from
 `.jenkins/Dockerfile` (Arch Linux), so the agent only needs Docker, a Jenkins user allowed to use it
 and the Docker Pipeline plugin. Two credentials: `spot-github-token` (secret text, contents:write on
 KopyTKG/spot, allowed to push to `main`) and `aur-ssh-key` (SSH username with private key, user
-`aur`, its public half on the AUR account). The AUR host keys are pinned in
+`aur`, its public half on the AUR account, the passphrase filled in if the key has one). The AUR host keys are pinned in
 `.jenkins/aur_known_hosts`. The Go build and module caches live in the Docker volume `spot-go-cache` (shared by all tags
 and branches), so only the first build compiles the GTK bindings from scratch; remove the volume to
 force a cold build. Re-running a failed tag build is safe: the release script

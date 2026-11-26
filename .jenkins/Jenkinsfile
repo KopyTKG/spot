@@ -5,7 +5,7 @@
 //   skips Build: Publish compiles the same code in release mode.
 // - AUR publishes both packages and commits the PKGBUILDs back to main
 //   (ci/aur-release.sh). It needs the "SSH Username with private key" credential
-//   `aur-ssh-key`, and `spot-github-token` must be allowed to push to main.
+//   `aur-ssh-key` (its passphrase field filled in if the key has one), and `spot-github-token` must be allowed to push to main.
 //
 // The stages run in a container built from .jenkins/Dockerfile (Arch Linux with
 // gtk4, gtk4-layer-shell, go, just and jq), so the agent only needs Docker, a
@@ -81,7 +81,7 @@ pipeline {
             when { buildingTag() }
             steps {
                 withCredentials([
-                    sshUserPrivateKey(credentialsId: 'aur-ssh-key', keyFileVariable: 'AUR_KEY'),
+                    sshUserPrivateKey(credentialsId: 'aur-ssh-key', keyFileVariable: 'AUR_KEY', passphraseVariable: 'AUR_PASSPHRASE'),
                     string(credentialsId: 'spot-github-token', variable: 'GH_TOKEN'),
                 ]) {
                     sh 'ci/aur-release.sh "$TAG_NAME"'

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publishes a released tag to the AUR and commits the updated PKGBUILDs to main.
 #
-#   AUR_KEY=<ssh key file> GH_TOKEN=... ci/aur-release.sh v0.1.0
+#   AUR_KEY=<ssh key file> [AUR_PASSPHRASE=...] GH_TOKEN=... ci/aur-release.sh v0.1.0
 #
 # Run by Jenkins after the GitHub release, inside the .jenkins/Dockerfile image.
 # GH_TOKEN needs contents:write on the repository and to be allowed to push to
@@ -35,8 +35,28 @@ if ! getent passwd "$(id -u)" >/dev/null; then
   echo "ci:x:$(id -u):$(id -g)::/tmp:/bin/bash" >> /etc/passwd
 fi
 if [[ -z ${DRY_RUN:-} ]]; then
-  export GIT_SSH_COMMAND="ssh -i ${AUR_KEY:?path of the AUR ssh key} -o IdentitiesOnly=yes \
--o UserKnownHostsFile=$here/.jenkins/aur_known_hosts -o StrictHostKeyChecking=yes"
+  # The key goes into an agent of our own, so that one with a passphrase works:
+  # ssh-add asks the helper, which reads it from the environment (it is never
+  # written down). A key without a passphrase never asks.
+  : "${AUR_KEY:?path of the AUR ssh key}"
+  eval "$(ssh-agent -s)" >/dev/null
+  askpass=$(mktemp)
+  trap 'ssh-agent -k >/dev/null; rm -f "$askpass" "$askpass.asked"' EXIT
+  # It answers once: ssh-add asks again after a wrong passphrase, for ever.
+  cat > "$askpass" <<'ASKPASS'
+#!/bin/sh
+[ -e "$0.asked" ] && exit 1
+: > "$0.asked"
+printf '%s\n' "$AUR_PASSPHRASE"
+ASKPASS
+  chmod 700 "$askpass"
+  if ! SSH_ASKPASS=$askpass SSH_ASKPASS_REQUIRE=force timeout 30 ssh-add -q "$AUR_KEY" </dev/null; then
+    echo "cannot load the AUR key: is the passphrase in the aur-ssh-key credential right?" >&2
+    exit 1
+  fi
+  # Public, and says which key to look for on the AUR account if it is refused.
+  echo "AUR key: $(ssh-add -l)"
+  export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$here/.jenkins/aur_known_hosts -o StrictHostKeyChecking=yes"
 fi
 
 # Nothing goes to the AUR unless the binary package builds and installs its files.
@@ -47,7 +67,12 @@ just aur-publish "$version"
 # The same edit on main, which may have moved on since the tag.
 git fetch --quiet "$repo" main
 work=$(mktemp -d)
-trap 'git -C "$here" worktree remove --force "$work/main" 2>/dev/null || true; rm -rf "$work"' EXIT
+cleanup() {
+  git -C "$here" worktree remove --force "$work/main" 2>/dev/null || true
+  rm -rf "$work"
+  if [[ -n ${askpass:-} ]]; then ssh-agent -k >/dev/null; rm -f "$askpass" "$askpass.asked"; fi
+}
+trap cleanup EXIT
 git worktree add --quiet --detach "$work/main" FETCH_HEAD
 cd "$work/main"
 just aur "$version"
