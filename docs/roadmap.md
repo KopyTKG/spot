@@ -63,7 +63,7 @@ Open design questions, to settle before the release that needs them:
 
 Not tied to a release above:
 
-- **Left from 0.8** ([#14](https://github.com/KopyTKG/spot/issues/14)): a meter, switch state on
+- **Left from 0.8** ([#18](https://github.com/KopyTKG/spot/issues/18)): a meter, switch state on
   tiles, per-tile CSS classes. States are read on open and after each change; noticing a change made
   elsewhere (polling or a signal) waits for live data in 0.11.
 - **"Open With" by file type** ([#13](https://github.com/KopyTKG/spot/issues/13)); its extra keys
@@ -75,8 +75,6 @@ Not tied to a release above:
 - **Confirm on a tile or row**, key shortcuts on tiles, icons on ordinary list rows,
   `spot --check` to validate a config.
 - **More ready-made sources** in `examples/sources/`.
-- **Another UI core:** to be decided by a prototype, see
-  [#14](https://github.com/KopyTKG/spot/issues/14). The plan above assumes GTK4.
 
 ## Shipped
 
@@ -91,6 +89,8 @@ Not tied to a release above:
 
 ## Not planned
 
+- **Another UI core.** spot stays on GTK4; web-based and lighter toolkits were weighed in
+  [#14](https://github.com/KopyTKG/spot/issues/14).
 - **Bars, panels and a notification daemon.** Always-visible desktop furniture pulls the design a
   different way, and Waybar, [eww](https://github.com/elkowar/eww) and mako already do it well.
 - **Its own keybindings.** The compositor binds keys and calls `spot`; `toggle` and `SPOT_QUERY`
