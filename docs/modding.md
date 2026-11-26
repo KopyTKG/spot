@@ -20,8 +20,8 @@ that hangs or eats memory can be killed without taking your launcher and menus w
              └──────────────────┘              └───────────────┘
 ```
 
-**UI mods** (behaviour inside one dialog) are a separate layer, planned for 0.12 and not covered
-here.
+**UI mods** (behaviour inside one dialog) are a separate layer. They come later, with no release set,
+and are not covered here. The work for 0.9 is tracked in the [milestone](https://github.com/KopyTKG/spot/milestone/1).
 
 ## Types of mod
 
@@ -29,7 +29,6 @@ here.
 |------|------|-----|------|
 | `parser` | turns text into data | compute only: no commands, files, timers or publishing | inside the mod host that uses it |
 | `provider` | gets data (usually with a parser), publishes it, answers requests | everything in [the API](#the-api) | in its own mod host, as long as the daemon runs |
-| `ui` | behaviour inside one dialog | (0.12, not designed here) | while the dialog is open |
 
 A mod says what it is in `mod.toml` next to its `init.lua`, so the daemon knows what it may do
 before running any of it:
@@ -174,7 +173,7 @@ Lua 5.1: the `string`, `table`, `math` and `coroutine` libraries and the harmles
 
 A value is a string, a number, a boolean, a table, or a list of rows. A **row** is
 `{ label, key, state, comment, icon }`; only `label` is required. `state` (a boolean) makes it a
-switch row.
+switch row. A value holds at most 10,000 rows (see [what was tested](#what-was-tested)).
 
 Nothing is computed for a value nobody has asked for.
 
@@ -206,6 +205,17 @@ message on stderr, and in a dialog the control goes back to what it showed.
 | `spot.log(message)` | To the daemon log, with the mod's name |
 
 Mods run in the **daemon's** environment, not that of whoever asks.
+
+### Limits
+
+| Limit | Default | |
+|-------|---------|---|
+| Time of one function | 5 s | then it is interrupted, or the host is killed |
+| Memory of a mod host | 256 MB | a data limit (`RLIMIT_DATA`); `memory` in `[mod.<name>]` changes it |
+| Rows in a value | 10,000 | larger values are refused |
+
+Programs a mod starts get their normal memory limit back before they run: some, such as `node`, do
+not start under the host's. Their memory is therefore **not limited**.
 
 ## Using mod data
 
@@ -253,7 +263,8 @@ that updates by itself while open comes with live lists (0.11).
 | Three errors in a row | The value stops being recomputed until the mod is reloaded or asked again after a pause |
 | A function runs longer than 5 s | It is interrupted inside the host; `spot.run` kills the process group |
 | The host does not answer in time (stuck where it cannot be interrupted) | The daemon kills the host, and the commands it started, and starts a new one |
-| A mod uses too much memory | Its host dies; the daemon starts a new one |
+| A mod uses more than its memory limit | Its host dies; the daemon starts a new one |
+| A published value has more than 10,000 rows | It is refused with an error naming the value |
 | A host dies three times in a row | The mod is disabled until `spot mods reload`; the error is shown by `spot mods` |
 | A `from` names a mod that is not running | The dialog shows the error under the item |
 
@@ -319,17 +330,23 @@ With gopher-lua 1.1.2, in a throwaway program, not in spot:
 | A parser like the one above on 5,000 lines | 65 ms |
 | A new Lua state | 40 µs |
 | A separate process running Lua | about 7 MB; 1 ms to start, run and exit |
+| Limiting its address space (`RLIMIT_AS`) | unusable: Go failed normal work even at 1 GB |
+| Limiting its data (`RLIMIT_DATA`) to 256 MB | stopped three kinds of runaway allocation within 0.2 s; normal work ran from 64 MB up |
+| Commands under an inherited limit | `node` failed at 256 and 512 MB; with only the soft limit set and restored for the command, it ran |
+| A systemd scope instead | also works; needs systemd and starts slower (46 ms against 27 ms) |
+| Checking memory from outside every 20 ms | overshot to 354 MB against 256 |
+| Passing rows between processes (send and decode) | 100: 0.2 ms; 1,000: 1.8 ms; 10,000: 16 ms; 100,000: 145 ms, the sender peaking at 318 MB |
 
-**Still to test:** how to limit a host's memory (a Go program reserves much more address space than
-it uses, so the limit has to be chosen with care), the cost of sending large values between
-processes, and the real host's size and start time.
+The limit tests were on Linux. The transfer figures cover one hop, not drawing the list.
+
+**Still to test:** the real host's size and start time.
 
 ### First version
 
 In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, `spot.use`, `spot parse`, `run` / `parse` in dialogs, `value` / `publish` / `on`, `spot.require`, `run`, `read`, `every`, `json`, `log`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
-Later: `watch_file`, built-in system events (power, network), automatic reload on save, UI mods.
+Later: `watch_file`, built-in system events (power, network), automatic reload on save.
 
 The API is **experimental** until menu trees (0.10) have used it.
 
@@ -352,5 +369,5 @@ The API is **experimental** until menu trees (0.10) have used it.
    performs actions?
 9. **One host per provider, or one for all?** Separate hosts isolate better and cost about 7 MB
    each in the test.
-10. **Limits.** What should the default memory limit be, and should a mod be able to raise it?
+10. **Limits.** Are 256 MB of memory and 10,000 rows the right defaults?
 11. **For whoever asked for modding:** what would you build first, and can this API do it?
