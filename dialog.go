@@ -39,6 +39,29 @@ type dialog struct {
 
 	done bool
 	busy bool // submit.exec is running
+
+	hooks []func() // undo every callback registered on the widgets; see release
+}
+
+// hook records a signal connection so release can undo it.
+//
+// Every callback must go through here. The bindings keep a callback alive as long
+// as the object it is connected to, and one that refers back to that object, or to
+// a parent of it, then keeps the whole widget tree alive for ever: in the daemon
+// each closed dialog stayed in memory.
+func (d *dialog) hook(obj coreglib.Objector, h coreglib.SignalHandle) {
+	o := coreglib.BaseObject(obj)
+	d.hooks = append(d.hooks, func() { o.HandlerDisconnect(h) })
+}
+
+// release lets a finished dialog's widgets be freed. Call it once they are no
+// longer on screen: a list without its callbacks cannot draw its rows.
+func (d *dialog) release() {
+	for _, undo := range d.hooks {
+		undo()
+	}
+	d.hooks, d.onKey, d.cancel = nil, nil, nil
+	d.firstFocus, d.saved = nil, nil
 }
 
 // focusFirst puts the keyboard on the first input.
@@ -78,7 +101,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 		btn.SetFocusable(false) // Enter and Tab belong to the dialog's input
 		btn.SetFocusOnClick(false)
 		btn.SetVAlign(gtk.AlignCenter)
-		btn.ConnectClicked(func() { goBack() })
+		d.hook(btn, btn.ConnectClicked(func() { goBack() }))
 		header.SetStartWidget(btn)
 		if cfg.Title != "" {
 			t := gtk.NewLabel(cfg.Title)
@@ -135,7 +158,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			}
 			row.Append(entry)
 			values[item.ID] = func() string { return entry.Text() }
-			input, onEdit = entry, func(f func()) { entry.ConnectChanged(f) }
+			input, onEdit = entry, func(f func()) { d.hook(entry, entry.ConnectChanged(f)) }
 			if firstFocus == nil {
 				firstFocus = entry
 			}
@@ -145,7 +168,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 			entry.SetShowPeekIcon(true)
 			row.Append(entry)
 			values[item.ID] = func() string { return entry.Text() }
-			input, onEdit = entry, func(f func()) { entry.ConnectChanged(f) }
+			input, onEdit = entry, func(f func()) { d.hook(entry, entry.ConnectChanged(f)) }
 			if firstFocus == nil {
 				firstFocus = entry
 			}
@@ -241,7 +264,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				ensureIconPaths(apps.paths, apps.home)
 			}
 			factory := gtk.NewSignalListItemFactory()
-			factory.ConnectSetup(func(obj *coreglib.Object) {
+			d.hook(factory, factory.ConnectSetup(func(obj *coreglib.Object) {
 				li, ok := obj.Cast().(*gtk.ListItem)
 				if !ok {
 					return
@@ -271,13 +294,13 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					li.SetChild(box)
 					// The selected row can have a bigger icon (icon_size_selected).
 					if apps.cfg.iconSizeSelected() != apps.cfg.iconSize() {
-						li.NotifyProperty("selected", func() {
+						d.hook(li, li.NotifyProperty("selected", func() {
 							if li.Selected() {
 								img.SetPixelSize(apps.cfg.iconSizeSelected())
 							} else {
 								img.SetPixelSize(apps.cfg.iconSize())
 							}
-						})
+						}))
 					}
 					return
 				}
@@ -285,8 +308,8 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				lbl.AddCSSClass("spot-list-row")
 				lbl.SetXAlign(0)
 				li.SetChild(lbl)
-			})
-			factory.ConnectBind(func(obj *coreglib.Object) {
+			}))
+			d.hook(factory, factory.ConnectBind(func(obj *coreglib.Object) {
 				li, ok := obj.Cast().(*gtk.ListItem)
 				if !ok {
 					return
@@ -354,7 +377,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 						}
 					}
 				}
-			})
+			}))
 
 			lv := gtk.NewListView(selModel, &factory.ListItemFactory)
 			lv.AddCSSClass("spot-list")
@@ -414,22 +437,28 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 					}
 					return false
 				}
-				lv.ConnectActivate(func(pos uint) {
+				d.hook(lv, lv.ConnectActivate(func(pos uint) {
 					if int(pos) < len(entries) && entries[pos].header {
 						selection.SetSelected(pos)
 						groupToggle(0)
 					}
-				})
+				}))
 			}
 			if apps != nil {
-				lv.ConnectActivate(func(uint) {
+				d.hook(lv, lv.ConnectActivate(func(uint) {
 					if submitFn != nil {
 						submitFn()
 					}
-				})
+				}))
 			}
 
-			search.ConnectSearchChanged(func() {
+			d.hooks = append(d.hooks, func() {
+				if pendingSource != 0 {
+					coreglib.SourceRemove(pendingSource)
+					pendingSource = 0
+				}
+			})
+			d.hook(search, search.ConnectSearchChanged(func() {
 				query = search.Text()
 				switch {
 				case gs != nil:
@@ -477,11 +506,11 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				if gs == nil && selection != nil && filterModel.NItems() > 0 {
 					selection.SetSelected(0)
 				}
-			})
+			}))
 
 			if item.HideEmpty { // a bare search bar until there is something to list
 				scrolled.SetVisible(filterModel.NItems() > 0) // the model the list shows, after filtering
-				filterModel.ConnectItemsChanged(func(_, _, _ uint) { scrolled.SetVisible(filterModel.NItems() > 0) })
+				d.hook(filterModel, filterModel.ConnectItemsChanged(func(_, _, _ uint) { scrolled.SetVisible(filterModel.NItems() > 0) }))
 			}
 			row.Append(search)
 			row.Append(scrolled)
@@ -655,21 +684,21 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				}
 			}
 			markPicked()
-			flow.ConnectSelectedChildrenChanged(func() {
+			d.hook(flow, flow.ConnectSelectedChildrenChanged(func() {
 				activeID = itemID
 				markPicked()
-			})
+			}))
 			focus := gtk.NewEventControllerFocus()
-			focus.ConnectEnter(func() {
+			d.hook(focus, focus.ConnectEnter(func() {
 				nav.active, nav.cur = group, max(group.selected(), 0)
 				nav.show(group)
-			})
-			focus.ConnectLeave(func() {
+			}))
+			d.hook(focus, focus.ConnectLeave(func() {
 				if nav.active == group {
 					nav.active = nil
 					nav.hide()
 				}
-			})
+			}))
 			flow.AddController(focus)
 
 			values[item.ID] = func() string {
@@ -684,13 +713,13 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				return tiles[idx].Value
 			}
 
-			flow.ConnectChildActivated(func(child *gtk.FlowBoxChild) {
+			d.hook(flow, flow.ConnectChildActivated(func(child *gtk.FlowBoxChild) {
 				flow.SelectChild(child)
 				activeID = itemID
 				if submitFn != nil {
 					submitFn()
 				}
-			})
+			}))
 
 			if firstFocus == nil {
 				firstFocus = flow
@@ -724,7 +753,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				ov := gtk.NewOverlay()
 				ov.SetChild(scrolled)
 				ov.AddOverlay(ph)
-				buf.ConnectChanged(func() { ph.SetVisible(buf.CharCount() == 0) })
+				d.hook(buf, buf.ConnectChanged(func() { ph.SetVisible(buf.CharCount() == 0) }))
 				widget = ov
 			}
 			if item.Default != nil {
@@ -736,7 +765,7 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 				return buf.Text(start, end, false)
 			}
 			textViews = append(textViews, tv)
-			input, onEdit = tv, func(f func()) { buf.ConnectChanged(f) }
+			input, onEdit = tv, func(f func()) { d.hook(buf, buf.ConnectChanged(f)) }
 			if firstFocus == nil {
 				firstFocus = tv
 			}
@@ -807,11 +836,11 @@ func newDialog(cfg *Config, env []string, dir string, back *backSpec) *dialog {
 	root.Append(execErr)
 	d.root = root
 	d.firstFocus = firstFocus
-	root.ConnectMap(func() {
+	d.hook(root, root.ConnectMap(func() {
 		if d.saved == nil {
 			d.focusFirst()
 		}
-	})
+	}))
 
 	end := func(r result) {
 		if d.done {

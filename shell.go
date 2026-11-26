@@ -24,6 +24,7 @@ type shell struct {
 	mapped bool
 
 	style *gtk.CSSProvider // the current dialog's stylesheet
+	shown *dialog          // whose widgets are in the window
 }
 
 func newShell(app *gtk.Application, oneshot bool, dc *DaemonConfig) *shell {
@@ -141,6 +142,10 @@ func (s *shell) retire(j *job) {
 		return
 	}
 	d.done = true
+	if d != s.shown {
+		d.release() // covered by a --sub dialog: nothing will replace it on screen
+		return
+	}
 	// The window may keep showing it for a moment (--chain, Back); it must not
 	// react, and must not keep the keyboard either, or the first keys typed into
 	// whatever opens next would vanish. The next dialog asks for it again.
@@ -161,6 +166,17 @@ func (s *shell) unmap() {
 	s.win.SetVisible(false)
 	s.win.SetChild(nil)
 	s.mapped = false
+	s.replaceShown(nil)
+}
+
+// replaceShown notes whose widgets the window holds now, and releases the dialog
+// they replaced if it is finished (one under a --sub dialog comes back).
+func (s *shell) replaceShown(d *dialog) {
+	old := s.shown
+	s.shown = d
+	if old != nil && old != d && old.done {
+		old.release()
+	}
 }
 
 // show puts j's dialog into the window and applies the look it asks for.
@@ -180,6 +196,7 @@ func (s *shell) show(j *job) {
 	s.fade.reset(op, d.root)
 	d.root.SetVisible(true)
 	s.win.SetChild(d.root)
+	s.replaceShown(d)
 }
 
 // setStyle swaps the display-wide stylesheet for the one of the dialog being
