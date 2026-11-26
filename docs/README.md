@@ -7,6 +7,7 @@
 | [`os-integration.md`](os-integration.md) | **Guide** to tying spot to the system: the shape of a script, patterns (lists, tiles, tables, folding groups, askpass), compositor keybinds, Back, testing without a screen |
 | [`css.md`](css.md) | **Styling**: the class tree, every `.spot-*` class, states, per-widget notes, a starter stylesheet |
 | [`daemon.md`](daemon.md) | **The daemon**: on demand, systemd user service, autostart, `daemon.toml`, control flags, troubleshooting |
+| [`modding.md`](modding.md) | **Draft, not built:** the proposed daemon mod API for 0.9 |
 | [`roadmap.md`](roadmap.md) | Where spot is going, and what it is not |
 
 Also in the repository:
