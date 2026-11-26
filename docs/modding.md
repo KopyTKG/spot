@@ -196,11 +196,38 @@ it runs in a mod host started for that one call.
 - Its `spot` has only `spot.use` (other parsers, in the same locked state), `spot.json` and
   `spot.log`.
 
-### Checking a shared parser
+### Checked on every call
 
-A parser can carry a sample: `example/input.txt` and the `example/output.json` it should give.
-`spot mods check ss` runs it, checks the contract and the shape, and says so when there is no sample.
-It shows that the parser does what it claims on that input, not that it is correct on all inputs.
+Spot checks a parser's output as it is copied to the caller, always, so that no provider or dialog
+sees data of the wrong shape: one function, a list, every item a record, every required field present
+with its declared type, plain data, within the limits. One bad record fails the whole call and the
+error says where:
+
+```
+parser ss: record 17, field "key": expected string, got nil
+```
+
+Dropping bad records silently would look like "there are fewer sockets".
+
+### Checking while writing
+
+```sh
+spot mods check ss                          # the contract and the saved samples
+ss -H -tuna | spot mods check ss -          # the same rules on live input
+```
+
+| Check | |
+|-------|---|
+| `init.lua` and `mod.toml` follow the contract | |
+| Each `example/<name>.input` gives its `example/<name>.json` | several cases, not only the usual one |
+| Empty input and junk input give `{}` or `error()` | never a crash or a wrong shape |
+| The same input twice gives the same output | |
+| Time and memory used, against the limits | a slow pattern shows up here, not in a menu |
+| Fields returned but not declared; optional fields never seen | warnings: the declaration may be out of date |
+
+It exits non-zero on failure, so a repository of shared parsers can run it in CI. It cannot say that
+the parsing is **correct** for input it has no sample of: a parser can match the shape and still read
+the wrong column.
 
 ## Files and enabling
 
@@ -328,29 +355,90 @@ that updates by itself while open comes with live lists (0.11).
 | `spot mods` | List mods: running, failing or disabled, with the last error |
 | `spot mods reload [name]` | Load the files again |
 | `spot parse <parser>` | Run a parser on standard input, print its records as a JSON array |
-| `spot mods check [name]` | Check a mod's contract and sample |
+| `spot mods check [name] [-]` | Check a mod's contract and samples, or live input with `-` |
+| `spot mods log <name>` | A mod's errors and log lines |
 
 `--json` prints `get` and `watch` as one JSON value per line, which is what a bar wants.
 `get`, `watch`, `call`, `parse` and `mods` become reserved words: a config of that name needs a path.
 `watch` reconnects when the daemon is restarted, for instance after an upgrade.
 
-## When things go wrong
+## Health and errors
+
+A broken mod must never just look like "nothing happened": started from a keybind, an error on
+stderr is invisible. **The daemon keeps the health of every mod and makes sure you hear about it.**
+
+- A dialog **always opens**. A broken mod affects only the items that use it.
+- You are told **once, when it breaks**, not on every call.
+- The message says **who is at fault**, what went wrong and where.
+
+### Where you see it
+
+| Place | What appears |
+|-------|--------------|
+| Desktop notification | When a mod starts failing or is disabled: `Parser "ss" broke its contract: record 17, field "key" is missing` |
+| The dialog | In place of the data: the same message, which provider used it, and how to see details |
+| A bar (`spot watch --json`) | `{ "text": "!", "tooltip": "…", "class": "error" }`: a warning, not a vanished module |
+| `spot mods` | Every mod with its state, last error, `file:line`, how often and since when |
+| `spot mods log <name>` | The history and the mod's own log lines |
+| `spot get` / `call` / `parse` | Nothing on stdout, the message on stderr, a non-zero exit |
+
+One notification per mod for each change from working to broken, none for repeats, and one when it
+works again. They go to your notification daemon; `daemon.toml` can replace the command or turn them
+off.
+
+### Whose fault
+
+| Broken | Blamed |
+|--------|--------|
+| A parser returns the wrong shape | the parser, naming who called it |
+| Provider code errors, or passes a parser something that is not a string | the provider |
+| A host dies, hangs or sends garbage | the mod running in it |
+| A used parser is missing or does not load | the parser; its users show as waiting on it |
+
+### A broken parser contract
+
+| Who called the parser | What happens |
+|-----------------------|--------------|
+| `spot parse` | Nothing on stdout, the error on stderr, non-zero exit |
+| A dialog (`parse = "ss"`) | The error under the item, no partial list |
+| A provider (`spot.use`) | The call raises a Lua error, which the mod may catch |
+| ...uncaught in a value | Readers keep the last good result, marked as old |
+| ...uncaught in a request | The request fails, and a switch goes back to where it was |
+| It does not even load (two functions, no `[returns]`) | Every mod that `uses` it is marked failing at load, not at first use |
+
+A broken contract is a fault of the mod, not of its host: nothing is restarted.
+
+### Broken messages between daemon and host
+
+The other side is not trusted, all the less once any program can be a backend (0.12).
+
+| Case | What the daemon does |
+|------|----------------------|
+| A line that is not JSON, or an unknown message | Kills and restarts the host: the stream cannot be trusted any more |
+| A message over 16 MB | The same, without reading it all into memory (100,000 rows were about 7 MB) |
+| A reply to a request nobody made | Ignores it and logs |
+| A value of the wrong shape or with too many rows | Refuses that value; the host keeps running |
+| No answer in time | Kills the host |
+| A different protocol version, stated in the first message | Does not start the mod, and says so |
+
+Garbled messages are fatal on purpose: skipping a bad line would let a half-broken mod look as if it
+works.
+
+### The rest
 
 | Case | What happens |
 |------|--------------|
-| A parser breaks its contract (not one function, no `[returns]`, not a list of records, a wrong field) | The call fails and names what did not match |
-| A mod fails to load | It is marked failing; the others and all dialogs work |
-| A `value` function errors | Readers get the last good result and the error is logged; `get` exits non-zero if there is none |
+| A mod fails to load | Marked failing; the others and all dialogs work |
+| A `value` function errors | Readers get the last good result; `get` exits non-zero if there is none |
 | Three errors in a row | The value stops being recomputed until the mod is reloaded or asked again after a pause |
-| A function runs longer than 5 s | It is interrupted inside the host; `spot.run` kills the process group |
-| The host does not answer in time (stuck where it cannot be interrupted) | The daemon kills the host, and the commands it started, and starts a new one |
+| A function runs longer than 5 s | Interrupted inside the host; `spot.run` kills the process group |
+| The host does not answer (stuck where it cannot be interrupted) | The daemon kills it and the commands it started, and starts a new one |
 | A mod uses more than its memory limit | Its host dies; the daemon starts a new one |
-| A published value has more than 10,000 rows | It is refused with an error naming the value |
-| A host dies three times in a row | The mod is disabled until `spot mods reload`; the error is shown by `spot mods` |
-| A `from` names a mod that is not running | The dialog shows the error under the item |
+| A host dies three times in a row | The mod is disabled until `spot mods reload` |
+| A `from` names a mod that is not running | The dialog says so under the item |
 
-A restarted mod starts empty. The daemon keeps the last values it published, marked as old, until
-new ones arrive.
+A restarted mod starts empty. The daemon keeps the last values it published, marked as old, until new
+ones arrive.
 
 **Why a separate process.** Two things cannot be contained inside one program, as a test of the Lua
 library showed:
@@ -432,7 +520,7 @@ The limit tests were on Linux. The transfer figures cover one hop, not drawing t
 
 ### First version
 
-In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
+In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, mod health and notifications, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
