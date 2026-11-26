@@ -1,8 +1,11 @@
 // Jenkins pipeline for spot. In the job, set Script Path to .jenkins/Jenkinsfile.
 //
 // - Lint, Test and Build run for every branch and pull request.
-// - Publish and Release run only for a tag (v0.1.0 and so on). A tag build skips
-//   Build: Publish compiles the same code in release mode.
+// - Publish, Release and AUR run only for a tag (v0.1.0 and so on). A tag build
+//   skips Build: Publish compiles the same code in release mode.
+// - AUR publishes both packages and commits the PKGBUILDs back to main
+//   (ci/aur-release.sh). It needs the "SSH Username with private key" credential
+//   `aur-ssh-key`, and `spot-github-token` must be allowed to push to main.
 //
 // The stages run in a container built from .jenkins/Dockerfile (Arch Linux with
 // gtk4, gtk4-layer-shell, go, just and jq), so the agent only needs Docker, a
@@ -70,6 +73,18 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'spot-github-token', variable: 'GH_TOKEN')]) {
                     sh 'ci/github-release.sh "$TAG_NAME" dist/spot-linux-x64'
+                }
+            }
+        }
+
+        stage('AUR') {
+            when { buildingTag() }
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'aur-ssh-key', keyFileVariable: 'AUR_KEY'),
+                    string(credentialsId: 'spot-github-token', variable: 'GH_TOKEN'),
+                ]) {
+                    sh 'ci/aur-release.sh "$TAG_NAME"'
                 }
             }
         }

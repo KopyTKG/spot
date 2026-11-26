@@ -8,26 +8,34 @@
 Both depend on `gtk4` and `gtk4-layer-shell` and install `/usr/bin/spot`; they
 conflict with each other.
 
-The PKGBUILDs here are the source of truth. A tag build on Jenkins (`.jenkins/Jenkinsfile`) builds the binary and creates the GitHub release. **Publishing to the AUR is always manual**, from a machine with the AUR SSH key (it can't be done from CI).
+The PKGBUILDs here are the source of truth. A tag build on Jenkins (`.jenkins/Jenkinsfile`) builds
+the binary, creates the GitHub release, publishes both packages to the AUR and commits the updated
+PKGBUILDs back to `main` (`ci/aur-release.sh`).
 
 ## Releasing
 
-1. `just tag 0.1.0 && git push origin v0.1.0` — Jenkins builds and creates the release.
-2. Once the release exists, on your machine:
+```sh
+just tag 0.1.0            # Jenkins does the rest
+git pull                  # once it is done: the PKGBUILD commit
+```
+
+Version and checksums are filled in after the release because the checksums cover the released
+binary and the source archive of the tag.
+
+### By hand
+
+If the AUR stage fails, or without Jenkins, from a machine with an AUR SSH key:
 
 ```sh
-just release 0.1.0        # tag, push tag to the `github` remote, build, gh release create
+just release 0.1.0        # only without Jenkins: tag, push, build, gh release create (needs gh)
 just aur-check            # makepkg both packages locally
 just aur-publish          # fill spot-bin version + checksums, push both to the AUR
 ```
 
-Both `aur` recipes take the last release tag; pass a version to publish another one
-(`just aur-publish 0.1.0`). Commit the PKGBUILDs afterwards: their checksums only exist once
-the release does.
-
-`just aur` does the version/checksum edit alone so the diff can be
-inspected first. `spot-git` needs no version bump: its `pkgver()` follows git,
-but it is pushed alongside so PKGBUILD changes reach the AUR.
+Both `aur` recipes take the last release tag; pass a version for another one. `just aur` does the
+version/checksum edit alone so the diff can be inspected first. Commit the PKGBUILDs afterwards.
+`DRY_RUN=1` stops `aur-publish` before it pushes. `spot-git` needs no version bump (its `pkgver()`
+follows git) but is pushed alongside so PKGBUILD changes reach the AUR.
 
 ## First-time setup
 
@@ -41,8 +49,10 @@ by `just aur-publish` via `makepkg --printsrcinfo`.
 Job config: pipeline from SCM, Script Path `.jenkins/Jenkinsfile`, build tags
 too. The stages run in a container built from
 `.jenkins/Dockerfile` (Arch Linux), so the agent only needs Docker, a Jenkins user allowed to use it
-and the Docker Pipeline plugin. One credential: `spot-github-token` (secret text, contents:write on
-KopyTKG/spot). The Go build and module caches live in the Docker volume `spot-go-cache` (shared by all tags
+and the Docker Pipeline plugin. Two credentials: `spot-github-token` (secret text, contents:write on
+KopyTKG/spot, allowed to push to `main`) and `aur-ssh-key` (SSH username with private key, user
+`aur`, its public half on the AUR account). The AUR host keys are pinned in
+`.jenkins/aur_known_hosts`. The Go build and module caches live in the Docker volume `spot-go-cache` (shared by all tags
 and branches), so only the first build compiles the GTK bindings from scratch; remove the volume to
 force a cold build. Re-running a failed tag build is safe: the release script
 replaces assets instead of duplicating them. If Jenkins is down,

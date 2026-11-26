@@ -5,6 +5,8 @@ set dotenv-load := false
 dist := "dist"
 repo := "KopyTKG/spot"
 aur_packages := "spot-bin spot-git"
+# Where the AUR repositories are cloned from and pushed to.
+aur_remote := env_var_or_default("AUR_REMOTE", "ssh://aur@aur.archlinux.org")
 
 # List the available recipes.
 default:
@@ -49,7 +51,7 @@ clean:
     rm -rf {{dist}} spot
 
 # --------------------------------------------------------------------------
-# Release (Jenkins builds + releases from the tag; the AUR is always manual)
+# Release (Jenkins builds, releases and publishes to the AUR from the tag)
 # --------------------------------------------------------------------------
 
 # Tag the current commit as v<version>; push it and Jenkins builds + releases.
@@ -68,7 +70,8 @@ release version: (tag version)
         {{dist}}/spot-linux-x64
 
 # --------------------------------------------------------------------------
-# AUR (spot-bin from the release binary, spot-git from the repo head)
+# AUR (spot-bin from the release binary, spot-git from the repo head).
+# Jenkins publishes after a release (ci/aur-release.sh); these also work by hand.
 # --------------------------------------------------------------------------
 
 # Point spot-bin at a released version (default: the last tag), checksums and all.
@@ -111,7 +114,7 @@ aur-publish version=release_version:
 
     for package in {{aur_packages}}; do
         echo "==> $package"
-        git clone --quiet "ssh://aur@aur.archlinux.org/$package.git" "$work/$package"
+        git clone --quiet "{{aur_remote}}/$package.git" "$work/$package"
         cp "packaging/aur/$package/PKGBUILD" "$work/$package/PKGBUILD"
         (
             cd "$work/$package"
@@ -121,17 +124,22 @@ aur-publish version=release_version:
                 echo "    already up to date"
             else
                 git commit -qm "Update to {{version}}"
-                git push --quiet
-                echo "    pushed"
+                if [[ -n "${DRY_RUN:-}" ]]; then
+                    echo "    dry run, would push:"
+                    git --no-pager show --stat --format='      %an: %s' HEAD
+                else
+                    git push --quiet
+                    echo "    pushed"
+                fi
             fi
         )
     done
 
 # Build the AUR packages locally, to check them before they reach anyone.
-aur-check:
+aur-check *packages=aur_packages:
     #!/usr/bin/env bash
     set -euo pipefail
-    for package in {{aur_packages}}; do
+    for package in {{packages}}; do
         work=$(mktemp -d)
         cp "packaging/aur/$package/PKGBUILD" "$work/"
         (cd "$work" && makepkg --nodeps --clean)
