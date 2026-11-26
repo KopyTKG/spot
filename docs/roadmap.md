@@ -41,15 +41,23 @@ What mid and big tools need, and widgets alone do not give:
 
 | Release | Adds | Proven by building |
 |---------|------|--------------------|
-| 0.9 | Pages and menu trees, searchable across every level | a whole system menu in one config |
-| 0.10 | Layout containers; live lists and tables; row actions | sockets and firewall tools |
-| 0.11 | Window mode; a long-running backend exchanging JSON lines with the window | a small control centre |
+| 0.9 | **Daemon mods** (experimental): embedded Lua in the daemon that publishes named values and lists, with helpers to run commands and read files; `spot get` / `spot watch` ([#16](https://github.com/KopyTKG/spot/issues/16)) | a sockets provider feeding a table and a bar counter |
+| 0.10 | Pages and menu trees, searchable across every level, fed by mods | a whole system menu in one config |
+| 0.11 | Layout containers; live lists and tables; row actions | firewall and "Open With" tools |
+| 0.12 | Window mode; a long-running backend exchanging JSON lines with the window; **UI mods** | a small control centre |
+
+Daemon mods come first because they make real tools much easier to build, and need no new layout or
+widget: today's lists and controls can show their data. Their API stays experimental until menu
+trees have used it.
 
 Open design questions, to settle before the release that needs them:
 
-- 0.9: whether a menu tree is one file or includes others.
-- 0.10: how containers nest in TOML without becoming unreadable.
-- 0.11: the backend protocol, its versioning, and what happens when the backend dies.
+- 0.9: the mod API: publish and request, enabling, time limits, errors and reloading.
+- 0.9: how a mod and an external backend (0.12) share one model, so there are not two systems.
+- 0.10: whether a menu tree is one file or includes others.
+- 0.11: how containers nest in TOML without becoming unreadable.
+- 0.12: the backend protocol, its versioning, and what happens when the backend dies.
+- 0.12: whether UI mods include new widget types or custom drawing (not assumed).
 
 ## Also wanted
 
@@ -57,7 +65,7 @@ Not tied to a release above:
 
 - **Left from 0.8** ([#14](https://github.com/KopyTKG/spot/issues/14)): a meter, switch state on
   tiles, per-tile CSS classes. States are read on open and after each change; noticing a change made
-  elsewhere (polling or a signal) waits for live data in 0.10.
+  elsewhere (polling or a signal) waits for live data in 0.11.
 - **"Open With" by file type** ([#13](https://github.com/KopyTKG/spot/issues/13)); its extra keys
   should come from the general row actions.
 - **A grid layout** (`layout = "grid"`, `columns`) for the apps list.
@@ -87,8 +95,9 @@ Not tied to a release above:
   different way, and Waybar, [eww](https://github.com/elkowar/eww) and mako already do it well.
 - **Its own keybindings.** The compositor binds keys and calls `spot`; `toggle` and `SPOT_QUERY`
   make that comfortable.
-- **Loading code into spot.** Sources and backends are separate programs, so they can be written
-  in any language and cannot crash the window.
+- **Native plugins.** Mods are Lua run by spot, with limits so that a broken one cannot stall or
+  crash it; sources and backends are separate programs in any language. Nothing is loaded as
+  machine code.
 - **A scripting language in TOML.**
 - **Fuzzy matching beyond the smart matcher.** `match = "smart"` (prefixes, word initials,
   substrings, letters in order) is deliberately predictable; a source can rank its own output.
