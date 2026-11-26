@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/diamondburned/gotk4/pkg/gio/v2"
-	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"gitlab.com/KopyTKG/spot/internal/client"
+	"gitlab.com/KopyTKG/spot/internal/config"
+	"gitlab.com/KopyTKG/spot/internal/daemon"
+	"gitlab.com/KopyTKG/spot/internal/protocol"
 )
 
 // version is set at build time: -ldflags "-X main.version=0.2.0".
@@ -58,19 +60,21 @@ daemon and service: https://github.com/KopyTKG/spot/blob/main/docs/daemon.md
 
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "spot: "+format+"\n", args...)
-	os.Exit(exitError)
+	os.Exit(protocol.ExitError)
 }
 
 func usageError(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "spot: "+format+"\n\n%s", append(args, usage)...)
-	os.Exit(exitUsage)
+	os.Exit(protocol.ExitUsage)
 }
 
 func main() {
+	protocol.Version = version
+
 	var (
 		arg                             string
 		chain, last, sub, back, oneshot bool
-		daemon, dismiss, quit, stat     bool
+		isDaemon, dismiss, quit, stat   bool
 	)
 	for _, a := range os.Args[1:] {
 		switch {
@@ -78,7 +82,7 @@ func main() {
 			fmt.Print(usage)
 			return
 		case a == "-v" || a == "--version":
-			fmt.Println("spot", version)
+			fmt.Println("spot", protocol.Version)
 			return
 		case a == "--chain":
 			chain = true
@@ -97,10 +101,10 @@ func main() {
 		case a == "--status":
 			stat = true
 		case a == "daemon" && arg == "":
-			daemon = true
+			isDaemon = true
 		case strings.HasPrefix(a, "-") && a != "-":
 			usageError("unknown flag %q", a)
-		case arg != "" || daemon:
+		case arg != "" || isDaemon:
 			usageError("only one config file is accepted")
 		default:
 			arg = a
@@ -111,25 +115,25 @@ func main() {
 	}
 
 	switch {
-	case daemon:
-		os.Exit(runDaemon())
+	case isDaemon:
+		os.Exit(daemon.RunDaemon())
 	case dismiss:
-		os.Exit(control(opDismiss))
+		os.Exit(client.Control(protocol.OpDismiss))
 	case quit:
-		os.Exit(control(opQuit))
+		os.Exit(client.Control(protocol.OpQuit))
 	case stat:
-		os.Exit(control(opPing))
+		os.Exit(client.Control(protocol.OpPing))
 	case arg == "":
 		fmt.Fprint(os.Stderr, usage)
-		os.Exit(exitUsage)
+		os.Exit(protocol.ExitUsage)
 	}
 
-	cfgPath, err := filepath.Abs(resolveConfigPath(arg))
+	cfgPath, err := filepath.Abs(config.ResolveConfigPath(arg))
 	if err != nil {
 		fatal("%v", err)
 	}
-	req := request{
-		Op: opShow, Version: version, Config: cfgPath, Env: os.Environ(),
+	req := protocol.Request{
+		Op: protocol.OpShow, Version: protocol.Version, Config: cfgPath, Env: os.Environ(),
 		Chain: chain, Last: last, Sub: sub, Back: back,
 	}
 	req.Dir, _ = os.Getwd()
@@ -140,7 +144,7 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
-	cfg, err := parseConfig(data, os.LookupEnv)
+	cfg, err := config.ParseConfig(data, os.LookupEnv)
 	if err != nil {
 		fatal("%s: %v", cfgPath, err)
 	}
@@ -158,40 +162,16 @@ func main() {
 		}
 	}
 
-	var resp response
+	var resp protocol.Response
 	if oneshot || os.Getenv("SPOT_NO_DAEMON") != "" || os.Getenv("WAYLAND_DISPLAY") == "" {
-		resp = runOneshot(req)
-	} else if r, ok := viaDaemon(req); ok {
+		resp = daemon.RunOneshot(req)
+	} else if r, ok := client.ViaDaemon(req); ok {
 		resp = r
 	} else {
-		resp = runOneshot(req)
+		resp = daemon.RunOneshot(req)
 	}
 
 	os.Stdout.WriteString(resp.Stdout)
 	os.Stderr.WriteString(resp.Stderr)
 	os.Exit(resp.Code)
-}
-
-// runOneshot shows the dialog in a window of its own and exits with the answer.
-func runOneshot(req request) response {
-	j, err := buildJob(req)
-	if err != nil {
-		return response{Code: exitError, Stderr: fmt.Sprintf("spot: %v\n", err)}
-	}
-	// Per-invocation app ID so concurrent `spot` calls don't dedupe.
-	base := strings.TrimSuffix(filepath.Base(req.Config), filepath.Ext(req.Config))
-	app := gtk.NewApplication(appID(base, os.Getpid()), gio.ApplicationFlagsNone)
-	sh := newShell(app, true, &DaemonConfig{})
-	app.ConnectActivate(func() {
-		sh.init()
-		sh.sched.enqueue(j)
-	})
-	app.Run(nil)
-
-	select {
-	case r := <-j.reply:
-		return r
-	default:
-		return response{Code: exitError}
-	}
 }

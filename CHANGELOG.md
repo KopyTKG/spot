@@ -3,9 +3,10 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
-## Unreleased
+## 0.7.2 — 2026-11-26
 
 - **The daemon no longer leaks memory.** Closed dialogs and their list rows are freed.
+- The source is split into packages under `internal/` (no change in behaviour).
 
 ## 0.7.1 — 2026-11-25
 

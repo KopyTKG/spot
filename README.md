@@ -178,6 +178,20 @@ go test ./...             # or: just test (no display needed)
 go test -tags gui ./...   # also the dialog tests; they need a Wayland session (nothing is drawn)
 ```
 
+The code lives under [`internal/`](internal/), with `main.go` only reading flags:
+
+| Package | What is in it |
+|---|---|
+| `config` | the TOML formats (dialog and daemon), validation, `SPOT_*` overrides |
+| `match` | smart matching and collapsible groups |
+| `launcher` | the `.desktop` index, launching, frecency, `[[sources]]` |
+| `protocol`, `client` | the socket messages and the command line's side of them |
+| `scheduler` | which dialog is showing, covered or waiting |
+| `daemon` | serving the socket and the one-shot run |
+| `ui` | GTK: the window, and one `item_*.go` per widget type |
+
+Only `daemon` and `ui` use GTK. Display tests: `go test -tags gui ./internal/ui`.
+
 `just build` and `just package` bake the git tag into `spot --version`; a plain `go build`
 reports `dev`. To set it by hand: `go build -ldflags "-X main.version=1.2.3" -o spot .`
 
