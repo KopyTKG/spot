@@ -530,10 +530,18 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 | Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
 | Do very large DNS answers (which need TCP port 53) and `.local` names have to work? | Both are untested and would likely fail |
 | How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
-| Should a security switch (a lock, a firewall) be able to say "unknown" instead of showing the last value when its mod is down? | A stale "on" is worse than no answer |
-| Should a `run` permission be able to limit arguments? | Less pressing now that the sandbox holds, but it narrows what a granted socket gives |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
-| Should unquoted `{id}` for `stdin = true` lists be turned off unless a config asks for it? | It is a way into a shell today; changing it breaks existing configs |
+
+#### Decided
+
+The design was agreed on 2026-11-27, by its two users, with these answers:
+
+| Question | Answer |
+|----------|--------|
+| A security switch whose mod is down | shows **unknown**, never the last value |
+| Limits on the arguments of a `run` permission | **not in the first version** |
+| Unquoted `{id}` for `stdin = true` lists | first a **warning**, refused in a later release |
+| No `systemd` user session | mods still run, **warned** that there is no memory or process limit |
 
 ### The sandbox
 
