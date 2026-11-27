@@ -83,7 +83,7 @@ func (f fixture) write(rel, text string) {
 	}
 }
 
-func (f fixture) enable(settings string) { f.write("daemon.toml", "mods=['m']\n"+settings) }
+func (f fixture) enable(settings string) { f.write("mods.toml", "mods=['m']\n"+settings) }
 
 func (f fixture) approve() {
 	m, err := f.store.Read("m")
@@ -124,7 +124,7 @@ func TestOnlyListedAndApprovedRun(t *testing.T) {
 	f := newFixture(t)
 	f.get("listed, not approved", "count", "!not approved")
 	f.approve()
-	os.Remove(f.home + "/daemon.toml")
+	os.Remove(f.home + "/mods.toml")
 	f.get("approved, not listed", "count", "!not enabled")
 	if f.running() {
 		t.Error("a host runs")
@@ -149,7 +149,7 @@ func TestChangeAndRevokeStopAndForget(t *testing.T) {
 	f.get("revoked: nothing old either", "count", "!not approved")
 	f.approve()
 	f.get("back", "count", "1")
-	os.Remove(f.home + "/daemon.toml")
+	os.Remove(f.home + "/mods.toml")
 	f.get("unlisted", "count", "!not enabled")
 	if f.running() {
 		t.Error("it still runs")
@@ -219,5 +219,25 @@ func TestStaleScopes(t *testing.T) {
 	got := StaleScopes(units, func(pid int) bool { return pid == 100 })
 	if !slices.Equal(got, []string{"spot-mod-b-c-200-3.scope"}) {
 		t.Error(fmt.Sprint(got))
+	}
+}
+
+func TestWhatOthersCanChangeRunsNothing(t *testing.T) {
+	f := newFixture(t)
+	f.approve()
+	f.get("as it should be", "count", "1")
+	for _, spoil := range []string{f.home + "/mods.toml", f.host} {
+		st, err := os.Stat(spoil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Chmod(spoil, st.Mode().Perm()|0o022)
+		if _, warning, err := f.Get("m.count"); err == nil && !strings.Contains(warning, "can be changed by others") {
+			t.Errorf("%s open to others: %v %q", spoil, err, warning)
+		}
+		if f.running() {
+			t.Errorf("%s open to others, and it runs", spoil)
+		}
+		os.Chmod(spoil, st.Mode().Perm())
 	}
 }

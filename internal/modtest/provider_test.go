@@ -84,7 +84,7 @@ func (w *world) start(toml, lua string) (*loaded, error) {
 	w.file(".config/spot/mods/m/init.lua", lua)
 	c, l, err := modload.Provider(w.conf+"/spot/mods/m", modload.Options{
 		Host: hostBin, Env: func(k string) string { return w.env[k] },
-		Protected: sandbox.Protected{Socket: w.dir + "/run/spot.sock", NoWrite: []string{w.conf + "/spot", w.dir + "/state/spot"}},
+		Protected: sandbox.Protected{Sockets: []string{w.dir + "/run/spot.sock"}, NoWrite: []string{w.conf + "/spot", w.dir + "/state/spot"}},
 		EmptyDir:  w.dir + "/empty",
 	})
 	if err != nil {

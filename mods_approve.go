@@ -69,7 +69,7 @@ func allowMod(s approval.Store, name string) int {
 		return modsError("%v", err)
 	}
 	if m.Provider.Manifest.Type == "provider" {
-		fmt.Fprintf(tty, "Approved. It runs once \"%s\" is in mods in daemon.toml.\n", name)
+		fmt.Fprintf(tty, "Approved. It runs once \"%s\" is in mods in mods.toml.\n", name)
 	} else {
 		fmt.Fprintf(tty, "Approved.\n")
 	}
@@ -174,6 +174,15 @@ func listMods() int {
 		return modsError("%v", err)
 	}
 	doing := modStates()
+	// A parser is approved on its own, or as part of each mod that uses it.
+	with := map[string][]string{}
+	for _, e := range entries {
+		if state, m, _, err := s.State(e.Name()); err == nil && state == approval.Approved {
+			for parser := range m.Parsers {
+				with[parser] = append(with[parser], e.Name())
+			}
+		}
+	}
 	for _, e := range entries {
 		name := e.Name()
 		if strings.HasPrefix(name, ".") {
@@ -198,7 +207,11 @@ func listMods() int {
 			case known && d.Running:
 				now = ", running"
 			}
-			fmt.Printf("%-20s %-9s %s%s\n", name, m.Provider.Manifest.Type, describe(state, r), now)
+			said := describe(state, r)
+			if users := with[name]; len(users) > 0 && state != approval.Approved {
+				said = "approved as part of " + strings.Join(users, ", ")
+			}
+			fmt.Printf("%-20s %-9s %s%s\n", name, m.Provider.Manifest.Type, said, now)
 		}
 	}
 	return 0

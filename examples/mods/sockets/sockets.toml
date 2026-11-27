@@ -1,0 +1,15 @@
+# A searchable table of the sockets mod's rows (see sockets.sh).
+title    = "Sockets"
+width    = 760
+keyboard = "exclusive"
+
+[[items]]
+type        = "list"
+id          = "row"
+placeholder = "Filter…  tcp listen 22 · estab"
+match       = "smart"
+stdin       = true
+height      = 480
+
+[submit]
+stdout = "{row}"

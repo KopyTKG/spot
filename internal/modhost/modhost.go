@@ -129,7 +129,7 @@ func Start(c Config) (*Host, error) {
 	}
 	theirs.Close() // so that the host's end closing is seen
 
-	_, err = h.exchange(channel.Hello{Policy: c.Policy}, startWait)
+	_, err = h.exchange(channel.Hello{Protocol: channel.Protocol, Policy: c.Policy}, startWait)
 	if err == nil && h.Limited {
 		h.cgroup, err = cgroupOf(h.cmd.Process.Pid, unit)
 	}

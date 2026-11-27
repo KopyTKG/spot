@@ -28,6 +28,7 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/modload"
 	"gitlab.com/KopyTKG/spot/internal/modperm"
 	"gitlab.com/KopyTKG/spot/internal/notify"
+	"gitlab.com/KopyTKG/spot/internal/sandbox"
 )
 
 // A host that keeps dying is restarted with growing pauses. Never disabled for
@@ -277,13 +278,21 @@ func (m *Manager) failed(p *provider, err error) error {
 // unchanged, with its settings and grants current. Called with p.mu held.
 func (m *Manager) ready(p *provider) error {
 	name := p.name
+	// What says which mods run, what runs them and where their programs are
+	// found must be yours or root's (S17).
+	for _, path := range []string{filepath.Join(m.store.Config, "mods.toml"), filepath.Join(m.store.Config, "daemon.toml"), m.host, sandbox.SystemPath} {
+		if err := approval.Trusted(path); err != nil {
+			p.stop()
+			return fmt.Errorf("mods do not run: %w", err)
+		}
+	}
 	conf, err := config.ModsConfig(m.store.Config)
 	if err != nil {
 		return err
 	}
 	if !slices.Contains(conf.Enabled, name) {
 		p.forget()
-		return fmt.Errorf("%s is not enabled: list it in mods in %s/daemon.toml", name, m.store.Config)
+		return fmt.Errorf("%s is not enabled: list it in mods in %s/mods.toml", name, m.store.Config)
 	}
 	store := m.store
 	store.Mods = conf.Dir

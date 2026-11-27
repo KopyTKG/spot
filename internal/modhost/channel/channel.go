@@ -15,9 +15,14 @@ import (
 // MaxMessage is the longest line either side reads.
 const MaxMessage = 16 << 20
 
+// Protocol is the version of what is said here. A package upgrade can put a new
+// host beside a daemon that is still running: they then do not talk.
+const Protocol = 1
+
 // Hello is the daemon's first message: what the host is to be restricted to.
 type Hello struct {
-	Policy sandbox.Policy `json:"policy"`
+	Protocol int            `json:"protocol"`
+	Policy   sandbox.Policy `json:"policy"`
 }
 
 // Operations.

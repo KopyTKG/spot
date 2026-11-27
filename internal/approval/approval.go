@@ -103,6 +103,15 @@ func trusted(path string) error {
 	return nil
 }
 
+// Trusted refuses a file or folder others than you or root could change. One
+// that is not there is no trouble.
+func Trusted(path string) error {
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return trusted(path)
+}
+
 func digest(b []byte) string {
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])

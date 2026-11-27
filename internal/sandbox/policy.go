@@ -57,7 +57,7 @@ type Rule struct {
 
 // Protected are spot's own places, which no permission may reach (S36).
 type Protected struct {
-	Socket  string   // the daemon's socket: never granted, nor a folder with it
+	Sockets []string // spot's sockets: never granted, nor a folder with one
 	NoWrite []string // configuration, mods, approvals, logs
 }
 
@@ -207,8 +207,10 @@ func (p Policy) Check(pr Protected) error {
 			}
 			for _, dir := range []string{path, filepath.Clean(asked)} {
 				// Holding the socket's folder is enough to replace the socket.
-				if pr.Socket != "" && reaches(dir, pr.Socket, false) {
-					return refuse("it holds spot's own socket")
+				for _, sock := range pr.Sockets {
+					if reaches(dir, sock, false) {
+						return refuse("it holds spot's own socket")
+					}
 				}
 				if g.kind != "write" {
 					continue

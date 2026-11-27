@@ -1,10 +1,16 @@
+-- The columns of `ss -H -tuna`: netid, state, two queue sizes, local, peer.
 return function(input, options)
   local rows = {}
   for line in input:gmatch("[^\n]+") do
-    -- netid, state, two queue sizes (numbers), local and peer address
     local proto, state, addr, peer = line:match("^(%a[%w_]*)%s+([%u%-%d]+)%s+%d+%s+%d+%s+(%S+)%s+(%S+)")
     if proto then
-      rows[#rows + 1] = { label = ("%-4s %-9s %s  %s"):format(proto, state, addr, peer), key = addr }
+      rows[#rows + 1] = {
+        label = ("%-4s %-9s %s  %s"):format(proto, state, addr, peer),
+        key = addr,
+        proto = proto,
+        state_name = state,
+        peer = peer,
+      }
     end
   end
   -- Text that is not ss output must not look like "no sockets".

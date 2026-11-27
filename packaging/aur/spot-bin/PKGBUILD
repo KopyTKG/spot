@@ -13,13 +13,17 @@ conflicts=('spot' 'spot-git')
 _release="$url/releases/download/v$pkgver"
 # The tagged source archive supplies LICENSE, README.md and examples/.
 source=("spot-linux-x64-$pkgver::$_release/spot-linux-x64"
+        "spot-mod-host-linux-x64-$pkgver::$_release/spot-mod-host-linux-x64"
         "spot-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-noextract=("spot-linux-x64-$pkgver")
+noextract=("spot-linux-x64-$pkgver" "spot-mod-host-linux-x64-$pkgver")
 sha256sums=('ba1ab6460dc9e3d66ccb43397dbeca0aca0ccb75b46d32169b46a0400a285f57'
+            '0000000000000000000000000000000000000000000000000000000000000000'
             '8806b448b2236d33dfe7fc19dcc066155725518aea26d9a17bff3c17b7022518')
 
 package() {
   install -Dm755 "$srcdir/spot-linux-x64-$pkgver" "$pkgdir/usr/bin/spot"
+  # Beside spot, where it looks for it; runs mods in their sandbox.
+  install -Dm755 "$srcdir/spot-mod-host-linux-x64-$pkgver" "$pkgdir/usr/bin/spot-mod-host"
   cd "$srcdir/spot-$pkgver"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/spot/README.md"

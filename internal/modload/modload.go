@@ -34,7 +34,7 @@ type Options struct {
 
 // Protected are spot's own places for a daemon with this environment.
 func Protected(vars map[string]string) sandbox.Protected {
-	p := sandbox.Protected{Socket: config.SocketPath()}
+	p := sandbox.Protected{Sockets: config.SocketPaths()}
 	for _, base := range []string{vars["XDG_CONFIG_HOME"], vars["XDG_STATE_HOME"], vars["XDG_DATA_HOME"]} {
 		if base != "" {
 			p.NoWrite = append(p.NoWrite, filepath.Join(base, "spot"))

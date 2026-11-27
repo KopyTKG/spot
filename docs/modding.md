@@ -103,7 +103,7 @@ ss = "list the open sockets"
 diag = "ss asks the kernel for the sockets"
 ```
 
-Enable the provider in `~/.config/spot/daemon.toml`, and approve what it asks for. The parser it uses
+Enable the provider in `~/.config/spot/mods.toml`, and approve what it asks for. The parser it uses
 comes with it:
 
 ```toml
@@ -260,10 +260,10 @@ the wrong column.
 | | |
 |---|---|
 | A mod | a folder `<name>/` with `init.lua` and `mod.toml` (optional for a provider). A provider can load other files of its folder with `spot.require` |
-| Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `daemon.toml` |
+| Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `mods.toml` |
 | Name | `[a-z][a-z0-9_-]*`; it prefixes everything the mod publishes |
-| Enabled | a provider: listed in `mods` in `daemon.toml` **and** approved with `spot mods allow`. A parser: approved, and used by something. Otherwise it never runs |
-| Settings | the `[mod.<name>]` table of `daemon.toml`, visible to the mod as `spot.config` |
+| Enabled | a provider: listed in `mods` in `mods.toml` **and** approved with `spot mods allow`. A parser: approved, and used by something. Otherwise it never runs |
+| Settings | the `[mod.<name>]` table of `mods.toml`, visible to the mod as `spot.config` |
 
 ## The API
 
@@ -1046,7 +1046,7 @@ outside spot's mods.
 - Lua: [gopher-lua](https://github.com/yuin/gopher-lua), written in Go, so no new C dependency.
 - The socket protocol gains `get`, `watch` and `call`. `watch` answers many times on one
   connection, where today every request has one answer.
-- `daemon.toml` gains `mods`, `mods_dir` and `[mod.*]`. Older versions of spot reject unknown keys
+- Mods are configured in `mods.toml`, not `daemon.toml`: older versions of spot reject unknown keys
   there and fall back to their defaults with a warning.
 
 ### One model for mods and backends

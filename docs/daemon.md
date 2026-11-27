@@ -186,6 +186,8 @@ turn.
 
 ## Mods (in development)
 
+Mods have a file of their own, `~/.config/spot/mods.toml`, which a spot without mods does not read:
+
 ```toml
 mods = ["sockets"]            # providers to run; each must also be approved
 mods_dir = "mods"             # optional, relative to this file

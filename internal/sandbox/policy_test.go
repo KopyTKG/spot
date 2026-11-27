@@ -12,7 +12,7 @@ func TestWhatIsNeverGranted(t *testing.T) {
 	for _, sub := range []string{"run", "config/spot", "data"} {
 		os.MkdirAll(filepath.Join(d, sub), 0o700)
 	}
-	pr := Protected{Socket: d + "/run/spot.sock", NoWrite: []string{d + "/config/spot"}}
+	pr := Protected{Sockets: []string{d + "/other/spot.sock", d + "/run/spot.sock"}, NoWrite: []string{d + "/config/spot"}}
 	os.Symlink(d+"/config", d+"/data/link")
 	for name, p := range map[string]Policy{
 		"everything":                  {Read: []string{"/"}},

@@ -112,7 +112,7 @@ func TestAHostStartedByHandRunsNothing(t *testing.T) {
 
 func TestARefusedPolicyStartsNothing(t *testing.T) {
 	d := t.TempDir()
-	_, err := Start(Config{Name: "bad", Policy: sandbox.Policy{Self: "/nonexistent", Sockets: []string{d}}, Protected: sandbox.Protected{Socket: d + "/spot.sock"}})
+	_, err := Start(Config{Name: "bad", Policy: sandbox.Policy{Self: "/nonexistent", Sockets: []string{d}}, Protected: sandbox.Protected{Sockets: []string{d + "/spot.sock"}}})
 	if err == nil || !strings.Contains(err.Error(), "socket") {
 		t.Errorf("err = %v", err)
 	}

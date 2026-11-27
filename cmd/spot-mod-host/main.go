@@ -54,6 +54,9 @@ func main() {
 	if err := json.NewDecoder(ch).Decode(&hello); err != nil {
 		fail(ch, fmt.Errorf("reading the policy: %w", err))
 	}
+	if hello.Protocol != channel.Protocol {
+		fail(ch, fmt.Errorf("the daemon speaks protocol %d and this host %d: spot was upgraded, run spot --quit", hello.Protocol, channel.Protocol))
+	}
 	// Nothing but the channel is passed on.
 	if err := unix.CloseRange(chanFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		fail(ch, fmt.Errorf("closing files: %w", err))

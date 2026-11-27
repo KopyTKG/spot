@@ -185,7 +185,7 @@ func TestOnlyWhatYouDidNotDoIsNotified(t *testing.T) {
 	f.get("good", "still", `"same"`)
 	f.store.Revoke("m")
 	f.Get("m.still")
-	os.Remove(f.home + "/daemon.toml")
+	os.Remove(f.home + "/mods.toml")
 	f.Get("m.still")
 	if n := f.heard.all(); len(n) != 0 {
 		t.Errorf("told about your own doing: %q", n)
