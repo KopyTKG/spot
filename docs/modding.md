@@ -370,7 +370,11 @@ not start under the host's. Their memory is therefore **not limited**.
 
 | | |
 |---|---|
-| Stopping | A cgroup per mod where delegation is available, otherwise the host is a child subreaper, which is weaker; `spot mods` says which is in use. A process-group kill alone is escaped with `setsid` |
+| Stopping | A cgroup per mod **and** a child subreaper: `cgroup.kill` misses a program that moved itself to another cgroup, the subreaper finds it. The adopting process is the daemon or a supervisor per mod, never the host that is killed. A job handed to `systemd` is not stopped by either |
+| Cgroups | Need delegation (`Delegate=yes`), which a daemon started by a compositor's autostart does not have unless started through `systemd-run --user --scope` or a user service. Without it only the subreaper, and `spot mods` says so |
+| Resource limits | With delegation, `pids.max` and `memory.max` on a mod's cgroup would cover its programs too (settable in a test; enforcement not yet tried). A program that leaves the cgroup leaves its limits |
+| Channel | A socket pair, not a pipe: a program could write into a pipe through `/proc` |
+| Open files | All beyond stderr are marked close-on-exec (`close_range`) before any program starts |
 | Reading each other | The daemon and the hosts set `PR_SET_DUMPABLE` to 0, so that other processes of yours cannot read their environment |
 | Environment | Hosts start with the small environment of S11 |
 
@@ -422,7 +426,7 @@ the machine. **Not** against something already running as you or as root.
 | S9 | `spot.require` stays inside the mod's own folder, links included |
 | S10 | A program is found in a fixed `PATH` of system folders. One in a folder your user can write, such as your own scripts, must be listed by full path; its hash is then part of the approval, and it is flagged |
 | S11 | A program started by a mod gets a small environment (`HOME`, `LANG`, the runtime folder, the fixed `PATH`) plus the variables the mod has `env` permission for, **not the daemon's**, which may hold secrets |
-| S12 | A program started by a mod inherits no open files, and never the channel to the daemon |
+| S12 | A program started by a mod inherits no open files, and can neither reach the channel to the daemon nor read its host's environment |
 | S26 | A program gets only the variables of S11 and those listed in `setenv` |
 | S27 | A program's working folder stays inside what the mod may read |
 | S28 | File functions handle only regular files; none under `/dev`, and under `/proc` and `/sys` only paths listed in `read`, never a process's own folder, never for writing |
@@ -469,9 +473,8 @@ S29 holds fully only with cgroups; without them, the tests and `spot mods` say w
 
 | Question | Why it matters |
 |----------|----------------|
-| Is cgroup delegation available to the daemon, and what does a child subreaper miss? | Decides how far S29 and the process limits hold |
+| How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
 | Should a `run` permission be able to limit arguments, for example `systemctl` only with `--user`? | `run = systemctl` alone grants a great deal |
-| How are S8 and S12 done in Go? (For S8: `openat2` with `RESOLVE_NO_SYMLINKS` on the resolved path) | Both are easy to get subtly wrong |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
 
 ### Data must not become commands
@@ -547,7 +550,10 @@ LC_ALL = "get untranslated output"
 
 **Files.** Regular files only, opened non-blocking and checked on the open descriptor, with a size
 cap. `/dev` is refused. spot's protected files are recognised by device and
-inode as well as by path, and a file with more than one hard link is not written to.
+inode as well as by path, and **a file with more than one hard link is neither read nor written**: a
+link inside a granted folder reads the file it shares, wherever else that is. Opening is `openat2`
+with `RESOLVE_NO_SYMLINKS` on the resolved path, then a check of the descriptor. Size limits count the
+bytes read: files under `/proc` report a size of 0.
 
 **`/proc` and `/sys`** are where battery, network and load are read, so they are not closed, but
 each path must be listed, and only for reading:
@@ -560,9 +566,12 @@ each path must be listed, and only for reading:
 - A broad entry (`/sys` or `/proc` itself) is refused: name what is needed.
 - `/proc/self`, `/proc/thread-self` and every `/proc/<number>` are always refused: they hold
   processes' environments and open files.
-- Folders under `/sys/class` are links into `/sys/devices`. Access through a listed path is allowed
-  as long as every link stays inside `/sys`; the same holds for `/proc`, whose links must not lead
-  into a refused folder.
+- **What is granted is the listed folder and the real folders its direct entries point to, no
+  further.** The entries of `/sys/class/power_supply` are links into `/sys/devices`, and those are
+  included; the links inside them (`device`, `subsystem`) are not, since following them reaches all
+  of `/sys`.
+- `/proc/net` and `/proc/mounts` lead into a process's own folder. They are named exceptions, which
+  give the mod host's own view.
 - Nothing under `/proc` or `/sys` can be written.
 
 #### Approval
@@ -850,7 +859,19 @@ With gopher-lua 1.1.2, in a throwaway program, not in spot:
 
 The limit tests were on Linux. The transfer figures cover one hop, not drawing the list.
 
-**Still to test:** the real host's size and start time.
+**Security mechanisms**, tested in throwaway programs on Linux 7.3:
+
+| Question | Result |
+|----------|--------|
+| Resolve, check, then open, while a folder is swapped for a link | read the outside file 488 times of 20,000 |
+| `openat2` with `RESOLVE_NO_SYMLINKS` | 0 of 20,000; a hard link still reads the file it shares |
+| A file left open without close-on-exec | reached the program; `close_range` stopped that |
+| A pipe as the channel | the program wrote a forged message; not with a socket pair, nor with `PR_SET_DUMPABLE` 0 |
+| Reading the host's environment | possible, until `PR_SET_DUMPABLE` 0 |
+| Stopping: process group / subreaper / `cgroup.kill` / the last two together | left detached programs / only `systemd` jobs / a program that moved itself / only `systemd` jobs |
+| "Links may go anywhere inside `/sys`" | permission for `/sys/class/power_supply` reached all of `/sys` |
+
+**Still to test:** the real host's size and start time, and enforcement of cgroup limits.
 
 ### First version
 
