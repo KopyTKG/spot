@@ -12,3 +12,5 @@ func ABI() int { return 0 }
 func Restrict(Policy) error { return errUnsupported }
 
 func Verify() error { return errUnsupported }
+
+func Privileged() error { return errUnsupported }

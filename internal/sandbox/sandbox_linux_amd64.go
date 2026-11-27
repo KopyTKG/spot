@@ -174,6 +174,27 @@ func Restrict(p Policy) error {
 	return installFilter(p)
 }
 
+// Privileged reports that the process has root's ids or any capability: no mod
+// runs then (S22). The sandbox is built to confine an ordinary user.
+func Privileged() error {
+	if os.Getuid() == 0 || os.Geteuid() == 0 || os.Getgid() == 0 || os.Getegid() == 0 {
+		return errors.New("mods do not run as root")
+	}
+	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
+	var data [2]unix.CapUserData
+	if err := unix.Capget(&header, &data[0]); err != nil {
+		return fmt.Errorf("cannot tell which capabilities we have: %w", err)
+	}
+	return capable(data[0].Effective | data[1].Effective | data[0].Permitted | data[1].Permitted)
+}
+
+func capable(set uint32) error {
+	if set != 0 {
+		return errors.New("mods do not run with Linux capabilities")
+	}
+	return nil
+}
+
 // Verify reports an error unless the process is restricted. It does not depend
 // on what was granted: the filter never allows a VM socket, and Landlock never
 // allows a signal to a process outside, here the parent.

@@ -23,6 +23,7 @@ const Protocol = 1
 type Hello struct {
 	Protocol int            `json:"protocol"`
 	Policy   sandbox.Policy `json:"policy"`
+	Memory   int64          `json:"memory,omitempty"` // bytes; 0 is the usual limit
 }
 
 // Operations.

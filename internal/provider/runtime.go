@@ -31,6 +31,7 @@ const (
 	maxEvents    = 500
 	maxText      = 4 << 10
 	maxTimers    = 64
+	maxKept      = 32 << 20 // of all values together
 	minTimer     = 100 * time.Millisecond
 	minEvery     = 250 * time.Millisecond
 )
@@ -51,6 +52,7 @@ type value struct {
 	fn     *lua.LFunction // nil for a published one
 	ttl    time.Duration
 	cached any
+	size   int // of cached, as JSON
 	at     time.Time
 	has    bool
 	every  time.Duration // recompute this often, while somebody watches
@@ -201,6 +203,25 @@ func (r *Runtime) copyOut(v lua.LValue) (any, error) {
 	return out, shape(out)
 }
 
+// keep checks that name may hold out beside the other values, and says how much
+// it is.
+func (r *Runtime) keep(name string, out any) (int, error) {
+	b, err := json.Marshal(out)
+	if err != nil {
+		return 0, err
+	}
+	total := len(b)
+	for other, v := range r.values {
+		if other != name {
+			total += v.size
+		}
+	}
+	if total > maxKept {
+		return 0, fmt.Errorf("the mod's values come to more than %d MB", maxKept>>20)
+	}
+	return len(b), nil
+}
+
 // Get is a value: computed when asked for, or kept for its ttl.
 func (r *Runtime) Get(name string) channel.Reply {
 	v, ok := r.values[name]
@@ -220,7 +241,11 @@ func (r *Runtime) Get(name string) channel.Reply {
 		if err != nil {
 			return err
 		}
-		v.cached, v.at, v.has = out, time.Now(), true
+		size, err := r.keep(name, out)
+		if err != nil {
+			return err
+		}
+		v.cached, v.size, v.at, v.has = out, size, time.Now(), true
 		return nil
 	})
 	if err != nil {
@@ -644,7 +669,11 @@ func (r *Runtime) install(config json.RawMessage) error {
 		if err != nil {
 			return raise(L, "publish %q: %v", name, err)
 		}
-		r.values[name] = &value{cached: out, has: true}
+		size, err := r.keep(name, out)
+		if err != nil {
+			return raise(L, "publish %q: %v", name, err)
+		}
+		r.values[name] = &value{cached: out, size: size, has: true}
 		r.changed[name] = true
 		return 0
 	})

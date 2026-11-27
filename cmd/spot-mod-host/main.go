@@ -15,6 +15,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"syscall"
 	"time"
 	"unsafe"
@@ -54,6 +55,9 @@ func main() {
 	if err := json.NewDecoder(ch).Decode(&hello); err != nil {
 		fail(ch, fmt.Errorf("reading the policy: %w", err))
 	}
+	if err := sandbox.Privileged(); err != nil {
+		fail(ch, err)
+	}
 	if hello.Protocol != channel.Protocol {
 		fail(ch, fmt.Errorf("the daemon speaks protocol %d and this host %d: spot was upgraded, run spot --quit", hello.Protocol, channel.Protocol))
 	}
@@ -62,6 +66,9 @@ func main() {
 		fail(ch, fmt.Errorf("closing files: %w", err))
 	}
 	env := environment(hello.Policy)
+	if hello.Memory > 0 { // stage two takes it from here
+		env = append(env, memoryVar+"="+strconv.FormatInt(hello.Memory, 10))
+	}
 	if err := sandbox.Restrict(hello.Policy); err != nil {
 		fail(ch, err)
 	}
@@ -149,15 +156,23 @@ func run() {
 
 // memoryLimit stops a mod that allocates without end. A data limit: an
 // address-space limit does not work with Go.
-const memoryLimit = 256 << 20
+const (
+	memoryLimit = 256 << 20
+	memoryVar   = "SPOT_MOD_MEMORY"
+)
 
 func limitMemory() error {
 	var l unix.Rlimit
 	if err := unix.Getrlimit(unix.RLIMIT_DATA, &l); err != nil {
 		return err
 	}
-	l.Cur = min(memoryLimit, l.Max)
-	debug.SetMemoryLimit(memoryLimit * 3 / 4) // collect before reaching it
+	limit := uint64(memoryLimit)
+	if v, err := strconv.ParseUint(os.Getenv(memoryVar), 10, 63); err == nil {
+		limit = v
+	}
+	os.Unsetenv(memoryVar) // programs of the mod do not need it
+	l.Cur = min(limit, l.Max)
+	debug.SetMemoryLimit(int64(limit * 3 / 4)) // collect before reaching it
 	return unix.Setrlimit(unix.RLIMIT_DATA, &l)
 }
 

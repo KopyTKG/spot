@@ -201,11 +201,15 @@ func listMods() int {
 			fmt.Printf("%-20s broken: %s\n", name, approval.Oneline(err.Error()))
 		default:
 			now := ""
-			switch d, known := doing[name]; {
+			d, known := doing[name]
+			switch {
 			case known && d.Error != "":
-				now = ", FAILING since " + d.Since + ": " + approval.Oneline(d.Error)
+				now = fmt.Sprintf(", FAILING since %s, %d times, fault of %s: %s", d.Since, d.Count, d.Fault, approval.Oneline(d.Error))
 			case known && d.Running:
 				now = ", running"
+			}
+			if known && d.Unlimited {
+				now += " (NO memory or task limit: no systemd user session)"
 			}
 			said := describe(state, r)
 			if users := with[name]; len(users) > 0 && state != approval.Approved {

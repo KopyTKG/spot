@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -100,6 +101,9 @@ type provider struct {
 
 	broken map[string]string // what is failing now: "" is the mod itself
 	since  time.Time
+	times  int    // failures since it last worked
+	fault  string // whose: the parser, the mod, its host, or a change
+	free   bool   // it runs without memory and task limits
 	told   bool
 	notes  []time.Time
 }
@@ -247,13 +251,31 @@ func (m *Manager) health(p *provider, what string, err error) {
 		return
 	}
 	if len(p.broken) == 0 {
-		p.since = time.Now()
+		p.since, p.times = time.Now(), 0
 	}
+	p.times++
+	p.fault = blame(err.Error())
 	p.broken[what] = err.Error()
 	if !p.told {
 		p.told = true
 		m.note(p, "spot: mod "+p.name+" is failing", err.Error())
 	}
+}
+
+var parserBlamed = regexp.MustCompile(`parser ([a-z][a-z0-9_-]*):`)
+
+// blame says whose fault an error is, so that the right thing gets fixed.
+func blame(msg string) string {
+	switch {
+	case strings.Contains(msg, "has changed since"):
+		return "changed"
+	case strings.Contains(msg, "host is gone") || strings.Contains(msg, "starting the host"):
+		return "its host"
+	}
+	if m := parserBlamed.FindStringSubmatch(msg); m != nil {
+		return "parser " + m[1]
+	}
+	return "the mod"
 }
 
 // forget drops what was known of a mod that you switched off yourself.
@@ -272,6 +294,20 @@ func (m *Manager) failed(p *provider, err error) error {
 	p.notBefore, p.lastErr = time.Now().Add(pause), err.Error()
 	m.health(p, "", err)
 	return err
+}
+
+// memorySetting is `memory` of a [mod.<name>]: megabytes for the mod's host
+// and everything it starts. 0 is the usual 256.
+func memorySetting(settings map[string]any) (int64, error) {
+	v, ok := settings["memory"]
+	if !ok {
+		return 0, nil
+	}
+	mb, ok := v.(int64)
+	if !ok || mb < 64 || mb > 16384 {
+		return 0, errors.New("memory is a whole number of megabytes, from 64 to 16384")
+	}
+	return mb << 20, nil
 }
 
 // ready makes sure that name is running as what it is now: listed, approved,
@@ -316,6 +352,10 @@ func (m *Manager) ready(p *provider) error {
 		return err
 	}
 	var settings []byte
+	memory, err := memorySetting(conf.Settings[name])
+	if err != nil {
+		return fmt.Errorf("[mod.%s]: %w", name, err)
+	}
 	if s := conf.Settings[name]; s != nil {
 		if settings, err = json.Marshal(s); err != nil {
 			return fmt.Errorf("[mod.%s]: %w", name, err)
@@ -346,11 +386,12 @@ func (m *Manager) ready(p *provider) error {
 		return m.failed(p, err)
 	}
 	c.Stderr = &complaints{mod: name, left: 3}
+	c.Memory = memory
 	h, err := modhost.Start(c)
 	if err != nil {
 		return m.failed(p, err)
 	}
-	p.h = h
+	p.h, p.free = h, !h.Limited
 	if !h.Limited {
 		log.Printf("mod %s: no systemd user session: no memory or task limit", name)
 	}
@@ -651,11 +692,14 @@ func (m *Manager) Reload(name string) {
 
 // Status is how one mod is doing.
 type Status struct {
-	Name     string `json:"name"`
-	Running  bool   `json:"running"`
-	Watchers int    `json:"watchers,omitempty"`
-	Error    string `json:"error,omitempty"`
-	Since    string `json:"since,omitempty"`
+	Name      string `json:"name"`
+	Running   bool   `json:"running"`
+	Unlimited bool   `json:"unlimited,omitempty"` // no memory or task limit
+	Watchers  int    `json:"watchers,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Since     string `json:"since,omitempty"`
+	Count     int    `json:"count,omitempty"`
+	Fault     string `json:"fault,omitempty"`
 }
 
 // Statuses is every mod asked for since the daemon started.
@@ -666,14 +710,14 @@ func (m *Manager) Statuses() []Status {
 	var out []Status
 	for _, p := range all {
 		p.mu.Lock()
-		s := Status{Name: p.name, Running: p.h != nil, Watchers: len(p.watchers)}
+		s := Status{Name: p.name, Running: p.h != nil, Unlimited: p.h != nil && p.free, Watchers: len(p.watchers)}
 		what := make([]string, 0, len(p.broken))
 		for k := range p.broken {
 			what = append(what, k)
 		}
 		sort.Strings(what)
 		if len(what) > 0 {
-			s.Error, s.Since = p.broken[what[0]], p.since.Format("15:04:05")
+			s.Error, s.Since, s.Count, s.Fault = p.broken[what[0]], p.since.Format("15:04:05"), p.times, p.fault
 		}
 		p.mu.Unlock()
 		out = append(out, s)

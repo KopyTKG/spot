@@ -369,7 +369,7 @@ what it means. There is no redirection of any kind: to keep output, use `spot.wr
 | Limit | Default | |
 |-------|---------|---|
 | Time of one function | 5 s | then it is interrupted, or the host is killed |
-| Memory of a mod host | 256 MB | a data limit (`RLIMIT_DATA`); `memory` in `[mod.<name>]` changes it |
+| Memory of a mod host | 256 MB | a data limit (`RLIMIT_DATA`); `memory` in `[mod.<name>]`, in megabytes from 64 to 16384, changes it and the scope's |
 | Rows in a value | 10,000 | larger values are refused |
 | Published values per mod | 100 | starting values, still to be measured |
 | One field | 4 KB | |
@@ -393,9 +393,9 @@ under it. What bounds those programs is the limit of the mod's scope.
 | | |
 |---|---|
 | One scope per mod | The daemon starts each host in a `systemd` scope of its own in your user session (`systemd-run --user --scope`, about 6 ms). The host stays the daemon's child and keeps the channel; its second stage drops what only `systemd-run` needed from the environment. No delegation, whatever started the daemon |
-| Stopping | `cgroup.kill` on the mod's scope **and** a child subreaper: the first misses a program that moved itself to another group, the second finds it. The adopting process is the daemon or a supervisor per mod, never the host that is killed. A job handed to `systemd` is not stopped by either |
+| Stopping | `cgroup.kill` on the mod's scope. Programs the host is waiting for are also killed by the host itself when the daemon goes. A job handed to `systemd` is not stopped. (**Later:** a child subreaper, for what detaches itself where there is no scope) |
 | Resource limits | `MemoryMax`, `MemorySwapMax=0` and `TasksMax` on the scope cover the host and everything it starts. **Without `MemorySwapMax=0` a memory limit does nothing** where there is swap. At the memory limit the kernel kills the biggest process, usually a program, and the host reports it. A sandboxed program cannot leave the scope or raise its limits |
-| Without a `systemd` user session | **No** memory or process limit, stopping only by the subreaper; `spot mods` says so |
+| Without a `systemd` user session | **No** memory or process limit, and a program that detaches itself is not stopped with the mod; `spot mods` says so |
 | Channel | A socket pair, not a pipe: a program could write into a pipe through `/proc` |
 | Open files | All beyond stderr are marked close-on-exec (`close_range`) before any program starts |
 | Reading each other | Mod hosts set `PR_SET_DUMPABLE` to 0. The daemon **cannot**: tested, the desktop portal then refuses it the desktop's settings. The sandbox already keeps a mod's programs from reading it (tested for a parent process) |
@@ -477,7 +477,7 @@ the machine. **Not** against something already running as you or as root.
 | S19 | A host publishes and answers only under its own mod's name; the daemon enforces it, whatever the host says |
 | S20 | Everything from a host is checked: size, form, names. Garbled messages kill it |
 | S21 | Socket connections are accepted only from your own user, checked on both ends; the daemon also refuses one from a mod host or anything it started |
-| S22 | Neither the daemon nor a mod host runs as root or with capabilities (any of uid, euid, gid, egid 0, or an effective capability); they refuse to start |
+| S22 | No mod host runs as root or with capabilities (any of uid, euid, gid, egid 0, or an effective or permitted capability); it refuses to start. The daemon refuses root, not capabilities, which a desktop may pass on and dialogs must survive |
 | S23 | A mod cannot exhaust spot: the [limits](#limits) on time, memory, rows, values, message size, programs, bytes written, log size and notifications |
 | S24 | Every `spot` call (command, file access) and every refusal by spot is logged where mods cannot write, readable only by you |
 | S29 | Stopping a mod stops what it started |
@@ -505,6 +505,8 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 #### Not promised
 
+- A script of your own is checked when the mod starts, not at each run: something already running as
+  you can swap it afterwards. (That something could change your shell too.)
 - With a `socket` permission, or write access to something that runs later, a mod can leave the
   sandbox.
 - **Not only the listed programs can run.** `/usr/lib` must be readable for libraries, and it holds
@@ -532,7 +534,6 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 |----------|----------------|
 | Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
 | Do very large DNS answers (which need TCP port 53) and `.local` names have to work? | Both are untested and would likely fail |
-| How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
 
 #### Decided
@@ -870,9 +871,8 @@ already taken over. Read a mod before approving it.
 
 Once mods can act, `spot call` makes the daemon's socket a way to cause actions. The daemon accepts
 connections only from your own user, checked on the connection and not by file permissions alone,
-and a client likewise checks who it is talking to. With mods, the socket moves into a folder of its
-own (`$XDG_RUNTIME_DIR/spot/`, mode 0700), so that no grant has to include it, and the daemon refuses
-a peer that is a mod host or something it started.
+and a client likewise checks who it is talking to. No mod can be granted any of spot's sockets or a folder that holds
+one, and the daemon refuses a peer that is a mod host or something it started.
 
 ## Using mod data
 
