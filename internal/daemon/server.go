@@ -26,7 +26,7 @@ func onMain(f func()) { coreglib.IdleAdd(f) }
 
 // RunDaemon serves dialogs until told to quit. It returns the process exit status.
 func RunDaemon() int {
-	if os.Geteuid() == 0 {
+	if IsRoot() {
 		fmt.Fprintln(os.Stderr, "spot: the daemon does not run as root")
 		return protocol.ExitError
 	}
@@ -49,7 +49,11 @@ func RunDaemon() int {
 		return protocol.ExitSubmitted
 	}
 
-	os.Remove(sock)             // a leftover from a crash; the lock says nobody is using it
+	// A leftover from a crash; the lock says nobody is using it. Only a socket:
+	// a mistaken socket path must not delete a file.
+	if st, err := os.Lstat(sock); err == nil && st.Mode()&os.ModeSocket != 0 {
+		os.Remove(sock)
+	}
 	old := syscall.Umask(0o177) // the socket is never open to others, not even briefly
 	ln, err := net.Listen("unix", sock)
 	syscall.Umask(old)
@@ -87,6 +91,15 @@ func RunDaemon() int {
 	return protocol.ExitSubmitted
 }
 
+// IsRoot reports whether any of the process's ids is root's.
+func IsRoot() bool {
+	return os.Getuid() == 0 || os.Geteuid() == 0 || os.Getgid() == 0 || os.Getegid() == 0
+}
+
+// reading limits how many requests are held while being read, so that many
+// connections at once cannot add up to the daemon's memory.
+var reading = make(chan struct{}, 8)
+
 func serve(ln net.Listener, sh *ui.Shell) {
 	for {
 		conn, err := ln.Accept()
@@ -99,7 +112,7 @@ func serve(ln net.Listener, sh *ui.Shell) {
 
 // A request is a config's path, the caller's environment and its stdin lines.
 const (
-	maxRequest  = 32 << 20
+	maxRequest  = 64 << 20
 	requestWait = 10 * time.Second
 )
 
@@ -123,7 +136,9 @@ func handle(conn net.Conn, sh *ui.Shell) {
 		json.NewEncoder(conn).Encode(r)
 	}
 
+	reading <- struct{}{}
 	req, err := readRequest(conn)
+	<-reading
 	if err != nil {
 		return
 	}
@@ -153,6 +168,13 @@ func show(conn net.Conn, sh *ui.Shell, req protocol.Request, reply func(protocol
 	j, err := scheduler.BuildJob(req)
 	if err != nil {
 		reply(protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true})
+		return
+	}
+
+	// The client shows these itself. Refused here too, for a caller that does not
+	// and for a config changed between its reading and ours.
+	if j.Cfg.HasPassword() {
+		reply(protocol.Response{Code: protocol.ExitError, Stderr: "spot: a dialog with a password is not shown by the daemon; run spot itself\n", Fault: true})
 		return
 	}
 

@@ -53,7 +53,10 @@ func valueVar(id string) string { return "SPOT_VALUE_" + strings.ToUpper(Sanitiz
 // reads these, quoted, is safe whatever a value contains, unlike {id}, which is
 // pasted into the command. Variables of these names inherited from the caller are
 // removed, so that an empty item cannot take someone else's value.
-func SubmitEnv(env []string, active string, values map[string]string) []string {
+//
+// A value holding a NUL byte cannot be a variable: that is an error, since a
+// command run with it silently empty could act on something else entirely.
+func SubmitEnv(env []string, active string, values map[string]string) ([]string, error) {
 	out := make([]string, 0, len(env)+len(values)+1)
 	for _, kv := range env {
 		if !strings.HasPrefix(kv, "SPOT_VALUE_") && !strings.HasPrefix(kv, "SPOT_ACTIVE=") {
@@ -61,11 +64,18 @@ func SubmitEnv(env []string, active string, values map[string]string) []string {
 		}
 	}
 	for id, v := range values {
-		if id != "" && !strings.ContainsRune(v, 0) {
-			out = append(out, valueVar(id)+"="+v)
+		if id == "" {
+			continue
 		}
+		if strings.ContainsRune(v, 0) {
+			return nil, fmt.Errorf("the value of %q holds a NUL byte", id)
+		}
+		out = append(out, valueVar(id)+"="+v)
 	}
-	return append(out, "SPOT_ACTIVE="+active)
+	if strings.ContainsRune(active, 0) {
+		return nil, fmt.Errorf("the active section's id holds a NUL byte")
+	}
+	return append(out, "SPOT_ACTIVE="+active), nil
 }
 
 // checkValueVars rejects ids that would share a variable.

@@ -54,9 +54,18 @@ type Scheduler struct {
 	OnIdle      func() // called when a quitting/oneshot scheduler runs out of work
 }
 
+// maxWaiting is how many dialogs may wait their turn or lie covered. Each holds
+// its whole request.
+const maxWaiting = 32
+
 // Enqueue takes a new request.
 func (s *Scheduler) Enqueue(j *Job) {
 	if s.toggled(j) {
+		return
+	}
+	if len(s.queue)+len(s.stack) >= maxWaiting {
+		j.finished = true
+		j.Reply <- protocol.Response{Code: protocol.ExitError, Stderr: "spot: too many dialogs are already waiting\n", Fault: true, Version: protocol.Version}
 		return
 	}
 	s.stopGrace()

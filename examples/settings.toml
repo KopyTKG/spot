@@ -14,8 +14,8 @@ keyboard = "exclusive"
 type      = "switch"
 id        = "nightlight"
 label     = "Nightlight"
-state     = "cat $XDG_RUNTIME_DIR/spot-demo-nightlight 2>/dev/null || echo off"
-on_change = "echo {value} > $XDG_RUNTIME_DIR/spot-demo-nightlight"
+state     = "cat \"$XDG_RUNTIME_DIR\"/spot-demo-nightlight 2>/dev/null || echo off"
+on_change = "echo {value} > \"$XDG_RUNTIME_DIR\"/spot-demo-nightlight"
 on        = "on"
 off       = "off"
 
@@ -24,8 +24,8 @@ type      = "switch"
 id        = "dnd"
 label     = "Do not disturb"
 look      = "button"
-state     = "cat $XDG_RUNTIME_DIR/spot-demo-dnd 2>/dev/null || echo off"
-on_change = "echo {value} > $XDG_RUNTIME_DIR/spot-demo-dnd"
+state     = "cat \"$XDG_RUNTIME_DIR\"/spot-demo-dnd 2>/dev/null || echo off"
+on_change = "echo {value} > \"$XDG_RUNTIME_DIR\"/spot-demo-dnd"
 
 [[items]]
 type  = "separator"
@@ -36,19 +36,19 @@ type      = "segmented"
 id        = "profile"
 options   = ["saver", "balanced", "performance"]
 labels    = ["Saver", "Balanced", "Performance"]
-state     = "cat $XDG_RUNTIME_DIR/spot-demo-profile 2>/dev/null || echo balanced"
-on_change = "echo {value} > $XDG_RUNTIME_DIR/spot-demo-profile"
+state     = "cat \"$XDG_RUNTIME_DIR\"/spot-demo-profile 2>/dev/null || echo balanced"
+on_change = "echo {value} > \"$XDG_RUNTIME_DIR\"/spot-demo-profile"
 
 [[items]]
 type      = "scale"
 id        = "volume"
 label     = "Volume"
 step      = 5
-state     = "cat $XDG_RUNTIME_DIR/spot-demo-volume 2>/dev/null || echo 50"
-on_change = "echo {value} > $XDG_RUNTIME_DIR/spot-demo-volume"
+state     = "cat \"$XDG_RUNTIME_DIR\"/spot-demo-volume 2>/dev/null || echo 50"
+on_change = "echo {value} > \"$XDG_RUNTIME_DIR\"/spot-demo-volume"
 
 [[items]]
 type  = "button"
 id    = "reset"
 label = "Reset"
-exec  = "rm -f $XDG_RUNTIME_DIR/spot-demo-*"
+exec  = "rm -f \"$XDG_RUNTIME_DIR\"/spot-demo-*"

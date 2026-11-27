@@ -50,7 +50,7 @@ func ensureIconPaths(appPaths []string, home string) {
 func setAppIcon(img *gtk.Image, icon string, size int) {
 	img.SetPixelSize(size)
 	if filepath.IsAbs(icon) {
-		if st, err := os.Stat(icon); err == nil && st.Mode().IsRegular() && st.Size() <= 8<<20 {
+		if imageFits(icon) {
 			img.SetFromFile(icon)
 			return
 		}

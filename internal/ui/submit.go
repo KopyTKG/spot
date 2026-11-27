@@ -94,7 +94,12 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 			return
 		}
 		cmd := config.Expand(b.cfg.Submit.Exec, b.activeID, vals)
-		env := config.SubmitEnv(b.env, b.activeID, vals)
+		env, err := config.SubmitEnv(b.env, b.activeID, vals)
+		if err != nil {
+			execErr.SetText(err.Error())
+			execErr.SetVisible(true)
+			return
+		}
 		if b.cfg.Submit.Spawn {
 			spawn(cmd, env, b.dir)
 			finish()

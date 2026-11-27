@@ -181,6 +181,8 @@ your socket, say) is refused for the same reason.
 A dialog with a `password` item is shown by the calling `spot` itself, above the
 daemon's dialog if one is up. Run as root, `spot` uses no daemon, and a daemon
 refuses to start as root.
+The daemon refuses such a dialog from any caller. At most 32 dialogs may wait their
+turn.
 
 ## Controlling it
 

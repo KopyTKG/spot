@@ -3,7 +3,6 @@ package scheduler
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,7 +13,7 @@ import (
 // BuildJob reads the config named by req and prepares it for display. It
 // touches no GTK, so it may run on any goroutine.
 func BuildJob(req protocol.Request) (*Job, error) {
-	data, err := os.ReadFile(req.Config)
+	data, err := config.ReadFile(req.Config)
 	if err != nil {
 		return nil, err
 	}

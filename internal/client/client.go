@@ -102,7 +102,7 @@ func untrusted(err error) error {
 // openLog opens the daemon's log, readable by its owner only: it can quote
 // commands and configs. A log from an earlier release is tightened too.
 func openLog(path string) (*os.File, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
 	if err != nil {
 		return nil, err
 	}

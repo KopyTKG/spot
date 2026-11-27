@@ -168,7 +168,9 @@ type tileNav struct {
 
 // choose selects the tile under the cursor and returns its section's id.
 func (n *tileNav) choose() string {
-	n.active.flow.SelectChild(n.active.children[n.cur])
+	if n.cur >= 0 && n.cur < len(n.active.children) {
+		n.active.flow.SelectChild(n.active.children[n.cur])
+	}
 	return n.active.id
 }
 
@@ -195,6 +197,9 @@ func (n *tileNav) show(g *tileGroup) {
 func (n *tileNav) move(dx, dy int) bool {
 	gi := slices.Index(n.groups, n.active)
 	g := n.groups[gi]
+	if len(g.children) == 0 {
+		return false
+	}
 	idx := n.cur
 	row, col := idx/g.cols, idx%g.cols
 	last := len(g.children) - 1

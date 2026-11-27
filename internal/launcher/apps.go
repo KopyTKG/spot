@@ -401,9 +401,7 @@ func buildLaunch(e *AppEntry, c *config.AppsConfig, home string, t target) launc
 	if dir == "" {
 		dir = e.WorkDir
 	}
-	if strings.HasPrefix(dir, "~") {
-		dir = home + strings.TrimPrefix(dir, "~")
-	}
+	dir = expandHome(dir, home) // not ~someone-else, which is no folder of ours
 	var env []string
 	for k, v := range l.Env {
 		env = append(env, k+"="+v)
@@ -630,11 +628,16 @@ func (s *frecencyStore) bump(id string, now time.Time) {
 	b, _ := json.Marshal(s.data)
 	s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err == nil {
-		tmp := s.path + ".tmp"
-		_ = os.Remove(tmp) // a leftover would keep its mode
-		if os.WriteFile(tmp, b, 0o600) == nil {
-			_ = os.Rename(tmp, s.path)
+		// A name of its own (mode 0600): two one-shot runs may write at once.
+		f, err := os.CreateTemp(filepath.Dir(s.path), "frecency-*.tmp")
+		if err != nil {
+			return
 		}
+		_, werr := f.Write(b)
+		if cerr := f.Close(); werr == nil && cerr == nil && os.Rename(f.Name(), s.path) == nil {
+			return
+		}
+		_ = os.Remove(f.Name())
 	}
 }
 

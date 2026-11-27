@@ -43,7 +43,8 @@ type (`[[sources]]`), and when you submit. Open only configs you would run as a
 script, and read one from someone else first.
 
 A dialog with a `password` item is always shown by the calling process, never by the
-daemon, so the password does not pass through it.
+daemon, so the password does not pass through it. A dialog takes at most 8 MB on
+stdin.
 
 ```
 spot [flags] <config>

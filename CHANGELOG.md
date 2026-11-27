@@ -3,6 +3,19 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.8.5 — 2026-11-27
+
+The rest of the audit ([#31](https://github.com/KopyTKG/spot/issues/31)).
+
+- Choosing in an empty tile section no longer crashes the daemon.
+- **No more freezes on awkward input:** thousands of identical switch rows took minutes to build, and
+  a long repetitive row made every keystroke slow.
+- Limits on stdin (8 MB), config files, waiting dialogs, requests read at once and image dimensions.
+- A value holding a NUL byte stops the submit instead of leaving `SPOT_VALUE_<ID>` empty.
+- The daemon itself refuses password dialogs; a process asking for a password writes no core dump.
+- Only a real socket is removed at the socket path; `~name` working folders are no longer mangled;
+  temporary and log files are opened safely; the examples quote `$XDG_RUNTIME_DIR`.
+
 ## 0.8.4 — 2026-11-27
 
 Security, from an audit ([#31](https://github.com/KopyTKG/spot/issues/31)):

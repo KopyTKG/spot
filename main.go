@@ -154,7 +154,7 @@ func main() {
 
 	// Parse here too: errors should surface before any window or daemon, and
 	// we need to know whether the dialog wants stdin.
-	data, err := os.ReadFile(cfgPath)
+	data, err := config.ReadFile(cfgPath)
 	if err != nil {
 		failDialog(cfgPath, "%v", err)
 	}
@@ -170,6 +170,9 @@ func main() {
 			for sc.Scan() {
 				b.WriteString(sc.Text())
 				b.WriteByte('\n')
+				if b.Len() > protocol.MaxStdin {
+					failDialog(cfgPath, "more than %d MB on stdin", protocol.MaxStdin>>20)
+				}
 			}
 			req.Stdin = b.String()
 			break
@@ -179,7 +182,7 @@ func main() {
 	var resp protocol.Response
 	// A password never goes through the daemon, and root gets no daemon: one
 	// running with its rights would take requests for as long as it lives.
-	if oneshot || cfg.HasPassword() || os.Geteuid() == 0 || os.Getenv("SPOT_NO_DAEMON") != "" || os.Getenv("WAYLAND_DISPLAY") == "" {
+	if oneshot || cfg.HasPassword() || daemon.IsRoot() || os.Getenv("SPOT_NO_DAEMON") != "" || os.Getenv("WAYLAND_DISPLAY") == "" {
 		resp = daemon.RunOneshot(req)
 	} else if r, ok := client.ViaDaemon(req); ok {
 		resp = r

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
@@ -33,6 +34,7 @@ type shownRow struct {
 
 func parseSwitchRows(item *config.Item, lines []string) *switchRows {
 	s := &switchRows{rows: map[string]*switchRow{}, shown: map[string]shownRow{}, undo: map[uintptr]func(){}}
+	next := map[string]int{}
 	for _, line := range lines {
 		parts := strings.SplitN(line, "\t", 3)
 		label := parts[0]
@@ -43,8 +45,15 @@ func parseSwitchRows(item *config.Item, lines []string) *switchRows {
 		if len(parts) > 2 {
 			r.on, r.has = item.ParseSwitch(parts[2])
 		}
-		for s.rows[label] != nil { // rows are told apart by what they show
-			label += " (" + r.key + ")"
+		if s.rows[label] != nil { // rows are told apart by what they show
+			base := label + " (" + r.key + ")"
+			label = base
+			// Counting on from the last number used: repeated lines must not make
+			// each one try every name before it.
+			for s.rows[label] != nil {
+				next[base]++
+				label = fmt.Sprintf("%s #%d", base, next[base]+1)
+			}
 		}
 		s.rows[label] = r
 		s.labels = append(s.labels, label)

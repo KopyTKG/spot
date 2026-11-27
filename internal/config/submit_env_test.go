@@ -9,7 +9,10 @@ import (
 
 func TestSubmitValuesCannotBecomeCommands(t *testing.T) {
 	nasty := "$(echo INJECTED); `echo INJECTED` \"x\" 'y' -- *"
-	env := SubmitEnv([]string{"PATH=/usr/bin", "SPOT_VALUE_OTHER=stale", "SPOT_ACTIVE=stale"}, "sec", map[string]string{"my-host": nasty})
+	env, err := SubmitEnv([]string{"PATH=/usr/bin", "SPOT_VALUE_OTHER=stale", "SPOT_ACTIVE=stale"}, "sec", map[string]string{"my-host": nasty})
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := exec.Command("sh", "-c", `printf '%s|%s|%s' "$SPOT_VALUE_MY_HOST" "${SPOT_VALUE_OTHER-unset}" "$SPOT_ACTIVE"`)
 	c.Env = env
 	out, err := c.Output()
@@ -35,5 +38,11 @@ func TestPasswordDialogsAreRecognised(t *testing.T) {
 	c, err := ParseConfig([]byte("[[items]]\ntype='password'\nid='p'\n"), noEnv)
 	if err != nil || !c.HasPassword() {
 		t.Errorf("HasPassword = %v, %v", c != nil && c.HasPassword(), err)
+	}
+}
+
+func TestAValueWithNULStopsTheSubmit(t *testing.T) {
+	if _, err := SubmitEnv(nil, "", map[string]string{"dir": "a\x00b"}); err == nil {
+		t.Error("the command would run with an empty variable")
 	}
 }

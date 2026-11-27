@@ -79,22 +79,32 @@ func isSubsequence(s, q string) bool {
 // subsequenceSpan reports whether q's letters occur in s in order, and how
 // wide the tightest greedy match starting at the first hit is.
 func subsequenceSpan(s, q string) (int, bool) {
-	sr, qr := []rune(s), []rune(q)
+	qr := []rune(q)
+	if len(qr) == 0 {
+		return 0, false
+	}
+	// last[j] is the latest place a match of q[:j+1] seen so far can start. One
+	// pass over s: trying every start is quadratic on a repetitive row, and this
+	// runs on the UI thread at every keystroke.
+	last := make([]int, len(qr))
+	for j := range last {
+		last[j] = -1
+	}
 	best, found := 0, false
-	for start := range sr {
-		if sr[start] != qr[0] {
-			continue
-		}
-		qi, end := 0, start
-		for i := start; i < len(sr) && qi < len(qr); i++ {
-			if sr[i] == qr[qi] {
-				qi++
-				end = i
+	for i, r := range []rune(s) {
+		for j := len(qr) - 1; j >= 0; j-- { // downwards: a rune of s is used once
+			if r != qr[j] {
+				continue
 			}
-		}
-		if qi == len(qr) {
-			if span := end - start + 1; !found || span < best {
-				best, found = span, true
+			if j == 0 {
+				last[0] = i
+			} else {
+				last[j] = last[j-1]
+			}
+			if j == len(qr)-1 && last[j] >= 0 {
+				if span := i - last[j] + 1; !found || span < best {
+					best, found = span, true
+				}
 			}
 		}
 	}

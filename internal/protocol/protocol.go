@@ -95,3 +95,7 @@ func EnvLookup(env []string) func(string) (string, bool) {
 		return v, ok
 	}
 }
+
+// MaxStdin is how much a dialog takes on stdin. A request has room for it also
+// when every byte needs escaping.
+const MaxStdin = 8 << 20

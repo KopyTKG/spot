@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -27,6 +28,9 @@ func RunOneshot(req protocol.Request) protocol.Response {
 	j, err := scheduler.BuildJob(req)
 	if err != nil {
 		return protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true}
+	}
+	if j.Cfg.HasPassword() {
+		noCoreDump()
 	}
 	// Without a display GTK would end the process itself, with the status that
 	// means "cancelled" and no word to anyone.
@@ -51,5 +55,16 @@ func RunOneshot(req protocol.Request) protocol.Response {
 		return r
 	default:
 		return protocol.Response{Code: protocol.ExitError, Stderr: "spot: the dialog could not be shown\n", Fault: true}
+	}
+}
+
+// noCoreDump keeps a password out of a crash dump on disk. Only the soft limit,
+// and only in a process that asks for a password: the daemon starts your
+// programs, which would inherit it.
+func noCoreDump() {
+	var l syscall.Rlimit
+	if syscall.Getrlimit(syscall.RLIMIT_CORE, &l) == nil {
+		l.Cur = 0
+		syscall.Setrlimit(syscall.RLIMIT_CORE, &l)
 	}
 }
