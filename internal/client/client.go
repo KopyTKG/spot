@@ -99,6 +99,20 @@ func untrusted(err error) error {
 	return err
 }
 
+// openLog opens the daemon's log, readable by its owner only: it can quote
+// commands and configs. A log from an earlier release is tightened too.
+func openLog(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	// Only a plain file: log = "/dev/null" must not have its mode changed.
+	if st, err := f.Stat(); err == nil && st.Mode().IsRegular() {
+		_ = f.Chmod(0o600)
+	}
+	return f, nil
+}
+
 // spawnDaemon starts `spot daemon` detached from this process and terminal.
 func spawnDaemon() error {
 	exe, err := os.Executable()
@@ -108,7 +122,7 @@ func spawnDaemon() error {
 	logf := os.NewFile(0, os.DevNull)
 	if path := config.LogPath(); path != "" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
-			if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); err == nil {
+			if f, err := openLog(path); err == nil {
 				defer f.Close()
 				logf = f
 			}
