@@ -484,7 +484,8 @@ the machine. **Not** against something already running as you or as root.
 | S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
 | S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, is refused: the kernel can only add access, not carve an exception out of it |
-| S37 | The base grant names what a host needs file by file; it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run` |
+| S37 | The base grant is the short list in [the sandbox](#the-base-grant); it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run`, and libraries may be read, not executed |
+| S43 | A host whose file grant no longer matches the file, because an update replaced it, is restarted with new grants before it is asked anything else |
 | S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes |
 
 **Requests are open to your programs.** Any program of yours can `spot call` any request of an
@@ -498,9 +499,11 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 - With a `socket` permission, or write access to something that runs later, a mod can leave the
   sandbox.
-- `run` binds the kernel to the listed programs, but the system's library folders hold programs too,
-  and a mod that may write a folder can put one there and start it through the dynamic loader. All of
-  them run in the same sandbox.
+- **Not only the listed programs can run.** `/usr/lib` must be readable for libraries, and it holds
+  programs too (525 binaries on the tested machine). The dynamic loader starts any of them, and any
+  program in a folder the mod may write. A mod's Lua cannot ask for that (`spot.run` takes listed
+  programs only), but a listed program that starts others, such as a shell, can. They run in the same
+  sandbox and gain no access by it. Programs in `/usr/bin` that are not listed cannot even be read.
 - A network permission is **by port, not by destination**: port 443 reaches any machine, and a port
   also reaches whatever listens on **this machine** and your local network, such as a development
   server that trusts local callers. Name lookups can carry data out.
@@ -516,7 +519,7 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 | Question | Why it matters |
 |----------|----------------|
-| What exactly is in the base grant, and which libraries does each program need? | Too little and programs fail, too much and S37 means nothing |
+| Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
 | How are network permissions written, and do the port rules hold? | Port rules are untested |
 | How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
 | How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
@@ -564,13 +567,34 @@ python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # t
 
 - Landlock ABI 11 limits UDP by port as well as TCP, so UDP is granted for port 53 only (to any
   address). Sending also needs a rule for binding port 0.
-- What a host gets: the system libraries, the programs listed in `run` and their interpreters (read,
-  execute), the few files they need, what its permissions list, and `/dev/null`. **Not the mods
+- What a host gets is the [base grant](#the-base-grant) and what its permissions list. **Not the mods
   folder**: the daemon reads every file once, checks the hash and sends the bytes to the host.
 - No other process can be read, traced or signalled, abstract sockets included.
 - `sudo` and `pkexec` do not work: a sandboxed process cannot gain rights.
-- Parser hosts started for `spot parse` or a dialog get the base only, so even a bug in the Lua
-  restrictions leaves them with nothing to reach.
+- Parser hosts, also those started for `spot parse` or a dialog, get their own program file and
+  nothing else, so even a bug in the Lua restrictions leaves them with nothing to reach.
+
+#### The base grant
+
+| For | Granted |
+|-----|---------|
+| every host | **its own program file** (execute and read). A host that runs no programs needs nothing else |
+| a mod with `run` | `/dev/null`; the dynamic loader (execute); `/usr/lib` (**read, not execute**) |
+| correct local time | `/etc/localtime`, `/usr/share/zoneinfo` (read) |
+| user and group names | `/etc/passwd`, `/etc/group` (read) |
+| each entry of `run` | that program, and its interpreter if it is a script (execute) |
+
+Nothing else of `/etc` is included: no tested program needed `ld.so.cache`, `nsswitch.conf`, the
+terminal descriptions, `/dev/urandom` or translations. Name lookups may need more; that comes with
+`net` and is still to be tested. What a program needs beyond this, such as `/proc` for `ps`,
+`/sys` for `brightnessctl` or its own configuration file, is a permission the mod asks for.
+
+**An update can take a grant away.** Landlock binds a rule to the file, not to its path. When a file
+granted by name is replaced by renaming another over it, as package updates do, the running host is
+refused the new one. Folder grants are not affected. So the daemon remembers which file each name
+meant when the host started, compares before it asks the host anything, and **restarts the host** when
+one changed (S43). This is not a failure of the mod and is not reported as one. A program you wrote is
+a different matter: its approved hash no longer matches (S10).
 
 ### Data must not become commands
 
@@ -938,6 +962,7 @@ works.
 | A function runs longer than 5 s | Interrupted inside the host; `spot.run` kills the process group |
 | The host does not answer (stuck where it cannot be interrupted) | The daemon kills it and the commands it started, and starts a new one |
 | A mod uses more than its memory limit | Its host dies; the daemon starts a new one |
+| A file granted by name was replaced (a system update) | The host is restarted with new grants; nothing is reported |
 | A host keeps dying | It is restarted with growing pauses (2 s, 10 s, 1 min, then every 5 min), and you are told once. Not disabled for good: data from outside, such as a network name that trips a slow pattern, must not be able to switch a mod off |
 | A `from` names a mod that is not running | The dialog says so under the item |
 
@@ -1087,7 +1112,18 @@ With the extended filter, `sh` pipelines, `python3` and `node` and Go starting p
 `brightnessctl` still worked. The re-exec was checked from 200 threads, and the second stage started on
 its own refused to go on.
 
-**Still to test:** older kernels (if the minimum is to be lowered), TCP port rules and name lookups through them, the base grant, the real host's size and start
+**The base grant**, 29 programs (`ss`, `hyprctl`, `systemctl`, `wpctl`, `bluetoothctl`, `pacman`, `git` and
+others), each with the sockets or folders its permissions would add:
+
+| Tried | Result |
+|---|---|
+| The base above | 27 gave the same result as unsandboxed; `ip` lacked a netlink permission, `sensors` its config file |
+| A Go host with gopher-lua, only its own file granted | runs Lua and executes itself again; 4.2 MB without GTK |
+| A listed shell starting `/usr/bin/curl`, directly or through the loader | refused |
+| A listed shell starting a program in `/usr/lib` through the loader | **starts**, still confined |
+| A file or program granted by name, then replaced by rename | **refused** from then on; through a folder grant it keeps working |
+
+**Still to test:** older kernels (if the minimum is to be lowered), other distributions, TCP port rules and name lookups through them, the real host's start
 time, and enforcement of cgroup limits.
 
 ### First version
