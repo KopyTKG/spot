@@ -286,6 +286,8 @@ any mod code runs:
 - `io`, `os`, `package` and `debug` are not loaded.
 - The Lua library's base functions include some that read files, `dofile` and `loadfile`, even with
   `io` left out. An allow-list keeps them out, and also whatever a later version of the library adds.
+- The Lua state is created with no libraries opened (not opened and then removed), a bounded call
+  stack and registry, and metatables of what spot hands out cannot be reached.
 - Code is loaded only by spot, and only from the mods folder: `spot.use` (parsers) and
   `spot.require` (a provider's own files).
 
@@ -372,6 +374,7 @@ what it means. There is no redirection of any kind: to keep output, use `spot.wr
 | Output kept from a command (`stdout`, `stderr`) | 8 MB | the program is killed beyond it |
 | Size of a file read | 8 MB | |
 | Timers per mod | 64 | |
+| Notifications per mod | a few per hour | so that failing and recovering in turn cannot flood |
 | Waiting output per watcher | capped | a watcher that does not read is dropped |
 
 Programs a mod starts get their normal memory limit back before they run, set by the program's own
@@ -387,7 +390,7 @@ not start under the host's. Their memory is therefore **not limited**.
 | Resource limits | With delegation, `pids.max` and `memory.max` on a mod's cgroup would cover its programs too (settable in a test; enforcement not yet tried). Inside the sandbox a program cannot move itself out (it cannot write `/sys/fs/cgroup`; untested). Without delegation, ask the user's `systemd` for a scope per mod (`MemoryMax`, `TasksMax`); without that, programs have **no** memory or process limit |
 | Channel | A socket pair, not a pipe: a program could write into a pipe through `/proc` |
 | Open files | All beyond stderr are marked close-on-exec (`close_range`) before any program starts |
-| Reading each other | The daemon and the hosts set `PR_SET_DUMPABLE` to 0, so that other processes of yours cannot read their environment |
+| Reading each other | Mod hosts set `PR_SET_DUMPABLE` to 0. The daemon **cannot**: tested, the desktop portal then refuses it the desktop's settings. The sandbox already keeps a mod's programs from reading it (tested for a parent process) |
 | Environment | Hosts start with the small environment of S11 |
 
 ## Security
@@ -438,7 +441,7 @@ the machine. **Not** against something already running as you or as root.
 | S9 | `spot.require` stays inside the mod's own folder, links included |
 | S10 | A program is found in a fixed `PATH` of system folders. One in a folder your user can write, such as your own scripts, must be listed by full path; its hash is then part of the approval, and it is flagged |
 | S11 | A program started by a mod gets a small environment (`HOME`, `LANG`, the fixed `PATH`; the runtime folder only with a `socket` permission) plus the variables the mod has `env` permission for, **not the daemon's**, which may hold secrets |
-| S12 | A program started by a mod inherits no open files, and can neither reach the channel to the daemon nor read its host's environment |
+| S12 | A program started by a mod inherits no open files, and can neither reach the channel to the daemon nor read its host's or the daemon's environment |
 | S26 | A program gets only the variables of S11 and those listed in `setenv` |
 | S27 | A program's working folder stays inside what the mod may read |
 | S42 | What a mod passes to `spot` is copied once, without metamethods, and checked as copied; numbers that are not finite, lists with holes and deep nesting are refused |
@@ -455,7 +458,7 @@ the machine. **Not** against something already running as you or as root.
 | S32 | Text from a mod cannot change how the approval, `show`, `diff`, `log` or `audit` read |
 | S38 | A mod is scanned before approval by reading its code, never by running it, and the same bytes are then hashed and loaded |
 | S39 | The scanner never calls a mod safe; flagged or not, you are told to read it |
-| S40 | `spot` appears in a mod only as `spot.name`, `_G` not at all, and the program in `spot.run` / `spot.pipe` is written out; a mod that does otherwise is refused |
+| S40 | `spot` appears in a mod only as what is being called (`spot.run(…)`, `spot.json.encode(…)`) or as `spot.config`; `_G` not at all; the program in `spot.run` / `spot.pipe` is written out. A mod that does otherwise is refused |
 | S17 | spot refuses a mods folder, mod file, approval record, `daemon.toml`, dialog that uses mods, system `PATH` folder or host binary that others than you or root can write, checking parent folders and symlinks too. The host binary is the one beside spot's own, never one found in `PATH` |
 | S18 | spot never downloads or updates a mod |
 
@@ -515,6 +518,8 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 | What exactly is in the base grant, and which libraries does each program need? | Too little and programs fail, too much and S37 means nothing |
 | How are network permissions written, and do the port rules hold? | Port rules are untested |
 | How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
+| How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
+| Should a security switch (a lock, a firewall) be able to say "unknown" instead of showing the last value when its mod is down? | A stale "on" is worse than no answer |
 | Should a `run` permission be able to limit arguments? | Less pressing now that the sandbox holds, but it narrows what a granted socket gives |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
 | Should unquoted `{id}` for `stdin = true` lists be turned off unless a config asks for it? | It is a way into a shell today; changing it breaks existing configs |
@@ -749,8 +754,9 @@ list lives in spot and grows; a mod cannot change it or switch a finding off. Th
 `spot mods check`, so authors and CI see it, and parsers are scanned like providers.
 
 **The strict form (S40)** is what makes scanning worth something. Without it, copying `spot` into a
-variable and building a name from pieces hid everything from a test scanner. With `spot` only ever
-written as `spot.name`, which of spot's functions a mod can call, and which programs its Lua starts,
+variable and building a name from pieces hid everything from a test scanner. Allowing `spot.name` as a
+value was still not enough: `pcall(spot.run, …)`, or handing `spot.run` to another function, hid the
+program again. With `spot` only ever written where it is called, which of spot's functions a mod can call, and which programs its Lua starts,
 is known before it runs. It is a rule about how code is written, not a judgement of what it does.
 
 Arguments can still be built while the mod runs, and a scanner can be fooled. **The sandbox is the
@@ -931,7 +937,9 @@ is killed, and with it the provider using it.
 This rests on the allow-list and the separate Lua state, and, for a parser running by itself, on the
 [sandbox](#the-sandbox) as well. It has been checked by a few tests, not audited.
 
-The daemon never runs as root; privileged actions go through your own helper (`sudo`, `pkexec`).
+The daemon never runs as root, and a mod cannot gain rights: `sudo` and `pkexec` do not work in the
+sandbox. Something that needs root is not a mod's job; do it from a dialog or a script of your own,
+outside spot's mods.
 
 ## Building it
 
