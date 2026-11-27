@@ -85,6 +85,16 @@ func usageError(format string, args ...any) {
 func main() {
 	protocol.Version = version
 
+	if len(os.Args) > 1 && (os.Args[1] == "get" || os.Args[1] == "call" || os.Args[1] == "watch") {
+		os.Exit(askMod(os.Args[1], os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "parse" {
+		os.Exit(parseCommand(os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "mods" {
+		os.Exit(modsCommand(os.Args[2:]))
+	}
+
 	var (
 		arg                             string
 		chain, last, sub, back, oneshot bool
@@ -161,6 +171,9 @@ func main() {
 	cfg, err := config.ParseConfig(data, os.LookupEnv)
 	if err != nil {
 		failDialog(cfgPath, "%s: %v", cfgPath, err)
+	}
+	for _, w := range append(config.UnknownKeys(data), cfg.UnquotedStdin()...) {
+		fmt.Fprintf(os.Stderr, "spot: %s: warning: %s\n", cfgPath, w)
 	}
 	for _, it := range cfg.Items {
 		if it.Type == "list" && it.Stdin {

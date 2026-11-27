@@ -40,6 +40,19 @@ ambient widgets; [eww](https://github.com/elkowar/eww) and Waybar do that.
   and `offset_*` put a dialog anywhere. Dialog config and CSS are re-read on every call.
 - **Fast.** The daemon keeps the window (and the launcher's app index) warm.
 
+## Mods
+
+A **mod** is a small Lua program the daemon runs for you, in a kernel sandbox, only after you approved
+what it asks for. It gets and parses data once and hands it to dialogs, bars and scripts:
+
+```sh
+spot mods allow sockets                  # read it, type what you accept
+spot watch --waybar sockets.count        # for a bar
+spot sockets.toml                        # a dialog: from = "sockets.table"
+```
+
+Experimental since 0.9; needs Linux with Landlock ABI 11. Start with [`examples/mods`](examples/mods/).
+
 ## A quick look
 
 A form:
@@ -161,7 +174,7 @@ For **every key in one runnable file**, see
 ## Install
 
 From the AUR: `spot-bin` (the prebuilt release binary) or `spot-git` (built from the repository
-head). Both install the README, docs and example configs to `/usr/share/doc/spot/` and a systemd
+head). Both install `spot`, the mod host `spot-mod-host` beside it, and the README, docs and example configs to `/usr/share/doc/spot/` and a systemd
 user unit for the daemon (not enabled; see
 [`docs/daemon.md`](docs/daemon.md#systemd-user-service)). Releases are cut manually; see
 [`packaging/aur/README.md`](packaging/aur/README.md).
@@ -174,7 +187,7 @@ Requires Go ≥ 1.26 (see `go.mod`), the GTK4 development headers and the gtk4-l
 # Arch
 sudo pacman -S gtk4 gtk4-layer-shell go
 
-go build -o spot .        # or: just build
+go build -o spot .        # or: just build, which also builds spot-mod-host (for mods)
 go test ./...             # or: just test (no display needed)
 go test -tags gui ./...   # also the dialog tests; they need a Wayland session (nothing is drawn)
 ```
@@ -189,9 +202,12 @@ The code lives under [`internal/`](internal/), with `main.go` only reading flags
 | `protocol`, `client` | the socket messages and the command line's side of them |
 | `scheduler` | which dialog is showing, covered or waiting |
 | `daemon` | serving the socket and the one-shot run |
+| `mod…`, `sandbox`, `parser`, `provider`, `scan`, `approval`, `luaenv` | mods: reading, approving and running them ([`docs/modding.md`](docs/modding.md)) |
 | `ui` | GTK: the window, and one `item_*.go` per widget type |
 
 Only `daemon` and `ui` use GTK. Display tests: `go test -tags gui ./internal/ui`.
+`just test-mods` runs the mod tests and fails if any is skipped: run it before releasing anything
+that touches mods, on a kernel with Landlock ABI 11.
 
 `just build` and `just package` bake the git tag into `spot --version`; a plain `go build`
 reports `dev`. To set it by hand: `go build -ldflags "-X main.version=1.2.3" -o spot .`

@@ -1,0 +1,11 @@
+type        = "provider"
+api         = 1
+version     = "1.0.0"
+description = "Every TCP and UDP socket, for a table and a bar"
+uses        = ["ss"]
+
+[permissions.run]
+ss = "list the sockets"
+
+[permissions.netlink]
+diag = "ss asks the kernel for the sockets"

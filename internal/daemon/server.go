@@ -85,6 +85,7 @@ func RunDaemon() int {
 		})
 	}()
 
+	defer closeMods()
 	if code := app.Run(nil); code > 0 {
 		return protocol.ExitError
 	}
@@ -131,10 +132,11 @@ func handle(conn net.Conn, sh *ui.Shell) {
 		fmt.Fprintf(os.Stderr, "spot: refused a connection: %v\n", err)
 		return
 	}
-	reply := func(r protocol.Response) {
+	send := func(r protocol.Response) error {
 		r.Version = protocol.Version
-		json.NewEncoder(conn).Encode(r)
+		return json.NewEncoder(conn).Encode(r)
 	}
+	reply := func(r protocol.Response) { _ = send(r) }
 
 	reading <- struct{}{}
 	req, err := readRequest(conn)
@@ -143,7 +145,22 @@ func handle(conn net.Conn, sh *ui.Shell) {
 		return
 	}
 
+	if pid, err := protocol.PeerPID(conn); err == nil && fromAMod(pid) {
+		fmt.Fprintf(os.Stderr, "spot: refused a connection from a mod (pid %d)\n", pid)
+		return
+	}
+
 	switch req.Op {
+	case protocol.OpGet, protocol.OpCall, protocol.OpWatch, protocol.OpReload, protocol.OpMods, protocol.OpParse:
+		if req.Version != protocol.Version {
+			reply(protocol.Response{Stale: true})
+			return
+		}
+		if req.Op == protocol.OpWatch {
+			watch(conn, req, send)
+			return
+		}
+		reply(modRequest(req))
 	case protocol.OpPing:
 		reply(protocol.Response{})
 	case protocol.OpQuit:
@@ -165,7 +182,7 @@ func show(conn net.Conn, sh *ui.Shell, req protocol.Request, reply func(protocol
 		reply(protocol.Response{Stale: true})
 		return
 	}
-	j, err := scheduler.BuildJob(req)
+	j, err := scheduler.BuildJob(req, dialogMods{})
 	if err != nil {
 		reply(protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true})
 		return

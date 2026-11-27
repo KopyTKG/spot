@@ -1,8 +1,9 @@
-# Modding: daemon mods (draft)
+# Modding: daemon mods
 
-> **Draft for review. Nothing described here exists yet.** It proposes the mod API for 0.9
-> ([#16](https://github.com/KopyTKG/spot/issues/16)); names and behaviour are all open to change.
-> Questions to answer are [at the end](#open-questions).
+> **Experimental, in 0.9.** This is the design the mods were built from and its reference: names and
+> behaviour may still change until menu trees (0.10) have used them. What is not built is listed in the
+> [roadmap](roadmap.md#where-09-stands). To try one, start with the [examples](../examples/mods/).
+> The [questions at the end](#open-questions) are still welcome.
 
 A **daemon mod** is a Lua program the spot daemon looks after. It loads and parses data once, keeps
 it, and hands it to anything that asks: dialogs, a bar, scripts. It replaces the shell script that
@@ -21,7 +22,7 @@ that hangs or eats memory can be killed without taking your launcher and menus w
 ```
 
 **UI mods** (behaviour inside one dialog) are a separate layer. They come later, with no release set,
-and are not covered here. The work for 0.9 is tracked in the [milestone](https://github.com/KopyTKG/spot/milestone/1).
+and are not covered here. The work is tracked in the [milestone](https://github.com/KopyTKG/spot/milestone/1).
 
 ## Types of mod
 
@@ -60,11 +61,14 @@ Its `init.lua` returns exactly one function:
 return function(input, options)
   local rows = {}
   for line in input:gmatch("[^\n]+") do
-    local proto, state, _, _, addr, peer = line:match("(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+    -- netid, state, two queue sizes (numbers), local and peer address
+    local proto, state, addr, peer = line:match("^(%a[%w_]*)%s+([%u%-%d]+)%s+%d+%s+%d+%s+(%S+)%s+(%S+)")
     if proto then
       rows[#rows + 1] = { label = ("%-4s %-9s %s  %s"):format(proto, state, addr, peer), key = addr }
     end
   end
+  -- Text that is not ss output must not look like "no sockets".
+  if #rows == 0 and input:match("%S") then error("this is not output of ss -H -tuna") end
   return rows
 end
 ```
@@ -100,7 +104,7 @@ ss = "list the open sockets"
 diag = "ss asks the kernel for the sockets"
 ```
 
-Enable the provider in `~/.config/spot/daemon.toml`, and approve what it asks for. The parser it uses
+Enable the provider in `~/.config/spot/mods.toml`, and approve what it asks for. The parser it uses
 comes with it:
 
 ```toml
@@ -257,10 +261,10 @@ the wrong column.
 | | |
 |---|---|
 | A mod | a folder `<name>/` with `init.lua` and `mod.toml` (optional for a provider). A provider can load other files of its folder with `spot.require` |
-| Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `daemon.toml` |
+| Where | `$XDG_CONFIG_HOME/spot/mods/`, or `mods_dir` in `mods.toml` |
 | Name | `[a-z][a-z0-9_-]*`; it prefixes everything the mod publishes |
-| Enabled | a provider: listed in `mods` in `daemon.toml` **and** approved with `spot mods allow`. A parser: approved, and used by something. Otherwise it never runs |
-| Settings | the `[mod.<name>]` table of `daemon.toml`, visible to the mod as `spot.config` |
+| Enabled | a provider: listed in `mods` in `mods.toml` **and** approved with `spot mods allow`. A parser: approved, and used by something. Otherwise it never runs |
+| Settings | the `[mod.<name>]` table of `mods.toml`, visible to the mod as `spot.config` |
 
 ## The API
 
@@ -332,7 +336,7 @@ message on stderr, and in a dialog the control goes back to what it showed.
 | `spot.list(path)` | The names in a folder |
 | `spot.exists(path)` | `"file"`, `"dir"` or `nil` |
 | `spot.every(ms, fn)`, `spot.after(ms, fn)` | Timers |
-| `spot.json.encode(v)`, `spot.json.decode(s)` | JSON |
+| `spot.json.encode(v)`, `spot.json.decode(s)` | JSON. A `null` is left out, in a list too, so that lists never have holes |
 | `spot.env(name)`, `spot.time()` | An environment variable; seconds since 1970 |
 | `spot.use(name)`, `spot.require(file)` | A parser's function; another file of this mod |
 | `spot.log(message)` | To the daemon log, with the mod's name |
@@ -366,7 +370,7 @@ what it means. There is no redirection of any kind: to keep output, use `spot.wr
 | Limit | Default | |
 |-------|---------|---|
 | Time of one function | 5 s | then it is interrupted, or the host is killed |
-| Memory of a mod host | 256 MB | a data limit (`RLIMIT_DATA`); `memory` in `[mod.<name>]` changes it |
+| Memory of a mod host | 256 MB | a data limit (`RLIMIT_DATA`); `memory` in `[mod.<name>]`, in megabytes from 64 to 16384, changes it and the scope's |
 | Rows in a value | 10,000 | larger values are refused |
 | Published values per mod | 100 | starting values, still to be measured |
 | One field | 4 KB | |
@@ -390,9 +394,9 @@ under it. What bounds those programs is the limit of the mod's scope.
 | | |
 |---|---|
 | One scope per mod | The daemon starts each host in a `systemd` scope of its own in your user session (`systemd-run --user --scope`, about 6 ms). The host stays the daemon's child and keeps the channel; its second stage drops what only `systemd-run` needed from the environment. No delegation, whatever started the daemon |
-| Stopping | `cgroup.kill` on the mod's scope **and** a child subreaper: the first misses a program that moved itself to another group, the second finds it. The adopting process is the daemon or a supervisor per mod, never the host that is killed. A job handed to `systemd` is not stopped by either |
+| Stopping | `cgroup.kill` on the mod's scope. Programs the host is waiting for are also killed by the host itself when the daemon goes. A job handed to `systemd` is not stopped. (**Later:** a child subreaper, for what detaches itself where there is no scope) |
 | Resource limits | `MemoryMax`, `MemorySwapMax=0` and `TasksMax` on the scope cover the host and everything it starts. **Without `MemorySwapMax=0` a memory limit does nothing** where there is swap. At the memory limit the kernel kills the biggest process, usually a program, and the host reports it. A sandboxed program cannot leave the scope or raise its limits |
-| Without a `systemd` user session | **No** memory or process limit, stopping only by the subreaper; `spot mods` says so |
+| Without a `systemd` user session | **No** memory or process limit, and a program that detaches itself is not stopped with the mod; `spot mods` says so |
 | Channel | A socket pair, not a pipe: a program could write into a pipe through `/proc` |
 | Open files | All beyond stderr are marked close-on-exec (`close_range`) before any program starts |
 | Reading each other | Mod hosts set `PR_SET_DUMPABLE` to 0. The daemon **cannot**: tested, the desktop portal then refuses it the desktop's settings. The sandbox already keeps a mod's programs from reading it (tested for a parent process) |
@@ -474,7 +478,7 @@ the machine. **Not** against something already running as you or as root.
 | S19 | A host publishes and answers only under its own mod's name; the daemon enforces it, whatever the host says |
 | S20 | Everything from a host is checked: size, form, names. Garbled messages kill it |
 | S21 | Socket connections are accepted only from your own user, checked on both ends; the daemon also refuses one from a mod host or anything it started |
-| S22 | Neither the daemon nor a mod host runs as root or with capabilities (any of uid, euid, gid, egid 0, or an effective capability); they refuse to start |
+| S22 | No mod host runs as root or with capabilities (any of uid, euid, gid, egid 0, or an effective or permitted capability); it refuses to start. The daemon refuses root, not capabilities, which a desktop may pass on and dialogs must survive |
 | S23 | A mod cannot exhaust spot: the [limits](#limits) on time, memory, rows, values, message size, programs, bytes written, log size and notifications |
 | S24 | Every `spot` call (command, file access) and every refusal by spot is logged where mods cannot write, readable only by you |
 | S29 | Stopping a mod stops what it started |
@@ -487,7 +491,7 @@ the machine. **Not** against something already running as you or as root.
 | S33 | Every mod host puts itself under the sandbox, and checks that it is in it, before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
 | S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included. A permission allows connecting out to the listed ports; no mod accepts connections |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
-| S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, or reaches `/sys/fs/cgroup`, is refused: the kernel can only add access, not carve an exception out of it |
+| S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, or reaches `/sys/fs/cgroup`, is refused, whether the grant holds the place, **a link on the way to it** or where a link leads: the kernel can only add access, not carve an exception out of it |
 | S37 | The base grant is the short list in [the sandbox](#the-base-grant); it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run`, and libraries may be read, not executed |
 | S43 | A host whose file grant no longer matches the file, because an update replaced it, is restarted with new grants before it is asked anything else |
 | S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes, and `listen` for a mod with network access |
@@ -502,6 +506,8 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 #### Not promised
 
+- A script of your own is checked when the mod starts, not at each run: something already running as
+  you can swap it afterwards. (That something could change your shell too.)
 - With a `socket` permission, or write access to something that runs later, a mod can leave the
   sandbox.
 - **Not only the listed programs can run.** `/usr/lib` must be readable for libraries, and it holds
@@ -529,11 +535,18 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 |----------|----------------|
 | Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
 | Do very large DNS answers (which need TCP port 53) and `.local` names have to work? | Both are untested and would likely fail |
-| How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
-| Should a security switch (a lock, a firewall) be able to say "unknown" instead of showing the last value when its mod is down? | A stale "on" is worse than no answer |
-| Should a `run` permission be able to limit arguments? | Less pressing now that the sandbox holds, but it narrows what a granted socket gives |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
-| Should unquoted `{id}` for `stdin = true` lists be turned off unless a config asks for it? | It is a way into a shell today; changing it breaks existing configs |
+
+#### Decided
+
+The design was agreed on 2026-11-27, by its two users, with these answers:
+
+| Question | Answer |
+|----------|--------|
+| A security switch whose mod is down | shows **unknown**, never the last value |
+| Limits on the arguments of a `run` permission | **not in the first version** |
+| Unquoted `{id}` for `stdin = true` lists | first a **warning**, refused in a later release |
+| No `systemd` user session | mods still run, **warned** that there is no memory or process limit |
 
 ### The sandbox
 
@@ -682,6 +695,8 @@ diag = "list the open sockets"
   your user can write, such as your own script, by its full path (S10). File permissions are matched
   after symlinks and `..` are resolved. The same rules hold for `spot.run` and
   for every command of `spot.pipe`.
+- A `write` entry names a **folder**: a file is written by renaming a new one over it, which takes
+  rights on the folder.
 - **`read` and `write` bind the programs too.** A mod allowed to run `cat` reads only what it may
   read. A grant of a folder covers everything below it.
 - The `env` option of `spot.run` / `spot.pipe` sets only variables listed in `setenv`. `LANG`,
@@ -734,6 +749,7 @@ $ spot mods allow keybinds
 
 keybinds 1.2.0 — "Lists your keybindings"
 CHANGED since you approved it on 2026-11-26
+Permissions: 2 NEW, marked below.
 
   NEW  socket  $XDG_RUNTIME_DIR/hypr     !! DANGER: Hyprland runs any command it is
                                             asked to. This mod can do anything you can.
@@ -749,8 +765,7 @@ CHANGED since you approved it on 2026-11-26
 
 Changed files: init.lua (+14 -2), mod.toml (+4)     see them: spot mods diff keybinds
 
-Type the name of each new or dangerous permission to accept it (socket, net, hyprctl),
-or press Enter to refuse:
+Type ALL 3 of these on one line (socket net hyprctl) to accept them, or press Enter to refuse:
 ```
 
 - **What is new comes first**, and is marked. The reason is shown as the author's claim: it can be
@@ -764,6 +779,18 @@ or press Enter to refuse:
 - **Accepting takes effort.** Every `run` entry and every dangerous permission is accepted by typing its name; the prompt
   appears after a short wait, is read from the terminal itself (`/dev/tty`) and discards what was
   typed before it. There is no `--yes`, no "approve all", and no approval without a terminal.
+- **What is typed:** the name of each program in `run`, and the kind (`net`, `socket`, `write`, …)
+  for each kind with something new or dangerous; a mod with neither is approved by typing its own
+  name. Exactly those words, in any order, and nothing else.
+- **The review goes to the terminal too**, not to standard output, so that redirecting output cannot
+  leave a prompt without what it is about.
+- A file of a mod whose name has control or invisible characters is refused.
+- **What is in the folder but is not the mod does not run in its sandbox.** A dialog or a script
+  shipped beside the code runs with all your rights when someone opens or runs it. `allow` and `check`
+  name each, show every command a dialog would run, and approving such a mod takes one more word,
+  `unsandboxed`.
+- The hash covers **every file** of the mod's folder and of the parsers it uses, except a `.git`
+  folder: at most 300 files, 4 MB each, 16 MB in all.
 - **A mod cannot dress up the screen.** A reason is one line of at most 200 characters. Bidirectional
   and invisible characters are removed from reasons and descriptions. `show`, `diff`, `log` and
   `audit` print every control, bidirectional and invisible character **visibly** (`\x1b`,
@@ -808,7 +835,7 @@ you enable it."** It never says that a mod is safe or clean.
 | Flagged | |
 |---------|---|
 | Programs | those that reach other machines, shells and interpreters, `sudo` and `pkexec`, `systemctl`, `crontab`, `chmod`, `base64`, `dd` and the like |
-| Paths | keys, keyrings, browser profiles; places that run code later |
+| Paths | keys, keyrings, browser profiles, shell history; places that run code later (not when a mod only asks to read them) |
 | Text | addresses and IP numbers, long encoded or escaped strings, text assembled from character codes |
 | Permissions | calls with no permission for them, and **permissions asked for but never used** |
 | Shape | arguments that are only known when the mod runs, `unpack` among later arguments of `spot.run`, `string.reverse`, paths assembled from pieces |
@@ -826,6 +853,8 @@ is known before it runs.
 For programs this means the list itself is literal: `spot.run({ "ss", "-tun", port })`. A list built
 elsewhere, a keyed entry (`[1] = …`) or `unpack` in first place is **refused**, not just flagged. A
 duplicate key shows why: `{ [1] = "ss", [1] = x }` runs `x`. It is a rule about how code is written, not a judgement of what it does.
+
+Names of its own called `spot` or `_G`, and method calls on `spot`, are refused too.
 
 Arguments can still be built while the mod runs, and a scanner can be fooled. **The sandbox is the
 protection; the scanner helps you notice what to ask about.**
@@ -849,9 +878,8 @@ already taken over. Read a mod before approving it.
 
 Once mods can act, `spot call` makes the daemon's socket a way to cause actions. The daemon accepts
 connections only from your own user, checked on the connection and not by file permissions alone,
-and a client likewise checks who it is talking to. With mods, the socket moves into a folder of its
-own (`$XDG_RUNTIME_DIR/spot/`, mode 0700), so that no grant has to include it, and the daemon refuses
-a peer that is a mod host or something it started.
+and a client likewise checks who it is talking to. No mod can be granted any of spot's sockets or a folder that holds
+one, and the daemon refuses a peer that is a mod host or something it started.
 
 ## Using mod data
 
@@ -859,9 +887,10 @@ a peer that is a mod host or something it started.
 
 | Key | On | Meaning |
 |-----|----|---------|
-| `from` | `list` | Rows come from the value. Rows with a `state` are switches |
-| `from` | `switch`, `segmented`, `scale` | The value is the control's state (instead of `state`) |
+| `from` | `list` | Rows come from the value: texts, or records with `label`, `key`, `state`. The item's value is the row's `key`. Rows with a `state` are switches |
+| `from` | `switch`, `segmented`, `scale` | The value is the control's position (instead of `state`) |
 | `call` | the same, and `button` | The request a change or a press makes (instead of `on_change` / `exec`) |
+| `run` + `parse` | `list` | A command's output through a parser, without a provider |
 
 ```toml
 [[items]]
@@ -870,12 +899,27 @@ id    = "idle"
 label = "Idle lock"
 from  = "idle.enabled"
 call  = "idle.set"        # called with the new value; a list row adds its key first
+
+[[items]]
+type  = "list"
+id    = "socket"
+run   = "ss -H -tuna"     # your command, run as you, like `state`
+parse = "ss"              # only the parser is sandboxed; it must be approved
 ```
 
-A mod's rows may name an icon from the **icon theme** only: a value containing `/` is ignored.
+Pressing Enter needs no shell either: `[submit] copy = "{socket}"` puts a value on the clipboard, and
+`call = "network.connect"` with `args = ["{socket}"]` makes a mod's request, in the mod's sandbox,
+instead of `exec`. A password item cannot be used in either.
 
-As with commands, values are read when the dialog opens and after every change made in it. A list
-that updates by itself while open comes with live lists (0.11).
+- Rows are fetched **before** the dialog opens, off the drawing thread. A dialog always opens: what
+  could not be had is said under it.
+- A control that follows a mod **never shows an old position**. While the mod cannot say what it is
+  now, the control is marked unknown (CSS class `spot-unknown`) and cannot be moved.
+- Old rows of a list may be shown, without their switches, with a note saying how old.
+- Values are read again after every change made in the dialog. A list that updates by itself while
+  open comes with live lists (0.11); the rows stay as they were, only switch positions are read again.
+- A dialog that uses mods, and that others than you or root could change, is refused.
+- Row icons are not shown yet.
 
 ### From the command line
 
@@ -898,7 +942,8 @@ that updates by itself while open comes with live lists (0.11).
 a bar, which reads markup: `text` and `tooltip` are escaped and `class` is limited to `[a-z0-9_-]`. In text
 output, piped or not, backslash, tab and newline are escaped, so that a value cannot forge a row or a
 field.
-`get`, `watch`, `call`, `parse` and `mods` become reserved words: a config of that name needs a path.
+`get`, `watch`, `call`, `parse` and `mods` are reserved words, like `daemon`: a config of that name needs a
+path.
 `watch` reconnects when the daemon is restarted, for instance after an upgrade.
 
 ## Health and errors
@@ -943,9 +988,16 @@ off.
 | A provider (`spot.use`) | The call raises a Lua error, which the mod may catch |
 | ...uncaught in a value | Readers keep the last good result, marked as old |
 | ...uncaught in a request | The request fails, and a switch goes back to where it was |
-| It does not even load (two functions, no `[returns]`) | Every mod that `uses` it is marked failing at load, not at first use |
+| It does not even load (two functions, no `[returns]`) | Every mod that `uses` it fails when it loads, not at first use |
 
 A broken contract is a fault of the mod, not of its host: nothing is restarted.
+
+### Timers and changes
+
+The host never speaks on its own: every reply says when its next timer is due and which values changed,
+and the daemon comes back for them. So a mod that is stuck is handled the same way whatever it was doing.
+`every` is at least 250 ms and runs only while somebody watches; timers are at least 100 ms. A mod may
+write 64 MB within an hour.
 
 ### Broken messages between daemon and host
 
@@ -1018,7 +1070,7 @@ outside spot's mods.
 - Lua: [gopher-lua](https://github.com/yuin/gopher-lua), written in Go, so no new C dependency.
 - The socket protocol gains `get`, `watch` and `call`. `watch` answers many times on one
   connection, where today every request has one answer.
-- `daemon.toml` gains `mods`, `mods_dir` and `[mod.*]`. Older versions of spot reject unknown keys
+- Mods are configured in `mods.toml`, not `daemon.toml`: older versions of spot reject unknown keys
   there and fall back to their defaults with a warning.
 
 ### One model for mods and backends
@@ -1175,10 +1227,9 @@ In: the mod host with its time and memory limits, loading and enabling, the `par
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
 
-Not in 0.9: **launch hooks**, which need their own design. Core data such as the app index and launch
-history needs a permission of its own and counts as private data in warnings. "Make executable and
-run" from [#13](https://github.com/KopyTKG/spot/issues/13) is not offered as a mod request: a
-confirmation in a dialog does not protect a request that `spot call` can reach.
+Not in 0.9: **launch hooks**, which need their own design. spot offers mods no data of its own, such
+as the app index; reading its state folder, where the launch history is, counts as private data in
+warnings. No mod can make a file executable and run it: changing modes is refused.
 
 The API is **experimental** until menu trees (0.10) have used it.
 

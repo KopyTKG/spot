@@ -24,13 +24,27 @@ ldflags := "-X main.version=" + build_version
 # (build_version also counts commits since it, which no release is named after.)
 release_version := `git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//' || true`
 
-# Build ./spot for this machine (needs gtk4, gtk4-layer-shell, go).
+# Build ./spot for this machine (needs gtk4, gtk4-layer-shell, go), and the mod
+# host beside it: a static program, the sandbox grants it nothing but itself.
 build:
     go build -ldflags "{{ldflags}}" -o spot .
+    CGO_ENABLED=0 go build -o spot-mod-host ./cmd/spot-mod-host
 
 # Run the unit tests (no display needed).
 test:
     go test ./...
+
+# The mod tests, failing if any is skipped: Jenkins has no Landlock and skips
+# the sandbox's, so run this here before releasing anything that touches mods.
+test-mods:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    out=$(go test -count=1 -v ./internal/mod ./internal/sandbox ./internal/modhost ./internal/modcheck ./internal/parser ./internal/scan ./internal/modtest ./internal/approval ./internal/modd ./internal/daemon ./internal/config ./internal/scheduler . 2>&1); status=$?
+    echo "$out" | grep -E '^(ok|FAIL)|^\s*--- (SKIP|FAIL)|_test\.go:[0-9]+:'
+    skipped=$(grep -c -- '--- SKIP' <<<"$out")
+    echo "$(grep -c -- '--- PASS' <<<"$out") passed, $skipped skipped"
+    [ "$status" -eq 0 ] || exit "$status"
+    [ "$skipped" -eq 0 ] || { echo "not checked: $skipped tests were skipped" >&2; exit 1; }
 
 # Fail if anything is formatted off-style, then vet.
 lint:
@@ -44,11 +58,21 @@ ci: lint test build package
 package:
     mkdir -p {{dist}}
     go build -buildmode=pie -trimpath -ldflags "-s -w {{ldflags}}" -o {{dist}}/spot-linux-x64 .
-    @ls -lh {{dist}}/spot-linux-x64
+    # The mod host must be static, so not pie: its sandbox grants it only itself.
+    CGO_ENABLED=0 go build -buildmode=exe -trimpath -ldflags "-s -w" -o {{dist}}/spot-mod-host-linux-x64 ./cmd/spot-mod-host
+    @! readelf -l {{dist}}/spot-mod-host-linux-x64 | grep -q INTERP || { echo "spot-mod-host is not static" >&2; exit 1; }
+    @ls -lh {{dist}}/spot-linux-x64 {{dist}}/spot-mod-host-linux-x64
 
 # Remove build output.
 clean:
-    rm -rf {{dist}} spot
+    rm -rf {{dist}} spot spot-mod-host
+
+# Run this build beside your installed spot, with a daemon and socket of its own:
+# `just dev get sockets.count`. Your installed spot is not touched.
+[positional-arguments]
+[no-exit-message]
+dev *args:
+    @SPOT_SOCKET="$XDG_RUNTIME_DIR/spot-dev.sock" XDG_STATE_HOME="$XDG_RUNTIME_DIR/spot-dev-state" ./spot "$@"
 
 # --------------------------------------------------------------------------
 # Release (Jenkins builds, releases and publishes to the AUR from the tag)
@@ -84,15 +108,17 @@ aur version=release_version:
     trap 'rm -rf "$work"' EXIT
 
     curl --fail --silent --show-error --location -o "$work/spot" "$release/spot-linux-x64"
+    curl --fail --silent --show-error --location -o "$work/host" "$release/spot-mod-host-linux-x64"
     curl --fail --silent --show-error --location -o "$work/source.tar.gz" \
         "https://github.com/{{repo}}/archive/refs/tags/v{{version}}.tar.gz"
     bin=$(sha256sum "$work/spot" | cut -d' ' -f1)
+    host=$(sha256sum "$work/host" | cut -d' ' -f1)
     source=$(sha256sum "$work/source.tar.gz" | cut -d' ' -f1)
 
     file="packaging/aur/spot-bin/PKGBUILD"
     sed -i "s|^pkgver=.*|pkgver={{version}}|; s|^pkgrel=.*|pkgrel=1|" "$file"
     sed -i "0,/^sha256sums=(/{s|^sha256sums=('.*'|sha256sums=('$bin'|}" "$file"
-    sed -i "s|^            '.*')|            '$source')|" "$file"
+    sed -i "s|^            '[^']*'$|            '$host'|; s|^            '.*')|            '$source')|" "$file"
     echo "$file -> {{version}}"
 
     # spot-git's pkgver() only runs at build time; the AUR listing reads the

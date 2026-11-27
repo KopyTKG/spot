@@ -1,0 +1,12 @@
+type        = "parser"
+api         = 1
+version     = "1.1.1"
+description = "Sockets from ss"
+input       = "output of `ss -H -tuna`"
+
+[returns]
+label      = "string" # one line for a list
+key        = "string" # the local address
+proto      = "string" # tcp, udp, ...
+state_name = "string" # LISTEN, ESTAB, UNCONN, ...  (`state` is a switch in rows)
+peer       = "string"

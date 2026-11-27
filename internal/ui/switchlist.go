@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
@@ -32,9 +33,33 @@ type shownRow struct {
 	sw  *slider
 }
 
+// rowSet collects rows, telling apart those that show the same.
+type rowSet struct {
+	*switchRows
+	next map[string]int
+}
+
+func newRowSet() rowSet {
+	return rowSet{&switchRows{rows: map[string]*switchRow{}, shown: map[string]shownRow{}, undo: map[uintptr]func(){}}, map[string]int{}}
+}
+
+func (s rowSet) add(label string, r *switchRow) {
+	if s.rows[label] != nil { // rows are told apart by what they show
+		base := label + " (" + r.key + ")"
+		label = base
+		// Counting on from the last number used: repeated lines must not make
+		// each one try every name before it.
+		for s.rows[label] != nil {
+			s.next[base]++
+			label = fmt.Sprintf("%s #%d", base, s.next[base]+1)
+		}
+	}
+	s.rows[label] = r
+	s.labels = append(s.labels, label)
+}
+
 func parseSwitchRows(item *config.Item, lines []string) *switchRows {
-	s := &switchRows{rows: map[string]*switchRow{}, shown: map[string]shownRow{}, undo: map[uintptr]func(){}}
-	next := map[string]int{}
+	s := newRowSet()
 	for _, line := range lines {
 		parts := strings.SplitN(line, "\t", 3)
 		label := parts[0]
@@ -45,20 +70,23 @@ func parseSwitchRows(item *config.Item, lines []string) *switchRows {
 		if len(parts) > 2 {
 			r.on, r.has = item.ParseSwitch(parts[2])
 		}
-		if s.rows[label] != nil { // rows are told apart by what they show
-			base := label + " (" + r.key + ")"
-			label = base
-			// Counting on from the last number used: repeated lines must not make
-			// each one try every name before it.
-			for s.rows[label] != nil {
-				next[base]++
-				label = fmt.Sprintf("%s #%d", base, next[base]+1)
-			}
-		}
-		s.rows[label] = r
-		s.labels = append(s.labels, label)
+		s.add(label, r)
 	}
-	return s
+	return s.switchRows
+}
+
+// modRows are the rows a mod or a parser gave: kept apart as they came, so that
+// nothing in a label or a key can be read as part of another field.
+func modRows(rows []config.Row) *switchRows {
+	s := newRowSet()
+	for _, row := range rows {
+		r := &switchRow{key: row.Key}
+		if row.State != nil {
+			r.has, r.on = true, *row.State
+		}
+		s.add(row.Label, r)
+	}
+	return s.switchRows
 }
 
 func (s *switchRows) key(label string) string {
@@ -158,7 +186,7 @@ func (b *builder) switchList(item config.Item, s *switchRows, selection *gtk.Sin
 	reads := 0 // only the newest state read counts
 	flip := func(label string) bool {
 		r := s.rows[label]
-		if r == nil || !r.has {
+		if r == nil || !r.has || item.From != "" && item.Call == "" {
 			return false
 		}
 		if r.busy {
@@ -169,15 +197,14 @@ func (b *builder) switchList(item config.Item, s *switchRows, selection *gtk.Sin
 		if r.on {
 			value = item.OnValue()
 		}
-		if item.OnChange == "" {
+		if item.OnChange == "" && item.Call == "" {
 			s.update(label)
 			return true
 		}
 		r.busy = true
 		reads++ // a state read from before this flip is out of date
 		s.update(label)
-		cmd := fill(item.OnChange, item.ID, r.key, value)
-		b.command(cmd, value, item.CommandTimeout(), func(stdout, stderr string, status int) {
+		done := func(stdout, stderr string, status int) {
 			r.busy = false
 			b.report(stderr, status)
 			if status != 0 {
@@ -187,7 +214,12 @@ func (b *builder) switchList(item config.Item, s *switchRows, selection *gtk.Sin
 			}
 			s.update(label)
 			b.refreshAll()
-		})
+		}
+		if item.Call != "" { // the row's key first, then the new value
+			b.call(item.Call, []string{r.key, value}, done)
+		} else {
+			b.command(fill(item.OnChange, item.ID, r.key, value), value, item.CommandTimeout(), done)
+		}
 		return true
 	}
 	selected := func() (string, bool) {
@@ -211,6 +243,10 @@ func (b *builder) switchList(item config.Item, s *switchRows, selection *gtk.Sin
 			b.submit()
 		}
 	}))
+	if item.From != "" {
+		b.refreshers = append(b.refreshers, b.followRows(item, s, &reads))
+		return
+	}
 	if item.State == "" {
 		return
 	}
@@ -242,4 +278,63 @@ func (b *builder) switchList(item config.Item, s *switchRows, selection *gtk.Sin
 			}
 		})
 	})
+}
+
+// followRows reads the switch positions of a list from its mod again. The rows
+// themselves stay as they were when the dialog opened. A position the mod cannot
+// give now is not shown at all.
+func (b *builder) followRows(item config.Item, s *switchRows, reads *int) func() {
+	first := true
+	return func() {
+		if first { // fetched before the dialog was drawn
+			first = false
+			if item.Note != "" {
+				b.report(item.Note, 1)
+			}
+			return
+		}
+		if !slices.ContainsFunc(item.Rows, func(r config.Row) bool { return r.State != nil }) {
+			return
+		}
+		*reads++
+		n := *reads
+		go func() {
+			var rows []config.Row
+			var warning string
+			err := errNoMods
+			if b.mods != nil {
+				var raw []byte
+				raw, warning, err = b.mods.Get(item.From)
+				if err == nil {
+					rows, err = config.Rows(raw)
+				}
+			}
+			coreglib.IdleAdd(func() {
+				if b.d.done || n != *reads {
+					return
+				}
+				states := map[string]*bool{}
+				if err == nil && warning == "" {
+					for _, r := range rows {
+						states[r.Key] = r.State
+					}
+				}
+				for label, r := range s.rows {
+					if r.busy {
+						continue
+					}
+					on := states[r.key]
+					r.has = on != nil
+					r.on = on != nil && *on
+					s.update(label)
+				}
+				switch {
+				case err != nil:
+					b.report("unknown: "+err.Error(), 1)
+				case warning != "":
+					b.report("unknown: "+warning, 1)
+				}
+			})
+		}()
+	}
 }

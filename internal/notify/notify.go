@@ -35,6 +35,15 @@ func Failure(command *string, title, body string) {
 	send(command, title, body)
 }
 
+// Send notifies whatever stderr is: for the daemon, whose failures nobody is
+// looking at. command is the `notify` key of daemon.toml.
+func Send(command *string, title, body string) {
+	if os.Getenv(EnvOff) != "" {
+		return
+	}
+	send(command, title, body)
+}
+
 // A notification daemon that does not answer must not keep spot from exiting.
 const limit = 3 * time.Second
 
@@ -57,6 +66,8 @@ func send(command *string, title, body string) {
 	_ = c.Run()
 }
 
-// escape keeps a notification daemon from reading the text as markup: error
-// messages quote config text, which may contain anything.
-var escape = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace
+// escape keeps the text as it is on its way to the screen: error messages quote
+// config and mod text, which may contain anything. A notification daemon reads
+// markup, and notify-send reads backslash codes in the body, so that a literal
+// "\n" would arrive as a new line.
+var escape = strings.NewReplacer(`\`, `\\`, "&", "&amp;", "<", "&lt;", ">", "&gt;").Replace

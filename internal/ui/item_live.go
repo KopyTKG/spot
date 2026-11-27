@@ -22,10 +22,25 @@ func classOn(w gtk.Widgetter, class string, on bool) {
 // live registers a control: its value for submit, its state to be read, and the
 // widget the keyboard can start on.
 func (b *builder) live(c *control, w gtk.Widgetter) {
+	if c.unsure == nil {
+		b.modControl(c, w, w)
+	}
 	gtk.BaseWidget(w).AddCSSClass("spot-control")
 	b.values[c.item.ID] = func() string { return c.value }
 	b.refreshers = append(b.refreshers, c.refresh)
 	b.focus(w)
+}
+
+// modControl prepares a control for from and call: one that shows a mod's value
+// has no position until it has been read, and one without call cannot be moved.
+func (b *builder) modControl(c *control, w, mark gtk.Widgetter) {
+	c.unsure = func(unsure bool) {
+		classOn(mark, "spot-unknown", unsure) // beside spot-on and spot-busy
+		gtk.BaseWidget(w).SetSensitive(!unsure && (c.item.From == "" || c.item.Call != ""))
+	}
+	if c.item.From != "" {
+		c.unsure(true)
+	}
 }
 
 // switchItem is an on / off control: a switch, a button that stays pressed, or
@@ -99,6 +114,7 @@ func (b *builder) switchItem(item config.Item, row *gtk.Box) {
 	c.busy = func(busy bool) { classOn(outer, "spot-busy", busy) }
 	c.show(c.value)
 	row.Append(outer)
+	b.modControl(c, w, outer)
 	b.live(c, w)
 }
 
@@ -152,6 +168,7 @@ func (b *builder) segmented(item config.Item, row *gtk.Box) {
 	row.Append(box)
 
 	start := buttons[max(slices.Index(item.Options, c.value), 0)]
+	b.modControl(c, box, box)
 	b.values[item.ID] = func() string { return c.value }
 	b.refreshers = append(b.refreshers, c.refresh)
 	b.focus(start)
@@ -169,19 +186,29 @@ func (b *builder) button(item config.Item, row *gtk.Box) {
 			return
 		}
 		cmd := fill(item.Exec, item.ID, item.ID, "")
-		if item.Close {
+		if item.Close && item.Call == "" {
 			launcher.SpawnDetached(cmd, b.env, b.dir)
 			b.end(result{submitted: true})
 			return
 		}
 		running = true
 		classOn(btn, "spot-busy", true)
-		b.command(cmd, "", item.CommandTimeout(), func(_, stderr string, status int) {
+		done := func(_, stderr string, status int) {
 			running = false
 			classOn(btn, "spot-busy", false)
 			b.report(stderr, status)
+			// A request is waited for: the process asking may be the one closing.
+			if item.Close && status == 0 {
+				b.end(result{submitted: true})
+				return
+			}
 			b.refreshAll()
-		})
+		}
+		if item.Call != "" {
+			b.call(item.Call, nil, done)
+			return
+		}
+		b.command(cmd, "", item.CommandTimeout(), done)
 	}))
 	row.Append(btn)
 	b.focus(btn)
@@ -212,6 +239,7 @@ func (b *builder) liveScale(item config.Item, sc *gtk.Scale) {
 		}
 	}
 	c.busy = func(busy bool) { classOn(sc, "spot-busy", busy) }
+	b.modControl(c, sc, sc)
 
 	var pending coreglib.SourceHandle
 	cancel := func() {

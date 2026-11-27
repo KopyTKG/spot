@@ -62,7 +62,7 @@ func (b *builder) scale(item config.Item, row *gtk.Box) {
 	sc.SetValue(item.ScaleDefault())
 	row.Append(sc)
 	b.values[item.ID] = func() string { return config.FormatNumber(roundTo(sc.Value(), item.StepValue())) }
-	if item.State != "" || item.OnChange != "" {
+	if item.State != "" || item.OnChange != "" || item.From != "" || item.Call != "" {
 		b.liveScale(item, sc)
 	}
 	b.focus(sc)

@@ -1,0 +1,5 @@
+[
+  {"label": "udp  UNCONN    127.0.0.1:53             0.0.0.0:*", "key": "127.0.0.1:53", "proto": "udp", "state_name": "UNCONN", "peer": "0.0.0.0:*"},
+  {"label": "tcp  LISTEN    127.0.0.1:8080           0.0.0.0:*", "key": "127.0.0.1:8080", "proto": "tcp", "state_name": "LISTEN", "peer": "0.0.0.0:*"},
+  {"label": "tcp  ESTAB     192.0.2.10:51234         192.0.2.80:443", "key": "192.0.2.10:51234", "proto": "tcp", "state_name": "ESTAB", "peer": "192.0.2.80:443"}
+]

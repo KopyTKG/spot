@@ -1,8 +1,7 @@
 # Roadmap
 
 Where spot is going, and what it is not. Shipped work is in the [changelog](../CHANGELOG.md).
-Nothing below the Shipped table is released; [0.9 is built on a branch](#where-09-stands). The version
-numbers show order, not dates.
+Nothing in the plan after 0.9 exists yet, and the version numbers show order, not dates.
 
 ## Direction
 
@@ -62,8 +61,7 @@ Open design questions, to settle before the release that needs them:
 
 ## Where 0.9 stands
 
-As of 2026-11-27. **Not released.** The work is on the
-[`mods` branch](https://github.com/KopyTKG/spot/tree/mods); installed spot has none of it.
+**Released as 0.9.0** on 2026-11-27, as experimental.
 
 **Built and tested**
 
@@ -75,36 +73,31 @@ As of 2026-11-27. **Not released.** The work is on the
   mod voids it.
 - The daemon runs listed and approved mods: `spot get`, `watch` (also for waybar) and `call`, timers,
   notifications when a mod breaks and recovers, an audit log. Configured in `mods.toml`.
-- Packaging of the mod host, and an [example](https://github.com/KopyTKG/spot/tree/mods/examples/mods):
-  an `ss` parser and a sockets provider, with a searchable table. The table, approval and
-  re-approval after a change have been used by hand.
+- Dialogs use mods: `from` and `call` on controls and lists, `run` with `parse`, `submit.call` and
+  `submit.copy`, so that a tool needs no shell. Also `spot parse`.
+- Approval covers every file of a mod's folder, and names what in it would run without the sandbox.
+- A log and an audit log per mod; the notification for a changed mod says what it newly asks for.
+- Packaging of the mod host, and an [example](../examples/mods):
+  an `ss` parser, a sockets provider and a searchable table, with no shell script. The table, copying,
+  approval and re-approval after a change have been used by hand.
 
-**Before it is released**
+**Still to find out**, with the API marked experimental until then
 
-- The verdict on the proof ([#24](https://github.com/KopyTKG/spot/issues/24)): is the mod clearly
-  simpler than the script it replaces? If not, the API is revisited first. It has the same numbers in
-  about 55 lines against 130, but cannot name processes or use root.
-- A second person trying it, above all the approval screen.
+- Whether writing a mod is clearly better than writing the script it replaces
+  ([#24](https://github.com/KopyTKG/spot/issues/24)). The sockets example has the same numbers as its
+  script, in about 55 lines of Lua and a short dialog against 130 lines of shell; it cannot name
+  processes or use root.
+- What a second person makes of it, above all of the approval screen.
 - The bar counter in a real bar.
-- Merging and tagging in one go: the `spot-bin` recipe expects a download that only a new release has.
 
-**Not built, and 0.9 waits for it**
+**Known limits of 0.9**
 
-- Dialogs that read mods directly, `from` and `call`
-  ([#23](https://github.com/KopyTKG/spot/issues/23)). Until then a script feeds the dialog.
-- From the item-by-item check of [#19](https://github.com/KopyTKG/spot/issues/19) and
-  [#29](https://github.com/KopyTKG/spot/issues/29), done on 2026-11-27: the `memory` setting of a mod;
-  the 32 MB a mod may keep; refusing to run with Linux capabilities; `spot mods` saying when there are
-  no limits, how often a mod failed and whose fault it was.
-
-**Not built, smaller**
-
-- `spot parse`, and a log view per mod.
-- Gaps in [#21](https://github.com/KopyTKG/spot/issues/21) and
-  [#22](https://github.com/KopyTKG/spot/issues/22): a permission for private data, saying what is new
-  in the notification.
-- The sandbox is tested on Arch only, on `x86_64`. The CI machine cannot test it, so
-  `just test-mods` runs it before a release.
+- A script of your own is checked when its mod starts, not at each run.
+- Without a `systemd` user session there are no memory or task limits, and a program that detaches
+  itself outlives its mod.
+- Row icons are not shown, and a list does not update while it is open (0.11).
+- The sandbox is tested on Arch only, on `x86_64`, and needs Linux with Landlock ABI 11. The CI
+  machine cannot test it, so `just test-mods` runs it before a release.
 
 ## Also wanted
 
@@ -133,6 +126,7 @@ Not tied to a release above:
 | 0.7.1–0.7.3 | A hidden pointer no longer highlights; the daemon memory leak fixed; source split into `internal/` |
 | 0.7.4 | `SPOT_TARGET`: open a file or URL with the picked app; `MimeType=` in the index |
 | 0.8 | Controls that apply at once (`state` / `on_change`): `switch`, `segmented`, `button`, `separator`, live `scale`, switch rows in lists |
+| 0.9 | Daemon mods (experimental): sandboxed parsers and providers, approval, `spot get` / `watch` / `call` / `parse`, `from` / `call` in dialogs, `submit.copy` |
 
 ## Not planned
 

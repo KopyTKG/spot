@@ -1,7 +1,41 @@
 # Changelog
 
-Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
+Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` and `spot-mod-host-linux-x64` binaries, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
+
+## 0.9.0 — 2026-11-27
+
+**Daemon mods (experimental).** A mod is a small Lua program the daemon runs for you: it gets and
+parses data once and hands it to dialogs, bars and scripts. Nothing runs until you list it and
+approve it. See [`examples/mods`](examples/mods/) and [`docs/modding.md`](docs/modding.md); the API may
+change until menu trees (0.10) have used it.
+
+- **Two kinds:** parsers turn text into records and can touch nothing; providers publish values and
+  answer requests under permissions that each state a reason.
+- **Sandboxed by the kernel:** each mod runs in its own `spot-mod-host` process, under Landlock and a
+  seccomp filter, with memory and task limits. Mods need Linux with Landlock ABI 11; without it no mod
+  runs, and everything else works as before.
+- **Approval** at a terminal, typing every program and every new or dangerous permission. A change to
+  any file of a mod voids it. A scanner refuses code that hides what it does and flags what deserves a
+  look; read the mod anyway.
+- **Command line:** `spot get`, `spot watch` (also `--waybar`), `spot call`, `spot parse`, and
+  `spot mods` (`allow`, `show`, `diff`, `revoke`, `check`, `log`, `audit`, `reload`). Configured in
+  `mods.toml`.
+- **Dialogs:** `from` and `call` on lists, `switch`, `segmented`, `scale` and `button`; `run` with
+  `parse`.
+
+Also for dialogs without mods:
+
+- `[submit] copy` puts a value on the clipboard (needs `wl-clipboard`) with no shell; `call` and `args`
+  make a mod's request instead of `exec`.
+- Keys that nothing reads, such as a misspelling, are now warned about.
+- A `stdin` list whose value `submit.exec` pastes unquoted is warned about; a later release will refuse
+  it. Use `$SPOT_VALUE_<ID>`.
+- A literal `\n` in a failure message no longer becomes a line break in its notification.
+- `get`, `watch`, `call`, `parse` and `mods` are now commands: a config of such a name is opened by its
+  path.
+
+Packages now also install `spot-mod-host`.
 
 ## 0.8.5 — 2026-11-27
 

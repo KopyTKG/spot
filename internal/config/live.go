@@ -29,8 +29,8 @@ func (it *Item) validateLive() error {
 			return fail("labels must be as many as options")
 		}
 	case "button":
-		if it.Exec == "" || it.Label == "" {
-			return fail("a button needs a label and exec")
+		if it.Exec == "" && it.Call == "" || it.Label == "" {
+			return fail("a button needs a label and exec or call")
 		}
 	}
 	if it.Switches && (it.Type != "list" || it.Multi || it.Collapsible) {

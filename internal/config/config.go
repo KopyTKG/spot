@@ -99,6 +99,15 @@ type Item struct {
 	Timeout  int      // ms a control's command may take (default 10000)
 	Switches bool     // list: rows are "LABEL<TAB>KEY<TAB>on|off"; rows with a state are switches
 
+	// Mods (see mods.go).
+	From             string // list, switch, segmented, scale: <mod>.<value> to show
+	Call             string // the same and button: <mod>.<request> a change makes
+	Run              string // list: a command whose output goes through parse
+	Parse            string // list: the parser for what run prints
+	AllowLeadingDash bool   `toml:"allow_leading_dash"`
+	Rows             []Row  `toml:"-"` // what from or parse gave, before the dialog opens
+	Note             string `toml:"-"` // why it gave nothing, or something old
+
 	pattern *regexp.Regexp
 }
 
@@ -109,11 +118,15 @@ type Tile struct {
 }
 
 type Submit struct {
-	Exec    string // command template; {id} substituted from field values
-	Stdout  string // print template to stdout on submit (exit 1 on cancel)
-	Format  string // "json": print every item's value as a JSON object
-	Spawn   bool   // (exec only) fire-and-forget then close
-	OnError string `toml:"on_error"` // (exec only) show (default) | exit
+	Exec   string // command template; {id} substituted from field values
+	Stdout string // print template to stdout on submit (exit 1 on cancel)
+	Format string // "json": print every item's value as a JSON object
+	Spawn  bool   // (exec only) fire-and-forget then close
+
+	Copy    string   // text put on the clipboard, a template like stdout; no shell
+	Call    string   // <mod>.<request> made instead of exec
+	Args    []string // its arguments, each a template
+	OnError string   `toml:"on_error"` // (exec only) show (default) | exit
 }
 
 // ResolveConfigPath maps the command-line argument to a config file. An
@@ -251,6 +264,12 @@ func (c *Config) validate() error {
 	if err := c.checkValueVars(); err != nil {
 		return err
 	}
+	if err := c.checkModValues(); err != nil {
+		return err
+	}
+	if err := c.checkSubmit(); err != nil {
+		return err
+	}
 	if c.MarginTop < 0 || c.MarginBottom < 0 || c.MarginLeft < 0 || c.MarginRight < 0 {
 		return errors.New("margin_top, margin_bottom, margin_left and margin_right must not be negative (use offset_x / offset_y to shift)")
 	}
@@ -295,6 +314,9 @@ func (c *Config) validate() error {
 			return fmt.Errorf("item %q: match: unknown mode %q (want \"contains\" or \"smart\")", it.ID, it.Match)
 		}
 		if err := it.validateLive(); err != nil {
+			return err
+		}
+		if err := it.validateMods(); err != nil {
 			return err
 		}
 		if it.Type == "scale" {

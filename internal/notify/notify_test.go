@@ -76,3 +76,10 @@ func TestPlainFileIsNotATerminal(t *testing.T) {
 		t.Error("a file or /dev/null taken for a terminal")
 	}
 }
+
+// notify-send turns backslash codes in a body into what they name.
+func TestBackslashesArriveAsWritten(t *testing.T) {
+	if got := escape(`a "x\n b" <i>`); got != `a "x\\n b" &lt;i&gt;` {
+		t.Errorf("%s", got)
+	}
+}

@@ -17,6 +17,7 @@ type Job struct {
 	Env   []string
 	Dir   string
 	Back  *config.BackSpec
+	Mods  config.ModSource       // for from, call and parse
 	Reply chan protocol.Response // buffered: the scheduler never blocks on a slow client
 	View  any                    // the presenter\'s widgets, set while the dialog exists
 

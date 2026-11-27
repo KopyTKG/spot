@@ -1,0 +1,16 @@
+# A searchable table of the sockets mod. Enter copies the local address.
+title    = "Sockets"
+width    = 760
+style    = "style.css"
+keyboard = "exclusive"
+
+[[items]]
+type        = "list"
+id          = "row"
+from        = "sockets.table"   # or sockets.listening
+placeholder = "Filter…  tcp listen 22 · estab"
+match       = "smart"
+height      = 480
+
+[submit]
+copy = "{row}"   # the row's key, the local address; spot copies it itself

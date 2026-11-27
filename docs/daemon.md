@@ -184,6 +184,39 @@ refuses to start as root.
 The daemon refuses such a dialog from any caller. At most 32 dialogs may wait their
 turn.
 
+## Mods (experimental)
+
+Mods have a file of their own, `~/.config/spot/mods.toml`, which a spot without mods does not read:
+
+```toml
+mods = ["sockets"]            # providers to run; each must also be approved
+mods_dir = "mods"             # optional, relative to this file
+
+[mod.sockets]                 # settings, spot.config in the mod
+limit = 10
+```
+
+```sh
+spot mods allow sockets       # approve it, at a terminal
+spot get sockets.table        # a value; --json for scripts
+spot watch --waybar sockets.count   # now and on every change, for a bar
+spot mods                     # approved, running or failing
+spot mods reload sockets      # start it anew
+spot call sockets.refresh     # a request
+spot mods log sockets         # what it said, and how it failed
+spot mods audit sockets       # what it ran, read, wrote and was refused
+```
+
+A mod runs only if it is listed **and** approved as it is now. These settings and approvals are read
+from your home folder as the system's user database has it, not from `XDG_CONFIG_HOME`. The daemon
+starts a mod when it is first asked for.
+
+A running or watched mod is checked every two seconds, so that a change or a revocation stops it without
+anyone asking. You get a notification when a mod starts failing and one when it works again, at most six
+an hour for one mod. For a changed mod the notification says what it newly asks for, or that it asks
+for nothing new. A `spot watch` carries on across a restart of the daemon, so after `spot --quit` it
+starts a new one. See [modding](modding.md).
+
 ## Controlling it
 
 | Command | |

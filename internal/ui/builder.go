@@ -16,6 +16,7 @@ type builder struct {
 	env   []string // the caller's environment and directory, for commands
 	dir   string
 	envOf func(string) string
+	mods  config.ModSource // for from and call
 
 	values      map[string]func() string   // each item's value, by id
 	multiValues map[string]func() []string // multi-select lists: the picked rows

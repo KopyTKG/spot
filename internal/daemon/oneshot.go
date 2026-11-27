@@ -10,6 +10,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"gitlab.com/KopyTKG/spot/internal/client"
 	"gitlab.com/KopyTKG/spot/internal/config"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
 	"gitlab.com/KopyTKG/spot/internal/scheduler"
@@ -25,7 +26,7 @@ func appID(name string, pid int) string {
 
 // RunOneshot shows the dialog in a window of its own and exits with the answer.
 func RunOneshot(req protocol.Request) protocol.Response {
-	j, err := scheduler.BuildJob(req)
+	j, err := scheduler.BuildJob(req, client.Mods{})
 	if err != nil {
 		return protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true}
 	}
