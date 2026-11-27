@@ -478,7 +478,7 @@ the machine. **Not** against something already running as you or as root.
 
 | # | Rule |
 |---|------|
-| S33 | Every mod host puts itself under the sandbox before reading any mod code. Where the kernel cannot provide it, no mod runs |
+| S33 | Every mod host puts itself under the sandbox before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
 | S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
 | S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, is refused: the kernel can only add access, not carve an exception out of it |
@@ -514,7 +514,6 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 | Question | Why it matters |
 |----------|----------------|
-| Which kernel is the minimum? The filter covers sockets on any kernel; restricting Unix socket **files** needs a recent Landlock (version to be confirmed; tested only with ABI 11) | S33 refuses to run mods without it; every user's kernel has to be considered |
 | What exactly is in the base grant, and which libraries does each program need? | Too little and programs fail, too much and S37 means nothing |
 | How are network permissions written, and do the port rules hold? | Port rules are untested |
 | How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
@@ -528,6 +527,15 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 [Landlock](https://docs.kernel.org/userspace-api/landlock.html), a Linux kernel feature that lets a
 process give up access for itself and everything it starts, without root.
+
+**Mods need Landlock ABI 11 or newer**, with `landlock` among the kernel's active security modules.
+That is the only version the sandbox has been tested on (Linux 7.3). The minimum is lowered only after
+testing an older kernel. The rest of spot does not need Landlock. To see what a machine has:
+
+```sh
+cat /sys/kernel/security/lsm
+python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # the ABI
+```
 
 - **The host restricts itself, then executes itself again**, before it reads any mod code. Landlock
   and the filter bind one thread and a Go program has many; what is set on a thread that then executes
@@ -1039,7 +1047,7 @@ then tried with a seccomp filter added:
 With the filter, `sh`, `python3`, `node`, `java`, `cp`, `mv`, `sed -i`, `hyprctl` and `systemctl --user`
 (with their sockets) still worked; `cp -p` and `install -m` failed.
 
-**Still to test:** older kernels, network port rules and UDP for name lookups, the base grant, the real host's size and start
+**Still to test:** older kernels (if the minimum is to be lowered), network port rules and UDP for name lookups, the base grant, the real host's size and start
 time, and enforcement of cgroup limits.
 
 ### First version
