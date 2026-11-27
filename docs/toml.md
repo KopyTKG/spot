@@ -43,6 +43,19 @@ development. A value that a mod or a parser chose is never pasted into `submit.e
 `$SPOT_VALUE_<ID>`. A value starting with `-` stops the submit unless the item sets
 `allow_leading_dash = true`.
 
+`[submit]` can do two things without a shell:
+
+```toml
+[submit]
+copy = "{row}"                 # put it on the clipboard (needs wl-clipboard)
+
+[submit]
+call = "network.connect"       # or: make a mod's request, instead of exec
+args = ["{row}", "{band}"]     # its arguments
+```
+
+A `password` item cannot be used in `copy` or `args`.
+
 ## Running it
 
 **A config is a program.** It can run commands when a dialog opens (`state`), as you

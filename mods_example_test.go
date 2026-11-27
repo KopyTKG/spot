@@ -2,10 +2,10 @@ package main
 
 import (
 	"os"
-	"strings"
 	"testing"
 
 	"gitlab.com/KopyTKG/spot/internal/config"
+	"gitlab.com/KopyTKG/spot/internal/scan"
 )
 
 // The example's dialog must stay a valid config.
@@ -18,7 +18,8 @@ func TestTheExampleDialog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.UsesMods() || !strings.Contains(c.Submit.Exec, "$SPOT_VALUE_ROW") {
+	// The example is mod and dialog: no shell anywhere in it.
+	if !c.UsesMods() || c.Submit.Copy != "{row}" || c.Submit.Exec != "" || len(scan.Beside(map[string][]byte{"sockets.toml": data})) != 0 {
 		t.Errorf("%+v", c.Submit)
 	}
 }

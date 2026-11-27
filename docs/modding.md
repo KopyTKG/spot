@@ -784,6 +784,12 @@ Type ALL 3 of these on one line (socket net hyprctl) to accept them, or press En
 - **The review goes to the terminal too**, not to standard output, so that redirecting output cannot
   leave a prompt without what it is about.
 - A file of a mod whose name has control or invisible characters is refused.
+- **What is in the folder but is not the mod does not run in its sandbox.** A dialog or a script
+  shipped beside the code runs with all your rights when someone opens or runs it. `allow` and `check`
+  name each, show every command a dialog would run, and approving such a mod takes one more word,
+  `unsandboxed`.
+- The hash covers **every file** of the mod's folder and of the parsers it uses, except a `.git`
+  folder: at most 300 files, 4 MB each, 16 MB in all.
 - **A mod cannot dress up the screen.** A reason is one line of at most 200 characters. Bidirectional
   and invisible characters are removed from reasons and descriptions. `show`, `diff`, `log` and
   `audit` print every control, bidirectional and invisible character **visibly** (`\x1b`,
@@ -899,6 +905,10 @@ id    = "socket"
 run   = "ss -H -tuna"     # your command, run as you, like `state`
 parse = "ss"              # only the parser is sandboxed; it must be approved
 ```
+
+Pressing Enter needs no shell either: `[submit] copy = "{socket}"` puts a value on the clipboard, and
+`call = "network.connect"` with `args = ["{socket}"]` makes a mod's request, in the mod's sandbox,
+instead of `exec`. A password item cannot be used in either.
 
 - Rows are fetched **before** the dialog opens, off the drawing thread. A dialog always opens: what
   could not be had is said under it.

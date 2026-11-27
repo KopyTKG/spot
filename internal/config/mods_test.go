@@ -97,3 +97,23 @@ func TestMisspelledKeysAreWarnedAbout(t *testing.T) {
 	}
 	t.Logf("%d configs checked", checked)
 }
+
+func TestSubmitCallAndCopy(t *testing.T) {
+	list := "[[items]]\ntype='list'\nid='h'\nfrom='a.b'\n[[items]]\ntype='password'\nid='pw'\n[submit]\n"
+	for name, c := range map[string]struct{ submit, says string }{
+		"call without a dot":      {"call='a'", "<mod>.<request>"},
+		"call and exec":           {"call='a.b'\nexec='x'", "takes the place"},
+		"call and spawn":          {"call='a.b'\nspawn=true", "takes the place"},
+		"args alone":              {"args=['{h}']", "goes with submit.call"},
+		"a password to a mod":     {"call='a.b'\nargs=['{h}','{pw}']", "is a password"},
+		"a password to clipboard": {"copy='x {pw}'", "is a password"},
+	} {
+		if _, err := ParseConfig([]byte(list+c.submit), noEnv); err == nil || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	c, err := ParseConfig([]byte(list+"call='a.b'\nargs=['{h}']\ncopy='{h}'"), noEnv)
+	if err != nil || !c.UsesMods() {
+		t.Errorf("%v", err)
+	}
+}

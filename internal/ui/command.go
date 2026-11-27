@@ -4,9 +4,24 @@ import (
 	"errors"
 	"log"
 	"os/exec"
+	"strings"
 
 	"gitlab.com/KopyTKG/spot/internal/capture"
 )
+
+// copyText puts text on the clipboard. wl-copy gets it as it is, on its input,
+// with no shell between; it stays to serve it after we are gone, which a dialog
+// shown by its own process could not do itself.
+func copyText(text string, env []string, dir string) error {
+	c := exec.Command("wl-copy")
+	c.Env, c.Dir = env, dir
+	c.Stdin = strings.NewReader(text)
+	err := c.Run()
+	if errors.Is(err, exec.ErrNotFound) {
+		return errors.New("wl-copy is not installed (package wl-clipboard)")
+	}
+	return err
+}
 
 // spawn starts cmd and does not wait for it to finish.
 func spawn(cmd string, env []string, dir string) {

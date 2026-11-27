@@ -46,7 +46,8 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 		execErr.SetVisible(false)
 
 		// An apps list with no [submit] of its own launches the selected app.
-		if b.appsRes != nil && b.cfg.Submit.Exec == "" && b.cfg.Submit.Stdout == "" && b.cfg.Submit.Format == "" {
+		if b.appsRes != nil && b.cfg.Submit.Exec == "" && b.cfg.Submit.Stdout == "" && b.cfg.Submit.Format == "" &&
+			b.cfg.Submit.Call == "" && b.cfg.Submit.Copy == "" {
 			if b.appsRes.Src != nil { // a source row: run its activate command
 				row := b.appsRes.PickedRow()
 				if row == nil {
@@ -71,6 +72,13 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 
 		// What happens once any exec command has succeeded.
 		finish := func() {
+			if t := b.cfg.Submit.Copy; t != "" {
+				if err := copyText(config.Expand(t, b.activeID, vals), b.env, b.dir); err != nil {
+					execErr.SetText("copy: " + err.Error())
+					execErr.SetVisible(true)
+					return
+				}
+			}
 			if b.cfg.Submit.Stdout != "" {
 				fmt.Fprintln(&d.out, config.Expand(b.cfg.Submit.Stdout, b.activeID, vals))
 			}
@@ -89,6 +97,32 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 			end(result{submitted: true})
 		}
 
+		if call := b.cfg.Submit.Call; call != "" {
+			if err := b.cfg.LeadingDash(vals); err != nil {
+				execErr.SetText(err.Error())
+				execErr.SetVisible(true)
+				return
+			}
+			args := make([]string, len(b.cfg.Submit.Args))
+			for i, t := range b.cfg.Submit.Args {
+				args[i] = config.Expand(t, b.activeID, vals)
+			}
+			setBusy(true)
+			b.call(call, args, func(_, stderr string, status int) {
+				setBusy(false)
+				switch {
+				case status == 0:
+					finish()
+				case b.cfg.Submit.OnError == "exit":
+					d.errOut.WriteString(stderr)
+					end(result{code: status})
+				default:
+					execErr.SetText(strings.TrimSpace(stderr))
+					execErr.SetVisible(true)
+				}
+			})
+			return
+		}
 		if b.cfg.Submit.Exec == "" {
 			finish()
 			return

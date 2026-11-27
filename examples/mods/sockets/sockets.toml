@@ -13,7 +13,4 @@ match       = "smart"
 height      = 480
 
 [submit]
-# The row's key is the address. It comes from the mod, so it is read from the
-# environment and never pasted into the command.
-exec  = 'printf %s "$SPOT_VALUE_ROW" | wl-copy'
-spawn = true
+copy = "{row}"   # the row's key, the local address; spot copies it itself

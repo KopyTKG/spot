@@ -43,6 +43,9 @@ func (it *Item) foreign() bool { return it.From != "" || it.Parse != "" }
 
 // UsesMods reports whether the dialog reaches any mod.
 func (c *Config) UsesMods() bool {
+	if c.Submit.Call != "" {
+		return true
+	}
 	for _, it := range c.Items {
 		if it.foreign() || it.Call != "" {
 			return true
@@ -111,6 +114,32 @@ func (c *Config) checkModValues() error {
 	for _, it := range c.Items {
 		if it.foreign() && it.ID != "" && strings.Contains(c.Submit.Exec, "{"+it.ID+"}") {
 			return fmt.Errorf("submit.exec: {%s} is pasted into the command, and a mod chooses that value: use \"$%s\" instead", it.ID, valueVar(it.ID))
+		}
+	}
+	return nil
+}
+
+// checkSubmit checks submit.call and submit.copy.
+func (c *Config) checkSubmit() error {
+	s := c.Submit
+	switch {
+	case s.Call != "" && !modItem.MatchString(s.Call):
+		return errors.New("submit.call: say <mod>.<request>")
+	case s.Call != "" && (s.Exec != "" || s.Spawn):
+		return errors.New("submit.call takes the place of exec and spawn")
+	case s.Call == "" && len(s.Args) > 0:
+		return errors.New("submit.args only goes with submit.call")
+	}
+	// A typed password must not travel into a mod, whose actions are logged,
+	// nor into the clipboard, whose history is kept.
+	for _, it := range c.Items {
+		if it.Type != "password" || it.ID == "" {
+			continue
+		}
+		for _, t := range append([]string{s.Copy}, s.Args...) {
+			if strings.Contains(t, "{"+it.ID+"}") {
+				return fmt.Errorf("submit: {%s} is a password: it is not given to a mod or the clipboard", it.ID)
+			}
 		}
 	}
 	return nil

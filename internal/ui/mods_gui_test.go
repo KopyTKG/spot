@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -176,5 +177,62 @@ func TestWhatSomeoneElseChoseIsNotAnOption(t *testing.T) {
 	settleLoop()
 	if _, err := os.Stat(out); err == nil || len(*ended) != 0 || !strings.Contains(errorShown(d), "dash") {
 		t.Errorf("it ran, or said nothing: %v %q", *ended, errorShown(d))
+	}
+}
+
+// fakeCopy puts a wl-copy that records what it is given first in PATH.
+func fakeCopy(t *testing.T) (copied string) {
+	dir := t.TempDir()
+	copied = filepath.Join(dir, "copied")
+	os.WriteFile(filepath.Join(dir, "wl-copy"), []byte("#!/bin/sh\nprintf '%s|%d' \"$(cat)\" $# > "+copied+"\n"), 0o755)
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	return copied
+}
+
+// Nothing of the value is read by a shell, and nothing becomes an option.
+func TestSubmitCopy(t *testing.T) {
+	copied := fakeCopy(t)
+	nasty := "-n $(touch pwned); `x` 'q'"
+	m := &fakeMods{values: map[string]string{"n.t": `[{"label":"row","key":` + strconv.Quote(nasty) + `}]`}}
+	d, ended := modDialog(t, "[[items]]\ntype='list'\nid='s'\nfrom='n.t'\n[submit]\ncopy='{s}'\n", m)
+	realize(t, d)
+	d.onKey(gdk.KEY_Return, 0, nil)
+	waitFor(t, "the dialog to end", func() bool { return len(*ended) == 1 })
+	if got := read(copied); got != nasty+"|0" {
+		t.Errorf("copied %q", got)
+	}
+}
+
+func TestSubmitCall(t *testing.T) {
+	cfg := "[[items]]\ntype='list'\nid='s'\nfrom='n.t'\n[submit]\ncall='net.connect'\nargs=['{s}','fixed']\nstdout='done {s}'\n"
+	value := map[string]string{"n.t": `[{"label":"row","key":"home"}]`}
+	m := &fakeMods{values: value}
+	d, ended := modDialog(t, cfg, m)
+	realize(t, d)
+	d.onKey(gdk.KEY_Return, 0, nil)
+	waitFor(t, "the request, then the end", func() bool { return len(*ended) == 1 })
+	if m.made() != "net.connect(home,fixed)" || strings.TrimSpace(d.out.String()) != "done home" {
+		t.Errorf("%s, %q", m.made(), d.out.String())
+	}
+	// A request that fails keeps the dialog open and says why.
+	m = &fakeMods{values: value}
+	d, ended = modDialog(t, cfg, m)
+	realize(t, d)
+	m.mu.Lock()
+	m.down = true
+	m.mu.Unlock()
+	d.onKey(gdk.KEY_Return, 0, nil)
+	waitFor(t, "the reason", func() bool { return errorShown(d) != "" })
+	if len(*ended) != 0 || d.out.Len() != 0 {
+		t.Errorf("it ended anyway: %v %q", *ended, d.out.String())
+	}
+	// A value that would be read as an option is not passed on.
+	m = &fakeMods{values: map[string]string{"n.t": `[{"label":"row","key":"--all"}]`}}
+	d, _ = modDialog(t, cfg, m)
+	realize(t, d)
+	d.onKey(gdk.KEY_Return, 0, nil)
+	settleLoop()
+	if m.made() != "" || !strings.Contains(errorShown(d), "dash") {
+		t.Errorf("%q %q", m.made(), errorShown(d))
 	}
 }

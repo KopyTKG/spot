@@ -118,11 +118,15 @@ type Tile struct {
 }
 
 type Submit struct {
-	Exec    string // command template; {id} substituted from field values
-	Stdout  string // print template to stdout on submit (exit 1 on cancel)
-	Format  string // "json": print every item's value as a JSON object
-	Spawn   bool   // (exec only) fire-and-forget then close
-	OnError string `toml:"on_error"` // (exec only) show (default) | exit
+	Exec   string // command template; {id} substituted from field values
+	Stdout string // print template to stdout on submit (exit 1 on cancel)
+	Format string // "json": print every item's value as a JSON object
+	Spawn  bool   // (exec only) fire-and-forget then close
+
+	Copy    string   // text put on the clipboard, a template like stdout; no shell
+	Call    string   // <mod>.<request> made instead of exec
+	Args    []string // its arguments, each a template
+	OnError string   `toml:"on_error"` // (exec only) show (default) | exit
 }
 
 // ResolveConfigPath maps the command-line argument to a config file. An
@@ -261,6 +265,9 @@ func (c *Config) validate() error {
 		return err
 	}
 	if err := c.checkModValues(); err != nil {
+		return err
+	}
+	if err := c.checkSubmit(); err != nil {
 		return err
 	}
 	if c.MarginTop < 0 || c.MarginBottom < 0 || c.MarginLeft < 0 || c.MarginRight < 0 {
