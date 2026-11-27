@@ -87,6 +87,89 @@ func resolve(path string) (string, error) {
 	return r, err
 }
 
+// places are what decides what a path means: the links on the way to it, and
+// the names it goes by - as written, and with every link followed.
+func places(path string) (links, names []string) {
+	names = []string{filepath.Clean(path)}
+	var walk func(p string, depth int)
+	walk = func(p string, depth int) {
+		at := "/"
+		rest := strings.Split(strings.Trim(filepath.Clean(p), "/"), "/")
+		for i, part := range rest {
+			next := filepath.Join(at, part)
+			st, err := os.Lstat(next)
+			if err == nil && st.Mode()&fs.ModeSymlink != 0 {
+				target, err := os.Readlink(next)
+				if err != nil || depth > 40 {
+					return
+				}
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(at, target)
+				}
+				links = append(links, next)
+				walk(filepath.Join(append([]string{target}, rest[i+1:]...)...), depth+1)
+				return
+			}
+			at = next
+		}
+		names = append(names, at)
+	}
+	walk(path, 0)
+	return links, names
+}
+
+// reaches reports whether a grant on dir gives access to own: it holds one of
+// the links that say where own is, or it and own lie one in the other.
+func reaches(dir, own string, insideToo bool) bool {
+	links, names := places(own)
+	for _, l := range links {
+		if within(l, dir) {
+			return true
+		}
+	}
+	for _, n := range names {
+		// A name that is itself a link is judged by where it leads.
+		if st, err := os.Lstat(n); err == nil && st.Mode()&fs.ModeSymlink != 0 {
+			continue
+		}
+		if within(n, dir) || insideToo && within(dir, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// linksInside are the links within one of spot's folders, and within the
+// folders they lead to: a linked daemon.toml or mod is changed by writing where
+// it leads.
+func linksInside(dir string) []string {
+	var out []string
+	seen := map[string]bool{}
+	count := 0
+	var walk func(dir string, depth int)
+	walk = func(dir string, depth int) {
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil || seen[real] || depth > 4 {
+			return
+		}
+		seen[real] = true
+		filepath.WalkDir(real, func(p string, d fs.DirEntry, err error) error {
+			if count++; err != nil || count > 5000 {
+				return filepath.SkipAll
+			}
+			if d.Type()&fs.ModeSymlink != 0 {
+				out = append(out, p)
+				if st, err := os.Stat(p); err == nil && st.IsDir() {
+					walk(p, depth+1)
+				}
+			}
+			return nil
+		})
+	}
+	walk(dir, 0)
+	return out
+}
+
 // Check refuses permissions that may never be granted.
 func (p Policy) Check(pr Protected) error {
 	for _, n := range p.Netlink {
@@ -122,25 +205,22 @@ func (p Policy) Check(pr Protected) error {
 			case g.kind != "read" && (within(path, "/proc") || within(path, "/sys")):
 				return refuse("nothing under /proc or /sys is written")
 			}
-			if pr.Socket != "" {
-				sock, err := resolve(pr.Socket)
-				if err != nil {
-					return err
-				}
-				if within(sock, path) {
+			for _, dir := range []string{path, filepath.Clean(asked)} {
+				// Holding the socket's folder is enough to replace the socket.
+				if pr.Socket != "" && reaches(dir, pr.Socket, false) {
 					return refuse("it holds spot's own socket")
 				}
-			}
-			if g.kind != "write" {
-				continue
-			}
-			for _, own := range noWrite {
-				own, err := resolve(own)
-				if err != nil {
-					return err
+				if g.kind != "write" {
+					continue
 				}
-				if within(own, path) || within(path, own) {
-					return refuse("it reaches " + own + ", which no mod may write")
+				for _, own := range noWrite {
+					// A linked daemon.toml or mods folder is spot's wherever it is.
+					all := append([]string{own}, linksInside(own)...)
+					for _, o := range all {
+						if reaches(dir, o, true) {
+							return refuse("it reaches " + own + ", which no mod may write")
+						}
+					}
 				}
 			}
 		}

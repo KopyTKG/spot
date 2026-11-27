@@ -34,6 +34,18 @@ build:
 test:
     go test ./...
 
+# The mod tests, failing if any is skipped: Jenkins has no Landlock and skips
+# the sandbox's, so run this here before releasing anything that touches mods.
+test-mods:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    out=$(go test -count=1 -v ./internal/mod ./internal/sandbox ./internal/modhost ./internal/modcheck ./internal/parser ./internal/scan ./internal/modtest 2>&1); status=$?
+    echo "$out" | grep -E '^(ok|FAIL)|^\s*--- (SKIP|FAIL)|_test\.go:[0-9]+:'
+    skipped=$(grep -c -- '--- SKIP' <<<"$out")
+    echo "$(grep -c -- '--- PASS' <<<"$out") passed, $skipped skipped"
+    [ "$status" -eq 0 ] || exit "$status"
+    [ "$skipped" -eq 0 ] || { echo "not checked: $skipped tests were skipped" >&2; exit 1; }
+
 # Fail if anything is formatted off-style, then vet.
 lint:
     test -z "$(gofmt -l $(git ls-files '*.go'))" || { gofmt -l $(git ls-files '*.go'); exit 1; }

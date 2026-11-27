@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"gitlab.com/KopyTKG/spot/internal/mod"
+	"gitlab.com/KopyTKG/spot/internal/modperm"
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
 )
 
@@ -23,12 +24,36 @@ type Hello struct {
 const (
 	OpPing  = "ping"  // does the host still answer
 	OpParse = "parse" // run a parser
+	OpLoad  = "load"  // load the provider this host is for
+	OpGet   = "get"   // a value of it
+	OpCall  = "call"  // a request of it
 )
 
 // Message is any later message from the daemon.
 type Message struct {
-	Op    string `json:"op"`
-	Parse *Parse `json:"parse,omitempty"`
+	Op    string   `json:"op"`
+	Parse *Parse   `json:"parse,omitempty"`
+	Load  *Load    `json:"load,omitempty"`
+	Name  string   `json:"name,omitempty"` // of the value or request
+	Args  []string `json:"args,omitempty"`
+}
+
+// Load is a provider: the very bytes that were checked, its parsers, and what
+// it was granted.
+type Load struct {
+	Mod      mod.Mod            `json:"mod"`
+	Files    map[string][]byte  `json:"files"` // what spot.require may load
+	Parsers  map[string]mod.Mod `json:"parsers,omitempty"`
+	Grants   modperm.Grants     `json:"grants"`
+	Config   json.RawMessage    `json:"config,omitempty"`
+	EmptyDir string             `json:"empty_dir"` // where programs start
+}
+
+// Event is one thing a mod did or was refused, for the audit log. It never
+// holds what was written to a program or the value of a variable.
+type Event struct {
+	Kind string `json:"kind"`
+	What string `json:"what"`
 }
 
 // Parse asks for one parser call. The mods' files travel with it: the host
@@ -50,6 +75,10 @@ type Reply struct {
 	Broken bool            `json:"broken,omitempty"` // the error is a broken contract
 	Result json.RawMessage `json:"result,omitempty"`
 	Log    []string        `json:"log,omitempty"`
+	Events []Event         `json:"events,omitempty"`
+
+	Values   []string `json:"values,omitempty"`   // after load
+	Requests []string `json:"requests,omitempty"` // after load
 }
 
 // ReadLine reads one message without ever holding more than MaxMessage of it.

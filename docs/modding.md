@@ -490,7 +490,7 @@ the machine. **Not** against something already running as you or as root.
 | S33 | Every mod host puts itself under the sandbox, and checks that it is in it, before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
 | S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included. A permission allows connecting out to the listed ports; no mod accepts connections |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
-| S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, or reaches `/sys/fs/cgroup`, is refused: the kernel can only add access, not carve an exception out of it |
+| S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, or reaches `/sys/fs/cgroup`, is refused, whether the grant holds the place, **a link on the way to it** or where a link leads: the kernel can only add access, not carve an exception out of it |
 | S37 | The base grant is the short list in [the sandbox](#the-base-grant); it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run`, and libraries may be read, not executed |
 | S43 | A host whose file grant no longer matches the file, because an update replaced it, is restarted with new grants before it is asked anything else |
 | S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes, and `listen` for a mod with network access |
@@ -693,6 +693,8 @@ diag = "list the open sockets"
   your user can write, such as your own script, by its full path (S10). File permissions are matched
   after symlinks and `..` are resolved. The same rules hold for `spot.run` and
   for every command of `spot.pipe`.
+- A `write` entry names a **folder**: a file is written by renaming a new one over it, which takes
+  rights on the folder.
 - **`read` and `write` bind the programs too.** A mod allowed to run `cat` reads only what it may
   read. A grant of a folder covers everything below it.
 - The `env` option of `spot.run` / `spot.pipe` sets only variables listed in `setenv`. `LANG`,

@@ -21,6 +21,7 @@ import (
 
 	"gitlab.com/KopyTKG/spot/internal/modhost/channel"
 	"gitlab.com/KopyTKG/spot/internal/parser"
+	"gitlab.com/KopyTKG/spot/internal/provider"
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
 	"golang.org/x/sys/unix"
 )
@@ -34,6 +35,13 @@ const (
 func init() { runtime.LockOSThread() }
 
 func main() {
+	// A child of the host, on its way to being a program a mod runs.
+	if len(os.Args) > 1 && os.Args[1] == provider.LaunchArg {
+		if err := provider.Launch(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "spot: %v\n", err)
+		}
+		os.Exit(126)
+	}
 	if len(os.Args) == 2 && os.Args[1] == second {
 		run()
 		return
@@ -102,7 +110,9 @@ func run() {
 		for {
 			line, err := channel.ReadLine(in)
 			if err != nil {
-				os.Exit(0) // the daemon is gone, or a stream that cannot be trusted
+				// the daemon is gone, or a stream that cannot be trusted
+				provider.KillRunning()
+				os.Exit(0)
 			}
 			var m channel.Message
 			if json.Unmarshal(line, &m) != nil {
@@ -111,8 +121,17 @@ func run() {
 			messages <- m
 		}
 	}()
+	var mods *provider.Runtime
 	for m := range messages {
 		switch {
+		case m.Op == channel.OpLoad && m.Load != nil && mods == nil:
+			var r channel.Reply
+			mods, r = provider.Open(*m.Load)
+			out.Encode(r)
+		case m.Op == channel.OpGet && mods != nil:
+			out.Encode(mods.Get(m.Name))
+		case m.Op == channel.OpCall && mods != nil:
+			out.Encode(mods.Call(m.Name, m.Args))
 		case m.Op == channel.OpPing:
 			out.Encode(channel.Reply{Ready: true})
 		case m.Op == channel.OpParse && m.Parse != nil:

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -50,6 +51,11 @@ type Host struct {
 	conn   net.Conn
 	in     *bufio.Reader
 	cgroup string // of the scope; "" when not Limited
+
+	abandoned bool
+
+	talking  sync.Mutex // one question and its answer at a time
+	stopping sync.Mutex
 }
 
 var (
@@ -135,6 +141,8 @@ func Start(c Config) (*Host, error) {
 // exchange sends v and waits for an answer from a host that is still fine.
 func (h *Host) exchange(v any, wait time.Duration) (channel.Reply, error) {
 	var r channel.Reply
+	h.talking.Lock()
+	defer h.talking.Unlock()
 	h.conn.SetDeadline(time.Now().Add(wait))
 	defer h.conn.SetDeadline(time.Time{})
 	if err := json.NewEncoder(h.conn).Encode(v); err != nil {
@@ -191,6 +199,38 @@ func (h *Host) Parse(p channel.Parse, limit time.Duration) (json.RawMessage, []s
 	return r.Result, r.Log, nil
 }
 
+// functionTime is how long one function of a mod may take.
+const functionTime = 5 * time.Second
+
+// ask sends a message to the mod in the host. An error that is not a ModError
+// means the host is gone.
+func (h *Host) ask(m channel.Message, limit time.Duration) (channel.Reply, error) {
+	r, err := h.exchange(m, limit+grace)
+	if err != nil {
+		h.Stop()
+		return r, fmt.Errorf("its host is gone (stuck, or out of memory?): %w", err)
+	}
+	if r.Error != "" {
+		return r, &ModError{r.Error, r.Broken}
+	}
+	return r, nil
+}
+
+// Load gives the host its provider. A host holds one, once.
+func (h *Host) Load(l channel.Load) (channel.Reply, error) {
+	return h.ask(channel.Message{Op: channel.OpLoad, Load: &l}, functionTime)
+}
+
+// Get is a value of the provider.
+func (h *Host) Get(name string) (channel.Reply, error) {
+	return h.ask(channel.Message{Op: channel.OpGet, Name: name}, functionTime)
+}
+
+// Call runs a request of the provider.
+func (h *Host) Call(name string, args []string) (channel.Reply, error) {
+	return h.ask(channel.Message{Op: channel.OpCall, Name: name, Args: args}, functionTime)
+}
+
 // HostPath is the host binary beside spot's own, never one found in PATH (S17).
 func HostPath() (string, error) {
 	exe, err := os.Executable()
@@ -224,16 +264,41 @@ func cgroupOf(pid int, unit string) (string, error) {
 	return filepath.Join("/sys/fs/cgroup", path), nil
 }
 
-// Stop kills the host and everything in its scope. It is safe to call twice.
+// Stop kills the host and everything in its scope. It is safe to call twice,
+// and while a call is waiting.
 func (h *Host) Stop() {
+	h.stopping.Lock()
+	defer h.stopping.Unlock()
+	if h.abandoned {
+		return
+	}
 	if h.cgroup != "" {
 		// The scope is gone already when its last process left.
 		_ = os.WriteFile(filepath.Join(h.cgroup, "cgroup.kill"), []byte("1"), 0)
 		h.cgroup = ""
 	}
 	h.conn.Close()
-	if h.cmd.ProcessState == nil {
-		_ = h.cmd.Process.Kill()
-		_ = h.cmd.Wait()
+	if h.cmd.ProcessState != nil {
+		return
 	}
+	// A moment to kill the programs it is waiting for, which without a scope
+	// nothing else would; then it is killed itself.
+	done := make(chan struct{})
+	go func() {
+		_ = h.cmd.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(300 * time.Millisecond):
+		_ = h.cmd.Process.Kill()
+		<-done
+	}
+}
+
+// Abandon drops the channel and from then on stops nothing: what a host is
+// left with when its daemon dies. For tests.
+func (h *Host) Abandon() {
+	h.abandoned = true
+	h.conn.Close()
 }

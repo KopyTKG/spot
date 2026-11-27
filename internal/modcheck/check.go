@@ -21,6 +21,8 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/mod"
 	"gitlab.com/KopyTKG/spot/internal/modhost"
 	"gitlab.com/KopyTKG/spot/internal/modhost/channel"
+	"gitlab.com/KopyTKG/spot/internal/modload"
+	"gitlab.com/KopyTKG/spot/internal/modperm"
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
 	"gitlab.com/KopyTKG/spot/internal/scan"
 )
@@ -237,6 +239,19 @@ func (c *checker) scan(dir string, m mod.Mod) (int, bool) {
 	return len(r.Flagged), len(r.Refused) == 0
 }
 
+// permissions says what in them could never be granted on this machine.
+func (c *checker) permissions(m mod.Mod) bool {
+	grants, err := modperm.Resolve(m.Manifest.Permissions, os.Getenv)
+	if err == nil {
+		err = grants.Policy(c.host).Check(modload.Protected(grants.Vars))
+	}
+	if err != nil {
+		c.say("FAIL", "permissions of %s: %v", m.Name, err)
+		return false
+	}
+	return true
+}
+
 // verdict never calls a mod safe (S39), and says nothing of the kind about code
 // it could not read or would not accept.
 func (c *checker) verdict(flagged int, accepted bool) {
@@ -264,7 +279,8 @@ func Check(host, dir string, live []byte, out io.Writer) bool {
 	if first.Manifest.Type == "provider" {
 		flagged, ok := c.scan(dir, first)
 		c.verdict(flagged, ok)
-		c.say("note", "this is a provider: its code was read, not run (running providers is not built yet)")
+		ok = c.permissions(first) && ok
+		c.say("note", "this is a provider: its code was read, not run (starting providers waits for approval)")
 		return ok
 	}
 	name, set, err := mod.LoadSet(dir)

@@ -325,6 +325,10 @@ func (s *scanner) call(n *ast.FuncCallExpr, line int) {
 				s.refuse(line, "spot.pipe takes every list, and its options, written out")
 				return
 			}
+			if i == 0 && len(t.Fields) > 0 && keyedOnly(t) {
+				s.refuse(line, "spot.pipe without a command")
+				return
+			}
 			if i == len(n.Args)-1 && i > 0 && keyedOnly(t) {
 				s.options(t, line)
 				return
