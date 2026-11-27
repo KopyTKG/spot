@@ -101,13 +101,27 @@ func IsRoot() bool {
 // connections at once cannot add up to the daemon's memory.
 var reading = make(chan struct{}, 8)
 
+// maxConnections bounds how many callers are served at once. Each costs memory;
+// dialogs and watchers are far fewer.
+const maxConnections = 256
+
+var connections = make(chan struct{}, maxConnections)
+
 func serve(ln net.Listener, sh *ui.Shell) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		go handle(conn, sh)
+		select {
+		case connections <- struct{}{}:
+			go func() {
+				defer func() { <-connections }()
+				handle(conn, sh)
+			}()
+		default:
+			conn.Close() // too many: the caller sees it closed
+		}
 	}
 }
 

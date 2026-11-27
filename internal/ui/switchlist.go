@@ -16,12 +16,14 @@ import (
 // open. A row without one is an ordinary choice, submitted as its KEY.
 
 type switchRow struct {
+	icon    string // from the icon theme; "" for none
 	key     string
 	has, on bool
 	busy    bool
 }
 
 type switchRows struct {
+	icons  bool     // some row has one: all leave room for it
 	labels []string // what the list shows, in input order, unique
 	rows   map[string]*switchRow
 	shown  map[string]shownRow // the rows on screen, by label
@@ -80,7 +82,8 @@ func parseSwitchRows(item *config.Item, lines []string) *switchRows {
 func modRows(rows []config.Row) *switchRows {
 	s := newRowSet()
 	for _, row := range rows {
-		r := &switchRow{key: row.Key}
+		r := &switchRow{key: row.Key, icon: row.Icon}
+		s.icons = s.icons || row.Icon != ""
 		if row.State != nil {
 			r.has, r.on = true, *row.State
 		}
@@ -104,9 +107,31 @@ func newSwitchRow(lbl *gtk.Label) *gtk.Box {
 	return box
 }
 
+// setRowIcon shows icon before the label of a row widget that has room for one.
+// Widgets are reused, so the icon of the row shown before is replaced.
+func setRowIcon(box *gtk.Box, icon string) {
+	img, ok := box.FirstChild().(*gtk.Image)
+	if !ok {
+		img = gtk.NewImage()
+		img.AddCSSClass("spot-row-icon")
+		img.SetPixelSize(20)
+		box.Prepend(img)
+	}
+	if icon == "" {
+		img.Clear()
+		img.SetSizeRequest(20, -1)
+		return
+	}
+	img.SetFromIconName(icon)
+}
+
 // rowParts is the label of a row widget and its switch (nil before the first bind).
 func rowParts(box *gtk.Box) (*gtk.Label, *gtk.Switch) {
-	lbl, ok := box.FirstChild().(*gtk.Label)
+	first := box.FirstChild()
+	if _, icon := first.(*gtk.Image); icon {
+		first = gtk.BaseWidget(first).NextSibling()
+	}
+	lbl, ok := first.(*gtk.Label)
 	if !ok {
 		return nil, nil
 	}
@@ -130,6 +155,9 @@ func (s *switchRows) bind(child gtk.Widgetter, label string) {
 		return
 	}
 	lbl.SetText(label)
+	if r := s.rows[label]; s.icons && r != nil {
+		setRowIcon(box, r.icon)
+	}
 	id := coreglib.BaseObject(box).Native()
 	if undo := s.undo[id]; undo != nil {
 		undo()

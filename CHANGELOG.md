@@ -3,6 +3,20 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` and `spot-mod-host-linux-x64` binaries, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.9.1 — 2026-11-27
+
+What was left over from 0.9 ([#32](https://github.com/KopyTKG/spot/issues/32)).
+
+- **Mods on Fedora:** the sandbox now grants `/usr/lib64` and Fedora's certificate folders; HTTPS from a
+  mod failed there.
+- Without a `systemd` user session, programs that detach themselves are now stopped with their mod.
+- A script of your own that a mod runs is checked again right before each run.
+- Rows from a mod may have an `icon`, a name from the icon theme.
+- The daemon serves at most 256 callers at once. A custom socket path in a folder that others can change
+  (not yours or root's, or group or world writable without the sticky bit) is refused. The launch
+  history file is not read through a symbolic link.
+- Built with Go 1.26.10.
+
 ## 0.9.0 — 2026-11-27
 
 **Daemon mods (experimental).** A mod is a small Lua program the daemon runs for you: it gets and

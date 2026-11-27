@@ -54,6 +54,8 @@ type Load struct {
 	Grants   modperm.Grants     `json:"grants"`
 	Config   json.RawMessage    `json:"config,omitempty"`
 	EmptyDir string             `json:"empty_dir"` // where programs start
+	// Approved are the digests of programs of your own, by path.
+	Approved map[string]string `json:"approved,omitempty"`
 }
 
 // Event is one thing a mod did or was refused, for the audit log. It never

@@ -126,6 +126,15 @@ func running() *modd.Manager {
 	return mods.m
 }
 
+// watchPatience is how long one update may take to be read.
+var watchPatience = 10 * time.Second
+
+// send writes one update of a watch. A caller that does not read is dropped.
+func send(conn net.Conn, reply func(protocol.Response) error, r protocol.Response) error {
+	conn.SetWriteDeadline(time.Now().Add(watchPatience))
+	return reply(r)
+}
+
 // watch sends a value now and on every change, until the caller goes.
 func watch(conn net.Conn, req protocol.Request, reply func(protocol.Response) error) {
 	m, err := manager()
@@ -159,9 +168,7 @@ func watch(conn net.Conn, req protocol.Request, reply func(protocol.Response) er
 			if u.Err != "" {
 				r.Code, r.Stderr = protocol.ExitError, "spot: "+approval.Visible(u.Err)+"\n"
 			}
-			// A caller that does not read is dropped.
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if reply(r) != nil {
+			if send(conn, reply, r) != nil {
 				return
 			}
 		}

@@ -307,7 +307,7 @@ any mod code runs:
 
 A value is a string, a number, a boolean, a table, or a list of rows. A **row** is
 `{ label, key, state, comment, icon }`; only `label` is required. `state` (a boolean) makes it a
-switch row. A value holds at most 10,000 rows (see [what was tested](#what-was-tested)).
+switch row; `icon` is a name from the icon theme, and anything else, such as a path, is ignored. A value holds at most 10,000 rows (see [what was tested](#what-was-tested)).
 
 Nothing is computed for a value nobody has asked for.
 
@@ -394,7 +394,7 @@ under it. What bounds those programs is the limit of the mod's scope.
 | | |
 |---|---|
 | One scope per mod | The daemon starts each host in a `systemd` scope of its own in your user session (`systemd-run --user --scope`, about 6 ms). The host stays the daemon's child and keeps the channel; its second stage drops what only `systemd-run` needed from the environment. No delegation, whatever started the daemon |
-| Stopping | `cgroup.kill` on the mod's scope. Programs the host is waiting for are also killed by the host itself when the daemon goes. A job handed to `systemd` is not stopped. (**Later:** a child subreaper, for what detaches itself where there is no scope) |
+| Stopping | `cgroup.kill` on the mod's scope. Programs the host is waiting for are also killed by the host itself when the daemon goes. A job handed to `systemd` is not stopped. Without a `systemd` user session there is no scope: a supervisor outside the sandbox, a child subreaper, adopts what detaches itself and kills it with the host |
 | Resource limits | `MemoryMax`, `MemorySwapMax=0` and `TasksMax` on the scope cover the host and everything it starts. **Without `MemorySwapMax=0` a memory limit does nothing** where there is swap. At the memory limit the kernel kills the biggest process, usually a program, and the host reports it. A sandboxed program cannot leave the scope or raise its limits |
 | Without a `systemd` user session | **No** memory or process limit, and a program that detaches itself is not stopped with the mod; `spot mods` says so |
 | Channel | A socket pair, not a pipe: a program could write into a pipe through `/proc` |
@@ -500,14 +500,15 @@ the machine. **Not** against something already running as you or as root.
 approved mod, so a request that does something drastic is a way for other programs to do it. A mod
 must check the arguments it gets, and `spot mods show` lists the requests a mod offers.
 
-S29 holds fully, and S44 at all, only with a `systemd` user session; without one, `spot mods` says what
-is not covered. A
+S44 holds only with a `systemd` user session; without one, `spot mods` says what is not covered, and
+S29 rests on the supervisor, which is lost if it is killed from outside. A
 job handed to `systemd` needs the user bus, which the sandbox refuses unless granted.
 
 #### Not promised
 
-- A script of your own is checked when the mod starts, not at each run: something already running as
-  you can swap it afterwards. (That something could change your shell too.)
+- A script of your own is checked when the mod starts and again right before each run, but not at the
+  instant it starts: something already running as you can still swap it in between. (That something
+  could change your shell too.)
 - With a `socket` permission, or write access to something that runs later, a mod can leave the
   sandbox.
 - **Not only the listed programs can run.** `/usr/lib` must be readable for libraries, and it holds
@@ -533,8 +534,7 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 
 | Question | Why it matters |
 |----------|----------------|
-| Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
-| Do very large DNS answers (which need TCP port 53) and `.local` names have to work? | Both are untested and would likely fail |
+| Should `net` grant TCP port 53 too? | A name whose answer is too big for UDP does not resolve unless the mod also lists `53` (tested). Granting it always would let every mod with `net` connect to any server on that port |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
 
 #### Decided
@@ -602,11 +602,11 @@ python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # t
 | For | Granted |
 |-----|---------|
 | every host | **its own program file** (execute and read). A host that runs no programs needs nothing else |
-| a mod with `run` | `/dev/null`; the dynamic loader (execute); `/usr/lib` (**read, not execute**) |
+| a mod with `run` | `/dev/null`; the dynamic loader (execute); `/usr/lib` and `/usr/lib64` (**read, not execute**) |
 | correct local time | `/etc/localtime`, `/usr/share/zoneinfo` (read) |
 | user and group names | `/etc/passwd`, `/etc/group` (read) |
 | each entry of `run` | that program, and its interpreter if it is a script (execute) |
-| a mod with `net` | TCP to the listed ports; UDP to port 53 and binding port 0; `/etc/resolv.conf`, `/etc/hosts`, `/etc/ssl/certs`, `/etc/ca-certificates` (read) |
+| a mod with `net` | TCP to the listed ports; UDP to port 53 and binding port 0; `/etc/resolv.conf`, `/etc/hosts`, `/etc/ssl/certs`, `/etc/ca-certificates`, and Fedora's `/etc/pki/tls/certs` and `/etc/pki/ca-trust` (read) |
 
 Nothing else of `/etc` is included: no tested program needed `ld.so.cache`, `nsswitch.conf`, the
 terminal descriptions, `/dev/urandom` or translations; name lookups and HTTPS did not need
@@ -919,7 +919,7 @@ instead of `exec`. A password item cannot be used in either.
 - Values are read again after every change made in the dialog. A list that updates by itself while
   open comes with live lists (0.11); the rows stay as they were, only switch positions are read again.
 - A dialog that uses mods, and that others than you or root could change, is refused.
-- Row icons are not shown yet.
+- A row's `icon`, a name from the icon theme, is shown before its label (`.spot-row-icon`).
 
 ### From the command line
 
@@ -1217,8 +1217,12 @@ were refused. Without the certificate folders HTTPS failed.
 | The same limits on a scope made with `systemd-run --user`, and killing it from outside | enforced; all gone |
 | A socket pair passed through `systemd-run --scope` | works; the process stays the caller's child |
 
-**Still to test:** the sandbox, scope and re-exec together in one real host; older kernels (if the minimum is to be lowered), other distributions, large DNS answers and `.local` names, the real host's start
+**Still to test:** the sandbox, scope and re-exec together in one real host; older kernels (if the minimum is to be lowered), `.local` names of other machines, the real host's start
 time.
+
+**Since tested:** the mod tests pass on Debian 13 and Fedora 45 (in containers, so on the same kernel;
+Fedora needed `/usr/lib64` and its certificate folders in the base grant). A name with 80 addresses
+failed with `net = 443` and resolved with `53` added. This machine's own `.local` name resolved.
 
 ### First version
 

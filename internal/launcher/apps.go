@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -573,11 +574,17 @@ func openFrecency(path string) *frecencyStore {
 	s := &frecencyStore{path: path, data: map[string]frecRecord{}}
 	// It is a history of what was launched: the owner's business only, also when
 	// an earlier release left it open to others.
-	if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() && st.Mode().Perm() != 0o600 {
-		_ = os.Chmod(path, 0o600)
-	}
-	if b, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(b, &s.data)
+	// Opened once, without following a link, and judged by what was opened.
+	if f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0); err == nil {
+		defer f.Close()
+		if st, err := f.Stat(); err == nil && st.Mode().IsRegular() {
+			if st.Mode().Perm() != 0o600 {
+				_ = f.Chmod(0o600)
+			}
+			if b, err := io.ReadAll(io.LimitReader(f, 4<<20)); err == nil {
+				_ = json.Unmarshal(b, &s.data)
+			}
+		}
 	}
 	return s
 }

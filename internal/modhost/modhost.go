@@ -40,6 +40,7 @@ type Config struct {
 	Memory    int64     // bytes; 0 is DefaultMemory
 	Tasks     int       // 0 is DefaultTasks
 	Stderr    io.Writer // where the host complains
+	NoScope   bool      // as without a systemd user session; for tests
 }
 
 // Host is a running mod host.
@@ -100,7 +101,7 @@ func Start(c Config) (*Host, error) {
 		return nil, err
 	}
 
-	h := &Host{conn: conn, in: bufio.NewReader(conn), Limited: userSystemd()}
+	h := &Host{conn: conn, in: bufio.NewReader(conn), Limited: userSystemd() && !c.NoScope}
 	unit := fmt.Sprintf("spot-mod-%s-%d-%d.scope", c.Name, os.Getpid(), count.Add(1))
 	argv := []string{c.Policy.Self}
 	if h.Limited {
@@ -110,6 +111,9 @@ func Start(c Config) (*Host, error) {
 			"-p", "MemorySwapMax=0", // without it a memory limit is none where there is swap
 			"-p", "TasksMax=" + strconv.Itoa(c.Tasks),
 			"--"}, argv...)
+	} else {
+		// Nothing else would stop what detaches itself.
+		argv = append(argv, "supervise")
 	}
 	h.cmd = exec.Command(argv[0], argv[1:]...)
 	h.cmd.Dir = "/"
@@ -295,9 +299,21 @@ func (h *Host) Stop() {
 		_ = h.cmd.Wait()
 		close(done)
 	}()
+	grace := 300 * time.Millisecond
+	if !h.Limited {
+		// The supervisor kills what is left once the host has gone. Ask it, and
+		// give it time, before taking it down too.
+		grace = 3 * time.Second
+		select {
+		case <-done:
+			return
+		case <-time.After(300 * time.Millisecond):
+			_ = h.cmd.Process.Signal(syscall.SIGTERM)
+		}
+	}
 	select {
 	case <-done:
-	case <-time.After(300 * time.Millisecond):
+	case <-time.After(grace):
 		_ = h.cmd.Process.Kill()
 		<-done
 	}

@@ -28,8 +28,13 @@ type ModSource interface {
 // Row is one row of a mod's value or a parser's output.
 type Row struct {
 	Label, Key string
-	State      *bool // a switch row
+	Icon       string // a name from the icon theme, never a file
+	State      *bool  // a switch row
 }
+
+// themeIcon is a name an icon theme can hold. A path is not one: a mod's rows
+// cannot name an image file (S31).
+var themeIcon = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$`)
 
 var (
 	modItem   = regexp.MustCompile(`^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_]{0,63}$`)
@@ -197,6 +202,9 @@ func Rows(raw json.RawMessage) ([]Row, error) {
 			r = Row{Label: label, Key: label}
 			if k, ok := x["key"].(string); ok && k != "" {
 				r.Key = k
+			}
+			if icon, ok := x["icon"].(string); ok && themeIcon.MatchString(icon) {
+				r.Icon = icon
 			}
 			if on, ok := x["state"].(bool); ok {
 				r.State = &on

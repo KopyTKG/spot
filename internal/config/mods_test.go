@@ -117,3 +117,11 @@ func TestSubmitCallAndCopy(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+// A mod's rows cannot name an image file (S31).
+func TestRowIconsAreThemeNames(t *testing.T) {
+	rows, err := Rows(json.RawMessage(`[{"label":"a","icon":"network-wired"},{"label":"b","icon":"/etc/passwd"},{"label":"c","icon":"../x"},{"label":"d","icon":7}]`))
+	if err != nil || rows[0].Icon != "network-wired" || rows[1].Icon+rows[2].Icon+rows[3].Icon != "" {
+		t.Errorf("%+v %v", rows, err)
+	}
+}

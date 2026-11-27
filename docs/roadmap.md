@@ -92,12 +92,15 @@ Open design questions, to settle before the release that needs them:
 
 **Known limits of 0.9**
 
-- A script of your own is checked when its mod starts, not at each run.
-- Without a `systemd` user session there are no memory or task limits, and a program that detaches
-  itself outlives its mod.
-- Row icons are not shown, and a list does not update while it is open (0.11).
-- The sandbox is tested on Arch only, on `x86_64`, and needs Linux with Landlock ABI 11. The CI
-  machine cannot test it, so `just test-mods` runs it before a release.
+- A script of your own can still be swapped between its check and its start.
+- Without a `systemd` user session there are no memory or task limits.
+- A name whose DNS answer needs TCP resolves only for a mod that also lists `53` in `net`.
+- A list does not update while it is open (0.11).
+- The sandbox needs Linux with Landlock ABI 11 on `x86_64`. It is tested on Arch, and in Debian and
+  Fedora containers on the same kernel. The CI machine cannot test it, so `just test-mods` runs it
+  before a release.
+
+What else is left over is in [#32](https://github.com/KopyTKG/spot/issues/32).
 
 ## Also wanted
 

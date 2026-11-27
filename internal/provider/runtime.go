@@ -67,6 +67,7 @@ type Runtime struct {
 	parsers  parser.Call
 	uses     []string
 	emptyDir string
+	approved map[string]string // digests of your own programs
 
 	values   map[string]*value
 	requests map[string]*lua.LFunction
@@ -154,7 +155,7 @@ func (r *Runtime) within5(f func() error) error {
 // Open runs the provider's init.lua, which says what it publishes.
 func Open(l channel.Load) (*Runtime, channel.Reply) {
 	r := &Runtime{L: luaenv.New(false), name: l.Mod.Name, grants: l.Grants, files: l.Files,
-		parsers: parser.Call{Mods: l.Parsers}, uses: l.Mod.Manifest.Uses, emptyDir: l.EmptyDir,
+		parsers: parser.Call{Mods: l.Parsers}, uses: l.Mod.Manifest.Uses, emptyDir: l.EmptyDir, approved: l.Approved,
 		values: map[string]*value{}, requests: map[string]*lua.LFunction{},
 		required: map[string]lua.LValue{}, loading: map[string]bool{}, ctx: context.Background(),
 		changed: map[string]bool{}, since: time.Now()}

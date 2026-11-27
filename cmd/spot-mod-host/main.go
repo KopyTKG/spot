@@ -43,6 +43,9 @@ func main() {
 		}
 		os.Exit(126)
 	}
+	if len(os.Args) == 2 && os.Args[1] == superviseArg {
+		os.Exit(supervise())
+	}
 	if len(os.Args) == 2 && os.Args[1] == second {
 		run()
 		return

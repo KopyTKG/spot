@@ -21,6 +21,11 @@ import (
 var hostBin string
 
 func TestMain(m *testing.M) {
+	// A prebuilt host, to run these on a machine without Go (another
+	// distribution, in a container).
+	if hostBin = os.Getenv("SPOT_TEST_HOST"); hostBin != "" {
+		os.Exit(m.Run())
+	}
 	dir, err := os.MkdirTemp("", "spot-host")
 	if err != nil {
 		panic(err)

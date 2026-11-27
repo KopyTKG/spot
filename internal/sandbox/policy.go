@@ -242,6 +242,7 @@ func (p Policy) Rules() ([]Rule, error) {
 		add(Read|Write, false, "/dev/null")
 		add(Exec, false, loader)
 		add(Read, false, "/usr/lib")
+		add(Read, true, "/usr/lib64") // where Fedora and others keep libraries; a link to lib elsewhere
 		add(Read, true, "/etc/localtime", "/usr/share/zoneinfo", "/etc/passwd", "/etc/group")
 	}
 	for _, prog := range p.Programs {
@@ -253,7 +254,9 @@ func (p Policy) Rules() ([]Rule, error) {
 		add(Exec, false, interp...)
 	}
 	if len(p.Ports) > 0 {
-		add(Read, true, "/etc/resolv.conf", "/etc/hosts", "/etc/ssl/certs", "/etc/ca-certificates")
+		// Certificates only: the folders beside them hold private keys.
+		add(Read, true, "/etc/resolv.conf", "/etc/hosts", "/etc/ssl/certs", "/etc/ca-certificates",
+			"/etc/pki/tls/certs", "/etc/pki/ca-trust") // as Fedora has them
 	}
 	for _, path := range p.Read {
 		add(Read, true, path)

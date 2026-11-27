@@ -3,8 +3,11 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -120,6 +123,10 @@ func (r *Runtime) pipeline(ctx context.Context, commands [][]string, o runOption
 		if !ok {
 			r.audit("refused", "run "+argv[0])
 			return res, fmt.Errorf("%q: %w to run it", argv[0], errRefused)
+		}
+		if err := r.unchanged(path); err != nil {
+			r.audit("refused", "run "+argv[0]+": "+err.Error())
+			return res, err
 		}
 		paths[i] = path
 	}
@@ -283,4 +290,27 @@ func kill(group int) {
 	if group > 0 {
 		_ = syscall.Kill(-group, syscall.SIGKILL)
 	}
+}
+
+// unchanged checks a program of your own right before it is run: the daemon
+// checks before each request, and a request can last. Something that already
+// runs as you can still swap it between here and the start (S10).
+func (r *Runtime) unchanged(path string) error {
+	want, mine := r.approved[path]
+	if !mine {
+		return nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("%s cannot be checked: %w", path, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, io.LimitReader(f, 17<<20)); err != nil {
+		return fmt.Errorf("%s cannot be checked: %w", path, err)
+	}
+	if hex.EncodeToString(h.Sum(nil)) != want {
+		return fmt.Errorf("%s has changed since you approved the mod", path)
+	}
+	return nil
 }

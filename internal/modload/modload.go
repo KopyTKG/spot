@@ -116,6 +116,6 @@ func Approved(m *approval.Mod, o Options) (modhost.Config, channel.Load, error) 
 		return c, l, fmt.Errorf("mod %s: %w", m.Name, err)
 	}
 	c = modhost.Config{Name: m.Name, Policy: grants.Policy(o.Host), Protected: o.Protected}
-	l = channel.Load{Mod: m.Provider, Files: m.Files, Parsers: m.Parsers, Grants: grants, Config: o.Config, EmptyDir: o.EmptyDir}
+	l = channel.Load{Mod: m.Provider, Files: m.Files, Parsers: m.Parsers, Grants: grants, Config: o.Config, EmptyDir: o.EmptyDir, Approved: m.Programs}
 	return c, l, nil
 }

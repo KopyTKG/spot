@@ -1,6 +1,6 @@
 module gitlab.com/KopyTKG/spot
 
-go 1.26.3
+go 1.26.10
 
 require (
 	github.com/diamondburned/gotk4-layer-shell/pkg v0.0.0-20240109211357-6efa9f6dc438

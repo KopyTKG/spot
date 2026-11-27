@@ -236,3 +236,12 @@ func TestSubmitCall(t *testing.T) {
 		t.Errorf("%q %q", m.made(), errorShown(d))
 	}
 }
+
+// A list whose rows have icons still reads each row's label and switch.
+func TestSwitchRowsWithIcons(t *testing.T) {
+	m := &fakeMods{values: map[string]string{"n.t": `[{"label":"one","key":"1","icon":"network-wired","state":false},{"label":"two","key":"2"}]`}}
+	d, _ := modDialog(t, "[[items]]\ntype='list'\nid='s'\nfrom='n.t'\ncall='n.set'\n", m)
+	realize(t, d)
+	d.onKey(gdk.KEY_Return, 0, nil)
+	waitFor(t, "the switch of the row with an icon", func() bool { return m.made() == "n.set(1,true)" })
+}
