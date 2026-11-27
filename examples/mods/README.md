@@ -7,6 +7,8 @@ Mods are in development. The design is in [docs/modding.md](../../docs/modding.m
 
 ## Install and approve
 
+From a checkout, or from `/usr/share/doc/spot/` with the package:
+
 ```sh
 mkdir -p ~/.config/spot/mods
 cp -r examples/mods/ss examples/mods/sockets ~/.config/spot/mods/
@@ -38,9 +40,9 @@ For waybar:
 }
 ```
 
-## Trying a build beside your installed spot
+## Trying a build from a checkout
 
-From a checkout, `just build`, then use `just dev` where the commands above say `spot`:
+`just build`, then use `just dev` where the commands above say `spot`:
 
 ```sh
 just dev mods allow sockets
@@ -49,8 +51,7 @@ just dev ~/.config/spot/mods/sockets/sockets.toml
 just dev --quit              # stop the second daemon
 ```
 
-It has its own daemon and socket; your installed `spot` keeps running and does not read `mods.toml`.
-Run `just dev` from the checkout folder.
+It has its own daemon and socket, beside your installed `spot`.
 
 ## Compared with a shell script
 

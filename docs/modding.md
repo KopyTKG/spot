@@ -1,8 +1,9 @@
-# Modding: daemon mods (draft)
+# Modding: daemon mods
 
-> **Draft for review. Nothing described here exists yet.** It proposes the mod API for 0.9
-> ([#16](https://github.com/KopyTKG/spot/issues/16)); names and behaviour are all open to change.
-> Questions to answer are [at the end](#open-questions).
+> **Experimental, in 0.9.** This is the design the mods were built from and its reference: names and
+> behaviour may still change until menu trees (0.10) have used them. What is not built is listed in the
+> [roadmap](roadmap.md#where-09-stands). To try one, start with the [examples](../examples/mods/).
+> The [questions at the end](#open-questions) are still welcome.
 
 A **daemon mod** is a Lua program the spot daemon looks after. It loads and parses data once, keeps
 it, and hands it to anything that asks: dialogs, a bar, scripts. It replaces the shell script that
@@ -21,7 +22,7 @@ that hangs or eats memory can be killed without taking your launcher and menus w
 ```
 
 **UI mods** (behaviour inside one dialog) are a separate layer. They come later, with no release set,
-and are not covered here. The work for 0.9 is tracked in the [milestone](https://github.com/KopyTKG/spot/milestone/1).
+and are not covered here. The work is tracked in the [milestone](https://github.com/KopyTKG/spot/milestone/1).
 
 ## Types of mod
 

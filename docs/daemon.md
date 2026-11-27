@@ -184,7 +184,7 @@ refuses to start as root.
 The daemon refuses such a dialog from any caller. At most 32 dialogs may wait their
 turn.
 
-## Mods (in development)
+## Mods (experimental)
 
 Mods have a file of their own, `~/.config/spot/mods.toml`, which a spot without mods does not read:
 

@@ -1,8 +1,7 @@
 # Roadmap
 
 Where spot is going, and what it is not. Shipped work is in the [changelog](../CHANGELOG.md).
-Nothing below the Shipped table is released; [0.9 is built on a branch](#where-09-stands). The version
-numbers show order, not dates.
+Nothing in the plan after 0.9 exists yet, and the version numbers show order, not dates.
 
 ## Direction
 
@@ -62,8 +61,7 @@ Open design questions, to settle before the release that needs them:
 
 ## Where 0.9 stands
 
-As of 2026-11-27. **Not released.** The work is on the
-[`mods` branch](https://github.com/KopyTKG/spot/tree/mods); installed spot has none of it.
+**Released as 0.9.0** on 2026-11-27, as experimental.
 
 **Built and tested**
 
@@ -79,19 +77,18 @@ As of 2026-11-27. **Not released.** The work is on the
   `submit.copy`, so that a tool needs no shell. Also `spot parse`.
 - Approval covers every file of a mod's folder, and names what in it would run without the sandbox.
 - A log and an audit log per mod; the notification for a changed mod says what it newly asks for.
-- Packaging of the mod host, and an [example](https://github.com/KopyTKG/spot/tree/mods/examples/mods):
+- Packaging of the mod host, and an [example](../examples/mods):
   an `ss` parser, a sockets provider and a searchable table, with no shell script. The table, copying,
   approval and re-approval after a change have been used by hand.
 
-**Before it is released**
+**Still to find out**, with the API marked experimental until then
 
-- The verdict on the proof ([#24](https://github.com/KopyTKG/spot/issues/24)): is the mod clearly
-  simpler than the script it replaces? If not, the API is revisited first. The example has the same
-  numbers as the script, in about 55 lines of Lua and a short dialog against 130 lines of shell; it
-  cannot name processes or use root.
-- A second person trying it, above all the approval screen.
+- Whether writing a mod is clearly better than writing the script it replaces
+  ([#24](https://github.com/KopyTKG/spot/issues/24)). The sockets example has the same numbers as its
+  script, in about 55 lines of Lua and a short dialog against 130 lines of shell; it cannot name
+  processes or use root.
+- What a second person makes of it, above all of the approval screen.
 - The bar counter in a real bar.
-- Merging and tagging in one go: the `spot-bin` recipe expects a download that only a new release has.
 
 **Known limits of 0.9**
 
@@ -129,6 +126,7 @@ Not tied to a release above:
 | 0.7.1–0.7.3 | A hidden pointer no longer highlights; the daemon memory leak fixed; source split into `internal/` |
 | 0.7.4 | `SPOT_TARGET`: open a file or URL with the picked app; `MimeType=` in the index |
 | 0.8 | Controls that apply at once (`state` / `on_change`): `switch`, `segmented`, `button`, `separator`, live `scale`, switch rows in lists |
+| 0.9 | Daemon mods (experimental): sandboxed parsers and providers, approval, `spot get` / `watch` / `call` / `parse`, `from` / `call` in dialogs, `submit.copy` |
 
 ## Not planned
 
