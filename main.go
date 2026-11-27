@@ -85,6 +85,10 @@ func usageError(format string, args ...any) {
 func main() {
 	protocol.Version = version
 
+	if len(os.Args) > 1 && os.Args[1] == "mods" {
+		os.Exit(modsCommand(os.Args[2:]))
+	}
+
 	var (
 		arg                             string
 		chain, last, sub, back, oneshot bool

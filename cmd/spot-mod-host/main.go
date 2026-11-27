@@ -8,12 +8,17 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"syscall"
+	"time"
 
 	"gitlab.com/KopyTKG/spot/internal/modhost/channel"
+	"gitlab.com/KopyTKG/spot/internal/parser"
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
 	"golang.org/x/sys/unix"
 )
@@ -75,16 +80,79 @@ func run() {
 	if err := sandbox.Verify(); err != nil {
 		fail(ch, fmt.Errorf("not in the sandbox: %w", err))
 	}
+	if err := limitMemory(); err != nil {
+		fail(ch, fmt.Errorf("limiting memory: %w", err))
+	}
 	out := json.NewEncoder(ch)
 	out.Encode(channel.Reply{Ready: true})
-	in := bufio.NewScanner(ch)
-	for in.Scan() {
-		var m channel.Message
-		if json.Unmarshal(in.Bytes(), &m) != nil || m.Op != channel.OpPing {
-			os.Exit(1) // a stream that cannot be trusted any more
+	in := bufio.NewReader(ch)
+	for {
+		line, err := channel.ReadLine(in)
+		if err != nil {
+			return // the daemon is gone, or a stream that cannot be trusted
 		}
-		out.Encode(channel.Reply{Ready: true})
+		var m channel.Message
+		if json.Unmarshal(line, &m) != nil {
+			os.Exit(1)
+		}
+		switch {
+		case m.Op == channel.OpPing:
+			out.Encode(channel.Reply{Ready: true})
+		case m.Op == channel.OpParse && m.Parse != nil:
+			out.Encode(parse(m.Parse))
+		default:
+			os.Exit(1)
+		}
 	}
+}
+
+// memoryLimit stops a mod that allocates without end. A data limit: an
+// address-space limit does not work with Go.
+const memoryLimit = 256 << 20
+
+func limitMemory() error {
+	var l unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_DATA, &l); err != nil {
+		return err
+	}
+	l.Cur = min(memoryLimit, l.Max)
+	debug.SetMemoryLimit(memoryLimit * 3 / 4) // collect before reaching it
+	return unix.Setrlimit(unix.RLIMIT_DATA, &l)
+}
+
+func parse(p *channel.Parse) channel.Reply {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.Millis)*time.Millisecond)
+	defer cancel()
+	c := &parser.Call{Mods: p.Mods}
+	bad := func(err error) channel.Reply {
+		var v *parser.Violation
+		return channel.Reply{Ready: true, Error: err.Error(), Broken: errors.As(err, &v), Log: c.Log}
+	}
+	if p.Load {
+		if err := c.Load(ctx, p.Name); err != nil {
+			return bad(err)
+		}
+		return channel.Reply{Ready: true, Log: c.Log}
+	}
+	var options any
+	if len(p.Options) > 0 {
+		if err := json.Unmarshal(p.Options, &options); err != nil {
+			return bad(fmt.Errorf("options: %w", err))
+		}
+	}
+	rows, err := c.Run(ctx, p.Name, string(p.Input), options)
+	if err != nil {
+		return bad(err)
+	}
+	b, err := json.Marshal(rows)
+	if err != nil {
+		return bad(err)
+	}
+	// Room for the rest of the message: JSON can be longer than the text in it.
+	if len(b) > channel.MaxMessage-1<<20 {
+		return bad(fmt.Errorf("parser %s: the result is too large", p.Name))
+	}
+	return channel.Reply{Ready: true, Result: b, Log: c.Log}
 }
 
 func fail(ch *os.File, err error) {

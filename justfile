@@ -24,9 +24,11 @@ ldflags := "-X main.version=" + build_version
 # (build_version also counts commits since it, which no release is named after.)
 release_version := `git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//' || true`
 
-# Build ./spot for this machine (needs gtk4, gtk4-layer-shell, go).
+# Build ./spot for this machine (needs gtk4, gtk4-layer-shell, go), and the mod
+# host beside it: a static program, the sandbox grants it nothing but itself.
 build:
     go build -ldflags "{{ldflags}}" -o spot .
+    CGO_ENABLED=0 go build -o spot-mod-host ./cmd/spot-mod-host
 
 # Run the unit tests (no display needed).
 test:
@@ -48,7 +50,7 @@ package:
 
 # Remove build output.
 clean:
-    rm -rf {{dist}} spot
+    rm -rf {{dist}} spot spot-mod-host
 
 # --------------------------------------------------------------------------
 # Release (Jenkins builds, releases and publishes to the AUR from the tag)

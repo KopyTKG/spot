@@ -1,0 +1,10 @@
+type        = "parser"
+api         = 1
+version     = "1.0.0"
+description = "Sockets from ss"
+input       = "output of `ss -H -tuna`"
+
+[returns]
+label   = "string"
+key     = "string"
+comment = "string?"

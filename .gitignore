@@ -1,5 +1,6 @@
 # Go build artifacts
 /spot
+/spot-mod-host
 *.exe
 *.test
 *.out

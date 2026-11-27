@@ -9,4 +9,7 @@ require (
 	golang.org/x/sys v0.50.0
 )
 
-require golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
+require (
+	github.com/yuin/gopher-lua v1.1.2 // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
+)

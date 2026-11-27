@@ -121,7 +121,7 @@ func Start(c Config) (*Host, error) {
 	}
 	theirs.Close() // so that the host's end closing is seen
 
-	err = h.exchange(channel.Hello{Policy: c.Policy}, startWait)
+	_, err = h.exchange(channel.Hello{Policy: c.Policy}, startWait)
 	if err == nil && h.Limited {
 		h.cgroup, err = cgroupOf(h.cmd.Process.Pid, unit)
 	}
@@ -132,30 +132,76 @@ func Start(c Config) (*Host, error) {
 	return h, nil
 }
 
-// exchange sends v and waits for the host to say it is ready.
-func (h *Host) exchange(v any, wait time.Duration) error {
+// exchange sends v and waits for an answer from a host that is still fine.
+func (h *Host) exchange(v any, wait time.Duration) (channel.Reply, error) {
+	var r channel.Reply
 	h.conn.SetDeadline(time.Now().Add(wait))
 	defer h.conn.SetDeadline(time.Time{})
 	if err := json.NewEncoder(h.conn).Encode(v); err != nil {
-		return fmt.Errorf("the host does not take messages: %w", err)
+		return r, fmt.Errorf("the host does not take messages: %w", err)
 	}
-	line, err := h.in.ReadSlice('\n') // bounded by the reader's buffer
+	line, err := channel.ReadLine(h.in)
 	if err != nil {
-		return fmt.Errorf("the host did not answer: %w", err)
+		return r, fmt.Errorf("the host did not answer: %w", err)
 	}
-	var r channel.Reply
 	if err := json.Unmarshal(line, &r); err != nil {
-		return fmt.Errorf("the host answered nonsense: %w", err)
+		return r, fmt.Errorf("the host answered nonsense: %w", err)
 	}
 	if !r.Ready {
-		return errors.New(r.Error)
+		return r, errors.New(r.Error)
 	}
-	return nil
+	return r, nil
 }
 
 // Ping reports whether the host answers in time.
 func (h *Host) Ping(wait time.Duration) error {
-	return h.exchange(channel.Message{Op: channel.OpPing}, wait)
+	_, err := h.exchange(channel.Message{Op: channel.OpPing}, wait)
+	return err
+}
+
+// ModError is a fault of the mod, or input it refused: the host is fine and
+// stays. Broken says the mod broke its contract.
+type ModError struct {
+	Message string
+	Broken  bool
+}
+
+func (e *ModError) Error() string { return e.Message }
+
+// grace is what a host gets beyond the time allowed inside Lua before it is
+// killed: a slow string pattern cannot be interrupted any other way.
+const grace = 2 * time.Second
+
+// Parse runs one parser call in the host, allowing it limit. The result is the
+// parser's records as a JSON array. An error that is not a ModError means the
+// host is gone: it did not answer, ran out of memory or talked nonsense.
+func (h *Host) Parse(p channel.Parse, limit time.Duration) (json.RawMessage, []string, error) {
+	p.Millis = int(limit / time.Millisecond)
+	r, err := h.exchange(channel.Message{Op: channel.OpParse, Parse: &p}, limit+grace)
+	if err != nil {
+		h.Stop()
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return nil, nil, fmt.Errorf("parser %s: took too long, its host was killed", p.Name)
+		}
+		return nil, nil, fmt.Errorf("parser %s: its host died (out of memory?): %w", p.Name, err)
+	}
+	if r.Error != "" {
+		return nil, r.Log, &ModError{r.Error, r.Broken}
+	}
+	return r.Result, r.Log, nil
+}
+
+// HostPath is the host binary beside spot's own, never one found in PATH (S17).
+func HostPath() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	path, err := filepath.EvalSymlinks(filepath.Join(filepath.Dir(exe), "spot-mod-host"))
+	if err != nil {
+		return "", fmt.Errorf("spot-mod-host is not beside spot: %w", err)
+	}
+	return path, nil
 }
 
 // PID is the host's process.

@@ -60,11 +60,14 @@ Its `init.lua` returns exactly one function:
 return function(input, options)
   local rows = {}
   for line in input:gmatch("[^\n]+") do
-    local proto, state, _, _, addr, peer = line:match("(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+    -- netid, state, two queue sizes (numbers), local and peer address
+    local proto, state, addr, peer = line:match("^(%a[%w_]*)%s+([%u%-%d]+)%s+%d+%s+%d+%s+(%S+)%s+(%S+)")
     if proto then
       rows[#rows + 1] = { label = ("%-4s %-9s %s  %s"):format(proto, state, addr, peer), key = addr }
     end
   end
+  -- Text that is not ss output must not look like "no sockets".
+  if #rows == 0 and input:match("%S") then error("this is not output of ss -H -tuna") end
   return rows
 end
 ```
@@ -332,7 +335,7 @@ message on stderr, and in a dialog the control goes back to what it showed.
 | `spot.list(path)` | The names in a folder |
 | `spot.exists(path)` | `"file"`, `"dir"` or `nil` |
 | `spot.every(ms, fn)`, `spot.after(ms, fn)` | Timers |
-| `spot.json.encode(v)`, `spot.json.decode(s)` | JSON |
+| `spot.json.encode(v)`, `spot.json.decode(s)` | JSON. A `null` is left out, in a list too, so that lists never have holes |
 | `spot.env(name)`, `spot.time()` | An environment variable; seconds since 1970 |
 | `spot.use(name)`, `spot.require(file)` | A parser's function; another file of this mod |
 | `spot.log(message)` | To the daemon log, with the mod's name |
