@@ -1,0 +1,20 @@
+/* The table: a card, in monospace so that the columns line up. */
+* { font-family: monospace; }
+.spot-window { background: transparent; }
+.spot-root {
+  background: #1c1917;
+  color: #fafaf9;
+  border: 1px solid rgba(245, 245, 244, 0.18);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.spot-title { font-size: 13pt; font-weight: bold; margin: 2px 0 8px 0; }
+.spot-search {
+  background: rgba(245, 245, 244, 0.07);
+  color: #fafaf9;
+  border: 1px solid rgba(245, 245, 244, 0.18);
+  border-radius: 10px;
+}
+listview, scrolledwindow { background: transparent; }
+listview > row { color: #e7e5e4; padding: 3px 8px; border-radius: 8px; }
+listview > row:selected { background: rgba(122, 162, 247, 0.28); color: #fafaf9; }

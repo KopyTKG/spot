@@ -5,7 +5,8 @@ return function(input, options)
     local proto, state, addr, peer = line:match("^(%a[%w_]*)%s+([%u%-%d]+)%s+%d+%s+%d+%s+(%S+)%s+(%S+)")
     if proto then
       rows[#rows + 1] = {
-        label = ("%-4s %-9s %s  %s"):format(proto, state, addr, peer),
+        -- padded, so that the peer addresses line up in monospace
+        label = ("%-4s %-9s %-24s %s"):format(proto, state, addr, peer),
         key = addr,
         proto = proto,
         state_name = state,

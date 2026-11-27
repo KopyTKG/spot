@@ -1,6 +1,7 @@
 # A searchable table of the sockets mod's rows (see sockets.sh).
 title    = "Sockets"
 width    = 760
+style    = "style.css"
 keyboard = "exclusive"
 
 [[items]]
