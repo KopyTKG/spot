@@ -4,6 +4,7 @@
 package approval
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"gitlab.com/KopyTKG/spot/internal/config"
 	"gitlab.com/KopyTKG/spot/internal/mod"
@@ -68,6 +70,7 @@ type Mod struct {
 	Files    map[string][]byte  // every .lua file
 	Parsers  map[string]mod.Mod // that it uses, directly or through another
 	Programs map[string]string  // programs of your own, by path: their digest
+	All      map[string][]byte  // every file of the mod and its parsers, "name/path"
 	Hash     string
 }
 
@@ -123,6 +126,7 @@ func (s Store) Read(name string) (*Mod, error) {
 		return nil, fmt.Errorf("%q is not a mod name", name)
 	}
 	dir := filepath.Join(s.Mods, name)
+	every := map[string][]byte{}
 	read := func(dir string) (mod.Mod, map[string][]byte, error) {
 		m, err := mod.Load(dir)
 		if err != nil {
@@ -142,13 +146,25 @@ func (s Store) Read(name string) (*Mod, error) {
 				return m, nil, fmt.Errorf("mod %s: %w", m.Name, err)
 			}
 		}
+		// Everything else in the folder is approved with it: a dialog or a
+		// script shipped beside the code must not change unnoticed.
+		all, err := mod.All(dir)
+		if err != nil {
+			return m, nil, fmt.Errorf("mod %s: %w", m.Name, err)
+		}
+		for rel, b := range all {
+			if err := trusted(filepath.Join(dir, rel)); err != nil {
+				return m, nil, fmt.Errorf("mod %s: %w", m.Name, err)
+			}
+			every[m.Name+"/"+rel] = b
+		}
 		return m, files, nil
 	}
 	m, files, err := read(dir)
 	if err != nil {
 		return nil, err
 	}
-	out := &Mod{Name: name, Provider: m, Files: files, Parsers: map[string]mod.Mod{}, Programs: map[string]string{}}
+	out := &Mod{Name: name, Provider: m, Files: files, Parsers: map[string]mod.Mod{}, Programs: map[string]string{}, All: every}
 	var use func(m mod.Mod, chain []string) error
 	use = func(m mod.Mod, chain []string) error {
 		for _, u := range m.Manifest.Uses {
@@ -265,28 +281,38 @@ func (m *Mod) hash() string {
 	for _, n := range keys(m.Parsers) {
 		one(n, m.Parsers[n], map[string][]byte{"init.lua": m.Parsers[n].Source})
 	}
+	for _, f := range keys(m.All) {
+		part("any", f, strconv.Itoa(len(m.All[f])), digest(m.All[f]))
+	}
 	for _, p := range keys(m.Programs) {
 		part("program", p, m.Programs[p])
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Texts is every file as approved, for showing and comparing: "name/file".
+// Texts is every file as approved, for showing and comparing: "name/file". What
+// is not text is named by its size and digest.
 func (m *Mod) Texts() map[string]string {
 	out := map[string]string{}
-	add := func(name string, x mod.Mod, files map[string][]byte) {
-		if x.Raw != nil {
-			out[name+"/mod.toml"] = string(x.Raw)
+	for name, b := range m.All {
+		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
+			out[name] = fmt.Sprintf("(not text: %d bytes, sha256 %s)", len(b), digest(b))
+			continue
 		}
-		for f, b := range files {
-			out[name+"/"+f] = string(b)
-		}
-	}
-	add(m.Name, m.Provider, m.Files)
-	for n, p := range m.Parsers {
-		add(n, p, map[string][]byte{"init.lua": p.Source})
+		out[name] = string(b)
 	}
 	return out
+}
+
+// Outside are the files of the mod's folder that run outside the sandbox.
+func (m *Mod) Outside() []scan.Outside {
+	own := map[string][]byte{}
+	for name, b := range m.All {
+		if rest, ok := strings.CutPrefix(name, m.Name+"/"); ok {
+			own[rest] = b
+		}
+	}
+	return scan.Beside(own)
 }
 
 // Refused is the code that breaks the strict form: such a mod cannot be

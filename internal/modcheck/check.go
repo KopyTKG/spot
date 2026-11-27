@@ -239,6 +239,21 @@ func (c *checker) scan(dir string, m mod.Mod) (int, bool) {
 	return len(r.Flagged), len(r.Refused) == 0
 }
 
+// outside says what else in the folder would run with no sandbox.
+func (c *checker) outside(dir string) {
+	files, err := mod.All(dir)
+	if err != nil {
+		c.say("FAIL", "%v", err)
+		return
+	}
+	for _, o := range scan.Beside(files) {
+		c.say("warn", "%s runs OUTSIDE the sandbox when opened or run: %s", o.File, o.Why)
+		for _, r := range o.Runs {
+			c.say("", "%s", r)
+		}
+	}
+}
+
 // permissions says what in them could never be granted on this machine.
 func (c *checker) permissions(m mod.Mod) bool {
 	grants, err := modperm.Resolve(m.Manifest.Permissions, os.Getenv)
@@ -279,6 +294,7 @@ func Check(host, dir string, live []byte, out io.Writer) bool {
 	if first.Manifest.Type == "provider" {
 		flagged, ok := c.scan(dir, first)
 		c.verdict(flagged, ok)
+		c.outside(dir)
 		ok = c.permissions(first) && ok
 		c.say("note", "this is a provider: its code was read, not run (starting providers waits for approval)")
 		return ok
@@ -314,6 +330,7 @@ func Check(host, dir string, live []byte, out io.Writer) bool {
 		flagged, strict = flagged+found, strict && ok
 	}
 	c.verdict(flagged, strict)
+	c.outside(dir)
 	if !strict {
 		return false
 	}

@@ -164,8 +164,8 @@ func parseManifest(data []byte) (Manifest, error) {
 // ReadExample reads a file of a mod's example folder: plain and not huge.
 func ReadExample(path string) ([]byte, error) { return readFile(path, 4<<20) }
 
-// readFile reads a plain file of a mod, never through a symlink.
-func readFile(path string, limit int64) ([]byte, error) {
+// readExact reads a plain file of a mod, never through a symlink.
+func readExact(path string, limit int64) ([]byte, error) {
 	st, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,13 @@ func readFile(path string, limit int64) ([]byte, error) {
 	if err == nil && int64(len(b)) > limit {
 		err = fmt.Errorf("%s: larger than %d bytes", path, limit)
 	}
-	// Some editors begin a file with a byte order mark.
+	return b, err
+}
+
+// readFile is readExact for text. Some editors begin a file with a byte order
+// mark, which is not part of it.
+func readFile(path string, limit int64) ([]byte, error) {
+	b, err := readExact(path, limit)
 	return bytes.TrimPrefix(b, []byte("\ufeff")), err
 }
 

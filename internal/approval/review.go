@@ -187,6 +187,24 @@ func Review(w io.Writer, m *Mod, old *Record) []Item {
 	for _, c := range Combinations(items) {
 		fmt.Fprintf(w, "\n  !! %s\n", c)
 	}
+	if outside := m.Outside(); len(outside) > 0 {
+		fmt.Fprintln(w, "\n  !! ALSO IN THE FOLDER, AND NOT SANDBOXED")
+		fmt.Fprintln(w, "  The mod is confined to what is listed above. These are not: whoever opens or runs")
+		fmt.Fprintln(w, "  one of them (you, a keybind, a bar) lets it do anything you can.")
+		var names []string
+		for _, o := range outside {
+			fmt.Fprintf(w, "\n    %s: %s\n", scan.Quote(o.File), o.Why)
+			for i, r := range o.Runs {
+				if i == 12 {
+					fmt.Fprintf(w, "        ... and %d more: spot mods show %s\n", len(o.Runs)-i, m.Name)
+					break
+				}
+				fmt.Fprintf(w, "        %s\n", r)
+			}
+			names = append(names, o.File)
+		}
+		items = append(items, Item{Kind: "unsandboxed", What: strings.Join(names, ", "), Danger: "runs outside the sandbox"})
+	}
 	if len(m.Parsers) > 0 {
 		fmt.Fprintf(w, "\nUses the parsers: %s\n", strings.Join(keys(m.Parsers), ", "))
 	}

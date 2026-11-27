@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -252,5 +253,75 @@ func TestAChangedModSaysWhatHappenedToItsPermissions(t *testing.T) {
 	Review(&out, m, old)
 	if !strings.Contains(out.String(), "a program of your own that it runs has changed") {
 		t.Errorf("a changed program:\n%s", &out)
+	}
+}
+
+// The approval covers the whole folder (S15), and what runs outside the sandbox
+// is said and typed.
+func TestEveryFileOfTheFolderIsApproved(t *testing.T) {
+	h := newHome(t)
+	h.write("mods/m/dialog.toml", "[[items]]\ntype='field'\nid='f'\n[submit]\nexec='rm -rf ~/precious'\n")
+	h.write("mods/m/helper.sh", "#!/bin/sh\necho 1\n")
+	h.write("mods/m/style.css", "* {}")
+	m, err := h.Read("m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	items := Review(&out, m, nil)
+	for _, want := range []string{"NOT SANDBOXED", "rm -rf ~/precious", "helper.sh", "anything you can"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("not said: %q\n%s", want, &out)
+		}
+	}
+	if !slices.Contains(Words(m, items), "unsandboxed") {
+		t.Errorf("words: %q", Words(m, items))
+	}
+	for name, change := range map[string]func(h home){
+		"a dialog":           func(h home) { h.write("mods/m/dialog.toml", "[submit]\nexec='curl x'\n") },
+		"a new dialog":       func(h home) { h.write("mods/m/new.toml", "[submit]\nexec='x'\n") },
+		"a script":           func(h home) { h.write("mods/m/helper.sh", "#!/bin/sh\ncurl x\n") },
+		"a stylesheet":       func(h home) { h.write("mods/m/style.css", "* { color: red }") },
+		"a binary":           func(h home) { h.write("mods/m/blob", "\x00\x01") },
+		"a deeper file":      func(h home) { h.write("mods/m/a/b/c.txt", "x") },
+		"the parser's extra": func(h home) { h.write("mods/up/note.sh", "echo") },
+		"only a BOM":         func(h home) { h.write("mods/m/lib.lua", "\ufeffreturn 1\n") },
+	} {
+		h := newHome(t)
+		h.write("mods/m/dialog.toml", "[submit]\nexec='ok'\n")
+		h.write("mods/m/helper.sh", "#!/bin/sh\necho 1\n")
+		h.write("mods/m/style.css", "* {}")
+		h.approve("m")
+		change(h)
+		if h.state("m") != Changed {
+			t.Errorf("%s changed unnoticed", name)
+		}
+	}
+	// Developing in a git repository must not void it at every commit.
+	h = newHome(t)
+	h.approve("m")
+	h.write("mods/m/.git/HEAD", "ref: refs/heads/main")
+	if h.state("m") != Approved {
+		t.Error("a .git folder voided the approval")
+	}
+	for name, spoil := range map[string]func(h home) error{
+		"a link": func(h home) error { return os.Symlink("/etc/passwd", h.Home+"/mods/m/x.css") },
+		"a pipe": func(h home) error { return syscall.Mkfifo(h.Home+"/mods/m/x.css", 0o600) },
+		"a huge file": func(h home) error {
+			os.WriteFile(h.Home+"/mods/m/x.bin", nil, 0o600)
+			return os.Truncate(h.Home+"/mods/m/x.bin", 1<<30)
+		},
+		"open to others": func(h home) error {
+			h.write("mods/m/x.css", "")
+			return os.Chmod(h.Home+"/mods/m/x.css", 0o666)
+		},
+	} {
+		h := newHome(t)
+		if err := spoil(h); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.Read("m"); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
 	}
 }
