@@ -372,24 +372,27 @@ what it means. There is no redirection of any kind: to keep output, use `spot.wr
 | One field | 4 KB | |
 | Kept per mod | 32 MB | |
 | Watchers per value | 64 | |
-| Programs at once, bytes written | capped per mod | with cgroups, also tasks and CPU |
+| Programs at once, bytes written | capped per mod | |
+| Memory of the whole mod, programs included | 256 MB, no swap | by its [scope](#processes); `memory` in `[mod.<name>]` changes it |
+| Tasks of the whole mod | 128 | threads count: the host alone needs about 8, `java` used 16 |
 | Output kept from a command (`stdout`, `stderr`) | 8 MB | the program is killed beyond it |
 | Size of a file read | 8 MB | |
 | Timers per mod | 64 | |
 | Notifications per mod | a few per hour | so that failing and recovering in turn cannot flood |
 | Waiting output per watcher | capped | a watcher that does not read is dropped |
 
-Programs a mod starts get their normal memory limit back before they run, set by the program's own
-launcher step in the child (the host's limit is never raised): some, such as `node`, do
-not start under the host's. Their memory is therefore **not limited**.
+The host's own data limit is lifted again for the programs it starts, set by the program's own
+launcher step in the child (the host's limit is never raised): some, such as `node`, do not start
+under it. What bounds those programs is the limit of the mod's scope.
 
 ### Processes
 
 | | |
 |---|---|
-| Stopping | A cgroup per mod **and** a child subreaper: `cgroup.kill` misses a program that moved itself to another cgroup, the subreaper finds it. The adopting process is the daemon or a supervisor per mod, never the host that is killed. A job handed to `systemd` is not stopped by either |
-| Cgroups | Need delegation (`Delegate=yes`), which a daemon started by a compositor's autostart does not have unless started through `systemd-run --user --scope` or a user service. Without it only the subreaper, and `spot mods` says so |
-| Resource limits | With delegation, `pids.max` and `memory.max` on a mod's cgroup would cover its programs too (settable in a test; enforcement not yet tried). Inside the sandbox a program cannot move itself out (it cannot write `/sys/fs/cgroup`; untested). Without delegation, ask the user's `systemd` for a scope per mod (`MemoryMax`, `TasksMax`); without that, programs have **no** memory or process limit |
+| One scope per mod | The daemon starts each host in a `systemd` scope of its own in your user session (`systemd-run --user --scope`, about 6 ms). The host stays the daemon's child and keeps the channel; its second stage drops what only `systemd-run` needed from the environment. No delegation, whatever started the daemon |
+| Stopping | `cgroup.kill` on the mod's scope **and** a child subreaper: the first misses a program that moved itself to another group, the second finds it. The adopting process is the daemon or a supervisor per mod, never the host that is killed. A job handed to `systemd` is not stopped by either |
+| Resource limits | `MemoryMax`, `MemorySwapMax=0` and `TasksMax` on the scope cover the host and everything it starts. **Without `MemorySwapMax=0` a memory limit does nothing** where there is swap. At the memory limit the kernel kills the biggest process, usually a program, and the host reports it. A sandboxed program cannot leave the scope or raise its limits |
+| Without a `systemd` user session | **No** memory or process limit, stopping only by the subreaper; `spot mods` says so |
 | Channel | A socket pair, not a pipe: a program could write into a pipe through `/proc` |
 | Open files | All beyond stderr are marked close-on-exec (`close_range`) before any program starts |
 | Reading each other | Mod hosts set `PR_SET_DUMPABLE` to 0. The daemon **cannot**: tested, the desktop portal then refuses it the desktop's settings. The sandbox already keeps a mod's programs from reading it (tested for a parent process) |
@@ -475,6 +478,7 @@ the machine. **Not** against something already running as you or as root.
 | S23 | A mod cannot exhaust spot: the [limits](#limits) on time, memory, rows, values, message size, programs, bytes written, log size and notifications |
 | S24 | Every `spot` call (command, file access) and every refusal by spot is logged where mods cannot write, readable only by you |
 | S29 | Stopping a mod stops what it started |
+| S44 | Each mod runs in a scope of its own, with limits on memory (no swap) and tasks that cover everything it starts |
 
 **The sandbox**
 
@@ -483,7 +487,7 @@ the machine. **Not** against something already running as you or as root.
 | S33 | Every mod host puts itself under the sandbox, and checks that it is in it, before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
 | S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included. A permission allows connecting out to the listed ports; no mod accepts connections |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
-| S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, is refused: the kernel can only add access, not carve an exception out of it |
+| S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, or reaches `/sys/fs/cgroup`, is refused: the kernel can only add access, not carve an exception out of it |
 | S37 | The base grant is the short list in [the sandbox](#the-base-grant); it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run`, and libraries may be read, not executed |
 | S43 | A host whose file grant no longer matches the file, because an update replaced it, is restarted with new grants before it is asked anything else |
 | S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes, and `listen` for a mod with network access |
@@ -492,7 +496,8 @@ the machine. **Not** against something already running as you or as root.
 approved mod, so a request that does something drastic is a way for other programs to do it. A mod
 must check the arguments it gets, and `spot mods show` lists the requests a mod offers.
 
-S29 holds fully only with cgroups; without them, the tests and `spot mods` say what is not covered. A
+S29 holds fully, and S44 at all, only with a `systemd` user session; without one, `spot mods` says what
+is not covered. A
 job handed to `systemd` needs the user bus, which the sandbox refuses unless granted.
 
 #### Not promised
@@ -524,7 +529,6 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 |----------|----------------|
 | Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
 | Do very large DNS answers (which need TCP port 53) and `.local` names have to work? | Both are untested and would likely fail |
-| How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
 | How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
 | Should a security switch (a lock, a firewall) be able to say "unknown" instead of showing the last value when its mod is down? | A stale "on" is worse than no answer |
 | Should a `run` permission be able to limit arguments? | Less pressing now that the sandbox holds, but it narrows what a granted socket gives |
@@ -687,7 +691,7 @@ diag = "list the open sockets"
   `LD_*`, `GLIBC_*`, `GCONV_PATH`, `LOCPATH`, `NLSPATH`.
 - The `dir` option must be inside a `read` entry. By default a program starts in an empty folder
   owned by spot.
-- **Never granted, whatever is listed:** the daemon's socket; writing to the mods folder, to spot's
+- **Never granted, whatever is listed:** the daemon's socket; writing under `/sys/fs/cgroup` (a mod could lift its own limits); writing to the mods folder, to spot's
   configuration, to its logs or to its record of approvals, or to a folder containing any of them.
 
 **Files.** Regular files only, opened non-blocking and checked on the open descriptor, with a size
@@ -1147,8 +1151,22 @@ others), each with the sockets or folders its permissions would add:
 the certificate folders added to the base grant: all worked, and ports 80 and 8443 of the same server
 were refused. Without the certificate folders HTTPS failed.
 
-**Still to test:** older kernels (if the minimum is to be lowered), other distributions, large DNS answers and `.local` names, the real host's start
-time, and enforcement of cgroup limits.
+**Resource limits**, cgroups with 64 MB and 20 tasks unless said, inside a bounded scope:
+
+| Tried | Result |
+|---|---|
+| A program allocating 200 MB under `memory.max` alone | **got all of it**, 140 MB swapped |
+| The same with `memory.swap.max=0` | killed at the limit |
+| A program starting 100 children | stopped at 19 |
+| Memory hog started by a shell, without / with `memory.oom.group` | the shell survived / died too |
+| A Go host running `ss`, 12 CPUs | failed with 3 or 5 tasks, 20 of 20 with 8 or more; 7 MB peak |
+| Leaving the group, raising its limits: unsandboxed / sandboxed / with write access to `/sys/fs/cgroup` | possible / **refused** / possible |
+| `cgroup.kill` with detached programs | all gone |
+| The same limits on a scope made with `systemd-run --user`, and killing it from outside | enforced; all gone |
+| A socket pair passed through `systemd-run --scope` | works; the process stays the caller's child |
+
+**Still to test:** the sandbox, scope and re-exec together in one real host; older kernels (if the minimum is to be lowered), other distributions, large DNS answers and `.local` names, the real host's start
+time.
 
 ### First version
 
