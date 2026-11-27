@@ -3,10 +3,10 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
-## Unreleased
+## 0.8.3 — 2026-11-27
 
-- The daemon's log is readable by its owner only (mode 0600), including one left by an earlier
-  release.
+- The daemon's log and the launch history (`frecency.json`) are readable by their owner only (mode
+  0600), including ones left by an earlier release.
 
 ## 0.8.2 — 2026-11-26
 

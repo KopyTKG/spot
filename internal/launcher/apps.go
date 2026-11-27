@@ -573,6 +573,11 @@ type frecRecord struct {
 
 func openFrecency(path string) *frecencyStore {
 	s := &frecencyStore{path: path, data: map[string]frecRecord{}}
+	// It is a history of what was launched: the owner's business only, also when
+	// an earlier release left it open to others.
+	if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() && st.Mode().Perm() != 0o600 {
+		_ = os.Chmod(path, 0o600)
+	}
 	if b, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(b, &s.data)
 	}
@@ -626,7 +631,8 @@ func (s *frecencyStore) bump(id string, now time.Time) {
 	s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err == nil {
 		tmp := s.path + ".tmp"
-		if os.WriteFile(tmp, b, 0o644) == nil {
+		_ = os.Remove(tmp) // a leftover would keep its mode
+		if os.WriteFile(tmp, b, 0o600) == nil {
 			_ = os.Rename(tmp, s.path)
 		}
 	}
