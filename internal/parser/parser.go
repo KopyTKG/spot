@@ -237,6 +237,9 @@ func check(m mod.Mod, ret lua.LValue) ([]any, error) {
 		return fail("what it returned has %v", err)
 	}
 	rows, ok := v.([]any)
+	if _, one := v.(map[string]any); one {
+		return fail("it returned a single record; return a list of them: { { ... } }")
+	}
 	if !ok {
 		return fail("it must return a list of records, got a %s", ret.Type())
 	}

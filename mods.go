@@ -15,8 +15,9 @@ import (
 
 const modsUsage = `usage: spot mods check <name|folder> [-]
 
-  check   hold a parser to its contract: load it, run its examples and empty and
-          junk input, in a sandbox. With -, also parse what comes on stdin.
+  check   read a mod's code and point at what deserves a look. A parser is then
+          held to its contract: loaded, run on its examples and on empty and junk
+          input, in a sandbox. With -, it also parses what comes on stdin.
 `
 
 // modsCommand is `spot mods ...`. It returns the exit status.
@@ -25,16 +26,7 @@ func modsCommand(args []string) int {
 		fmt.Fprint(os.Stderr, modsUsage)
 		return protocol.ExitUsage
 	}
-	dir := args[1]
-	if !strings.ContainsRune(dir, '/') && mod.ValidName(dir) {
-		base, err := os.UserConfigDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "spot: %v\n", err)
-			return protocol.ExitError
-		}
-		dir = filepath.Join(base, "spot", "mods", dir)
-	}
-	dir, err := filepath.Abs(dir)
+	dir, err := modFolder(args[1])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "spot: %v\n", err)
 		return protocol.ExitError
@@ -59,4 +51,27 @@ func modsCommand(args []string) int {
 		return protocol.ExitError
 	}
 	return 0
+}
+
+// modFolder is the folder meant by arg: a folder that is there, or the name of
+// an installed mod.
+func modFolder(arg string) (string, error) {
+	st, err := os.Stat(arg)
+	switch {
+	case err == nil && st.IsDir():
+		return filepath.Abs(arg)
+	case err == nil:
+		return "", fmt.Errorf("%s is a file: give the folder of the mod, the one with init.lua in it", arg)
+	case strings.ContainsRune(arg, '/') || !mod.ValidName(arg):
+		return "", fmt.Errorf("there is no folder %s", arg)
+	}
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	installed := filepath.Join(base, "spot", "mods", arg)
+	if st, err := os.Stat(installed); err != nil || !st.IsDir() {
+		return "", fmt.Errorf("there is no folder %s here, and no mod of that name in %s", arg, filepath.Dir(installed))
+	}
+	return installed, nil
 }

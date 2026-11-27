@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/KopyTKG/spot/internal/mod"
+	"gitlab.com/KopyTKG/spot/internal/modhost/channel"
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
 )
 
@@ -113,5 +115,34 @@ func TestARefusedPolicyStartsNothing(t *testing.T) {
 	_, err := Start(Config{Name: "bad", Policy: sandbox.Policy{Self: "/nonexistent", Sockets: []string{d}}, Protected: sandbox.Protected{Socket: d + "/spot.sock"}})
 	if err == nil || !strings.Contains(err.Error(), "socket") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// Whatever a mod is doing, its host does not outlive the daemon; and it can be
+// told apart from other processes.
+func TestAStuckHostGoesWithTheDaemon(t *testing.T) {
+	bin := buildHost(t)
+	h, err := Start(Config{Name: "stuck", Policy: sandbox.Policy{Self: bin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Stop()
+	pid := h.PID()
+	if comm, _ := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm"); strings.TrimSpace(string(comm)) != "spot-mod-host" {
+		t.Errorf("it is shown as %q", comm)
+	}
+	// A pattern that takes for ever and cannot be interrupted from inside.
+	stuck := mod.Mod{Name: "p", Manifest: mod.Manifest{Type: "parser"}, Source: []byte(`return function() ("a"):rep(100000):match(".-.-.-.-b$") return {} end`)}
+	go h.Parse(channel.Parse{Name: "p", Mods: map[string]mod.Mod{"p": stuck}}, time.Minute)
+	time.Sleep(500 * time.Millisecond)
+	h.conn.Close() // what the daemon dying looks like from the host
+	done := make(chan error, 1)
+	go func() { done <- h.cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Error("it runs on without a daemon")
+		h.cmd.Process.Kill()
+		<-done
 	}
 }

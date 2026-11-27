@@ -65,7 +65,7 @@ func TestTheContract(t *testing.T) {
 		"error with table": {"a:string", `return function() error({}) end`, "", "a table as the error"},
 		"nil":              {"a:string", `return function() end`, "", "list of records"},
 		"a string":         {"a:string", `return function() return "x" end`, "", "list of records"},
-		"one record":       {"a:string", `return function() return {a="x"} end`, "", "list of records"},
+		"one record":       {"a:string", `return function() return {a="x"} end`, "", "a single record"},
 		"strings in list":  {"a:string", `return function() return {"x"} end`, "", "record 1 is not a record"},
 		"missing field":    {"a:string", `return function() return {{a="x"}, {}} end`, "", `record 2, field "a": expected string, got nil`},
 		"wrong type":       {"a:number", `return function() return {{a="x"}} end`, "", `expected number, got string`},

@@ -22,6 +22,7 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/modhost"
 	"gitlab.com/KopyTKG/spot/internal/modhost/channel"
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
+	"gitlab.com/KopyTKG/spot/internal/scan"
 )
 
 const (
@@ -31,37 +32,65 @@ const (
 )
 
 type checker struct {
-	host   string
-	name   string
-	set    map[string]mod.Mod
-	out    io.Writer
-	h      *modhost.Host
-	failed bool
-	seen   map[string]bool // fields returned by any record
-	rows   int
-	slow   time.Duration
+	host    string
+	name    string
+	set     map[string]mod.Mod
+	out     io.Writer
+	h       *modhost.Host
+	failed  bool
+	seen    map[string]bool // fields returned by any record
+	rows    int
+	slow    time.Duration
+	flagged int
+	hinted  bool
 }
 
-// clean makes text that came from a mod safe to print (S32): no control
-// characters to move the cursor or recolour what spot says.
+// clean makes text that may hold a mod's own safe to print (S32): one line, no
+// control or invisible characters, and no run of spaces to push words to where
+// spot's own would stand.
 func clean(s string) string {
+	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool { return unicode.IsSpace(r) }), " ")
 	s = strings.Map(func(r rune) rune {
-		if r == '\n' || !unicode.IsControl(r) && !unicode.Is(unicode.Cf, r) {
-			return r
+		if !unicode.IsPrint(r) {
+			return '?'
 		}
-		return '?'
+		return r
 	}, s)
-	if len(s) > 600 {
-		s = s[:600] + "..."
+	if r := []rune(s); len(r) > 300 {
+		s = string(r[:300]) + "..."
 	}
-	return strings.ReplaceAll(s, "\n", "\n         ")
+	return s
 }
 
+// say writes one finding. Newlines of the format are spot's and are kept;
+// whatever is put into it is cleaned.
 func (c *checker) say(mark, format string, args ...any) {
 	if mark == "FAIL" {
 		c.failed = true
+		defer c.hint(args)
 	}
-	fmt.Fprintf(c.out, "%-5s %s\n", mark, clean(fmt.Sprintf(format, args...)))
+	for i, a := range args {
+		switch v := a.(type) {
+		case string:
+			args[i] = clean(v)
+		case []byte:
+			args[i] = clean(string(v))
+		case error:
+			args[i] = clean(v.Error())
+		}
+	}
+	text := strings.ReplaceAll(fmt.Sprintf(format, args...), "\n", "\n         ")
+	fmt.Fprintf(c.out, "%-5s %s\n", mark, text)
+}
+
+// hint explains the Lua error someone gets who expects the whole language.
+func (c *checker) hint(args []any) {
+	text := fmt.Sprint(args...)
+	if c.hinted || !strings.Contains(text, "non-function object") && !strings.Contains(text, "non-table object(nil)") {
+		return
+	}
+	c.hinted = true
+	fmt.Fprintf(c.out, "%-5s %s\n", "hint", "a parser has no print, io, os or require, and its spot has only use, json and log (print: use spot.log)")
 }
 
 // call runs the parser once, in a new host if the last one died.
@@ -118,7 +147,7 @@ func (c *checker) peak() string {
 func (c *checker) twice(what string, input []byte) ([]map[string]any, error) {
 	rows, log, err := c.call(input, false)
 	for _, l := range log {
-		c.say("log", "%s", l)
+		c.say("log", "the mod says %s", scan.Quote(l))
 	}
 	again, _, err2 := c.call(input, false)
 	if !reflect.DeepEqual(rows, again) || fmt.Sprint(err) != fmt.Sprint(err2) {
@@ -137,17 +166,20 @@ func broken(err error) bool {
 func (c *checker) examples(dir string) {
 	inputs, _ := filepath.Glob(filepath.Join(dir, "example", "*.input"))
 	if len(inputs) == 0 {
+		if other, _ := filepath.Glob(filepath.Join(dir, "example", "*")); len(other) > 0 {
+			c.say("warn", "example/ has files, but none ends in .input: none of them is checked")
+		}
 		c.say("warn", "no examples: put example/<name>.input and its expected <name>.json, so the result is checked")
 		return
 	}
 	for _, in := range inputs {
 		name := strings.TrimSuffix(filepath.Base(in), ".input")
-		input, err := os.ReadFile(in)
+		input, err := mod.ReadExample(in)
 		if err != nil {
 			c.say("FAIL", "example %s: %v", name, err)
 			continue
 		}
-		data, err := os.ReadFile(strings.TrimSuffix(in, ".input") + ".json")
+		data, err := mod.ReadExample(strings.TrimSuffix(in, ".input") + ".json")
 		if err != nil {
 			c.say("FAIL", "example %s: %v", name, err)
 			continue
@@ -181,10 +213,60 @@ func (c *checker) examples(dir string) {
 	}
 }
 
+// scan reads a mod's code and says what it found. It reports how many things
+// it flagged and whether the code keeps to the strict form.
+func (c *checker) scan(dir string, m mod.Mod) (int, bool) {
+	files, err := mod.Files(dir)
+	if err != nil {
+		c.say("FAIL", "mod %s: %v", m.Name, err)
+		return 0, false
+	}
+	// What is read must be what runs, byte for byte (S38).
+	files["init.lua"] = m.Source
+	r := scan.Mod(files, m.Manifest.Permissions)
+	for _, n := range r.Refused {
+		c.say("FAIL", "%s/%s  %s", m.Name, n.Where(), n.What)
+	}
+	for _, n := range r.Flagged {
+		c.say("flag", "%s/%s  %s", m.Name, n.Where(), n.What)
+		c.say("", "%s", n.Why)
+		if also := n.Also(); also != "" {
+			c.say("", "also at %s", also)
+		}
+	}
+	return len(r.Flagged), len(r.Refused) == 0
+}
+
+// verdict never calls a mod safe (S39), and says nothing of the kind about code
+// it could not read or would not accept.
+func (c *checker) verdict(flagged int, accepted bool) {
+	c.flagged = flagged
+	if !accepted {
+		c.say("scan", "Refused: this mod would not be run, and what it does is not known. %d flagged in what was read.", flagged)
+		return
+	}
+	if flagged == 0 {
+		c.say("scan", "Nothing flagged. %s", scan.Verdict)
+		return
+	}
+	c.say("scan", "%d flagged; each also has honest uses. %s", flagged, scan.Verdict)
+}
+
 // Check checks the parser in dir with the host binary at host, writing to out.
 // With live not nil, that text is parsed too. It reports whether all passed.
 func Check(host, dir string, live []byte, out io.Writer) bool {
 	c := &checker{host: host, out: out, seen: map[string]bool{}}
+	first, err := mod.Load(dir)
+	if err != nil {
+		c.say("FAIL", "%v", err)
+		return false
+	}
+	if first.Manifest.Type == "provider" {
+		flagged, ok := c.scan(dir, first)
+		c.verdict(flagged, ok)
+		c.say("note", "this is a provider: its code was read, not run (running providers is not built yet)")
+		return ok
+	}
 	name, set, err := mod.LoadSet(dir)
 	if err != nil {
 		c.say("FAIL", "%v", err)
@@ -204,6 +286,21 @@ func Check(host, dir string, live []byte, out io.Writer) bool {
 		}
 	}
 	slices.Sort(used)
+
+	// Read the code first: what breaks the strict form is not run.
+	flagged, strict := 0, true
+	for _, n := range append([]string{name}, used...) {
+		at := dir
+		if n != name {
+			at = filepath.Join(filepath.Dir(filepath.Clean(dir)), n)
+		}
+		found, ok := c.scan(at, set[n])
+		flagged, strict = flagged+found, strict && ok
+	}
+	c.verdict(flagged, strict)
+	if !strict {
+		return false
+	}
 	for _, n := range append(used, name) {
 		c.name = n
 		_, _, err := c.call(nil, true)
@@ -269,5 +366,7 @@ func Check(host, dir string, live []byte, out io.Writer) bool {
 		c.say("warn", "optional fields never seen: %s", strings.Join(never, ", "))
 	}
 	c.say("", "slowest call %s, host memory at most %s (limits %s, 256 MB)", c.slow.Round(time.Millisecond), c.peak(), limit)
+	// Repeated at the end: whatever a mod printed above, this comes after it.
+	c.verdict(c.flagged, true)
 	return !c.failed
 }

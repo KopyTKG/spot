@@ -819,7 +819,7 @@ you enable it."** It never says that a mod is safe or clean.
 | Flagged | |
 |---------|---|
 | Programs | those that reach other machines, shells and interpreters, `sudo` and `pkexec`, `systemctl`, `crontab`, `chmod`, `base64`, `dd` and the like |
-| Paths | keys, keyrings, browser profiles; places that run code later |
+| Paths | keys, keyrings, browser profiles, shell history; places that run code later (not when a mod only asks to read them) |
 | Text | addresses and IP numbers, long encoded or escaped strings, text assembled from character codes |
 | Permissions | calls with no permission for them, and **permissions asked for but never used** |
 | Shape | arguments that are only known when the mod runs, `unpack` among later arguments of `spot.run`, `string.reverse`, paths assembled from pieces |
@@ -837,6 +837,8 @@ is known before it runs.
 For programs this means the list itself is literal: `spot.run({ "ss", "-tun", port })`. A list built
 elsewhere, a keyed entry (`[1] = …`) or `unpack` in first place is **refused**, not just flagged. A
 duplicate key shows why: `{ [1] = "ss", [1] = x }` runs `x`. It is a rule about how code is written, not a judgement of what it does.
+
+Names of its own called `spot` or `_G`, and method calls on `spot`, are refused too.
 
 Arguments can still be built while the mod runs, and a scanner can be fooled. **The sandbox is the
 protection; the scanner helps you notice what to ask about.**

@@ -13,9 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"gitlab.com/KopyTKG/spot/internal/modhost/channel"
 	"gitlab.com/KopyTKG/spot/internal/parser"
@@ -27,6 +29,9 @@ const (
 	chanFD = 3
 	second = "restricted"
 )
+
+// The main goroutine stays on the main thread: its name is the process's name.
+func init() { runtime.LockOSThread() }
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == second {
@@ -74,6 +79,10 @@ func environment(p sandbox.Policy) []string {
 func run() {
 	ch := os.NewFile(chanFD, "daemon")
 	syscall.CloseOnExec(chanFD) // programs a mod starts do not get the channel (S12)
+	// Executed as /proc/self/exe we would show up as "exe".
+	name := [16]byte{}
+	copy(name[:], "spot-mod-host")
+	unix.Prctl(unix.PR_SET_NAME, uintptr(unsafe.Pointer(&name[0])), 0, 0, 0)
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		fail(ch, fmt.Errorf("protecting memory: %w", err))
 	}
@@ -85,16 +94,24 @@ func run() {
 	}
 	out := json.NewEncoder(ch)
 	out.Encode(channel.Reply{Ready: true})
-	in := bufio.NewReader(ch)
-	for {
-		line, err := channel.ReadLine(in)
-		if err != nil {
-			return // the daemon is gone, or a stream that cannot be trusted
+	// Reading goes on while a mod runs: when the daemon is gone, also a mod
+	// stuck where nothing can interrupt it must go.
+	messages := make(chan channel.Message)
+	go func() {
+		in := bufio.NewReader(ch)
+		for {
+			line, err := channel.ReadLine(in)
+			if err != nil {
+				os.Exit(0) // the daemon is gone, or a stream that cannot be trusted
+			}
+			var m channel.Message
+			if json.Unmarshal(line, &m) != nil {
+				os.Exit(1)
+			}
+			messages <- m
 		}
-		var m channel.Message
-		if json.Unmarshal(line, &m) != nil {
-			os.Exit(1)
-		}
+	}()
+	for m := range messages {
 		switch {
 		case m.Op == channel.OpPing:
 			out.Encode(channel.Reply{Ready: true})
