@@ -206,6 +206,9 @@ it runs in a mod host started for that one call.
 - **An allow-list of globals**, below. What is not on it is not there.
 - **No way out:** no commands, files, network, environment, timers or publishing.
 - **Same input, same output:** no clock and no `math.random`.
+- **Copying is raw.** Output and error objects are read without metamethods, so no parser code runs
+  while they are checked.
+- `spot.use` validates a name before it becomes a path.
 - Its `spot` has only `spot.use` (other parsers, in the same locked state), `spot.json` and
   `spot.log`.
 
@@ -311,7 +314,7 @@ message on stderr, and in a dialog the control goes back to what it showed.
 
 | Call | Returns / does |
 |------|----------------|
-| `spot.run(argv, options)` | `{ status, stdout, stderr }`. `argv` is a list; **there is no shell**. Options: `timeout` (ms, default 5000), `stdin`, `env`, `dir` |
+| `spot.run(argv, options)` | `{ status, stdout, stderr }`. `argv` is a list; **there is no shell**. Options: `timeout` (ms, default 5000), `stdin`, `env` (only what `setenv` lists), `dir` (inside `read`) |
 | `spot.pipe(argv1, argv2, …, options)` | The same for a [pipeline](#pipelines): each list is one command, connected without a shell |
 | `spot.read(path)`, `spot.write(path, text)` | Whole files; `nil, message` on failure |
 | `spot.lines(path)` | Iterate over a file line by line |
@@ -340,7 +343,7 @@ local r = spot.pipe({ "ss", "-H", "-tuna" }, { "grep", "LISTEN" }, { timeout = 2
 | `statuses` | each command's own, in order |
 | `stdout` | of the last command |
 | `stderr` | collected from every command |
-| Options | `timeout` for the whole pipeline, `stdin` for the first command, `env` and `dir` for all |
+| Options | `timeout` for the whole pipeline, `stdin` for the first command, `env` and `dir` for all, under the same permissions as `spot.run` |
 | Permissions | **every** command must be allowed; if one is not, none is started |
 | Cleanup | on a timeout, or when one cannot start, all of them are killed |
 
@@ -354,11 +357,38 @@ what it means. There is no redirection of any kind: to keep output, use `spot.wr
 | Time of one function | 5 s | then it is interrupted, or the host is killed |
 | Memory of a mod host | 256 MB | a data limit (`RLIMIT_DATA`); `memory` in `[mod.<name>]` changes it |
 | Rows in a value | 10,000 | larger values are refused |
+| Published values per mod | 100 | starting values, still to be measured |
+| One field | 4 KB | |
+| Kept per mod | 32 MB | |
+| Watchers per value | 64 | |
+| Programs at once, bytes written | capped per mod | with cgroups, also tasks and CPU |
 
 Programs a mod starts get their normal memory limit back before they run: some, such as `node`, do
 not start under the host's. Their memory is therefore **not limited**.
 
+### Processes
+
+| | |
+|---|---|
+| Stopping | A cgroup per mod where delegation is available, otherwise the host is a child subreaper, which is weaker; `spot mods` says which is in use. A process-group kill alone is escaped with `setsid` |
+| Reading each other | The daemon and the hosts set `PR_SET_DUMPABLE` to 0, so that other processes of yours cannot read their environment |
+| Environment | Hosts start with the small environment of S11 |
+
 ## Security
+
+### What a permission promises
+
+**Permissions limit the mod's Lua code. A `run` permission means trusting the mod with your account.**
+
+A program a mod may run has your user's full access. It can write approvals or logs, talk to the
+daemon socket, or ask `systemd` to start something outside any limit, and checks inside spot cannot
+stop that. (Checking a socket peer's cgroup would not either: a process of yours can usually move
+itself, or have another service start it.) A mod with **no** `run` permission is the case spot can
+actually contain, and `spot mods` shows which mods those are.
+
+Making permissions bind the programs too needs a sandbox in the kernel (Landlock, namespaces,
+including access to Unix sockets). That is a project of its own, [#29](https://github.com/KopyTKG/spot/issues/29); 0.9 does not
+promise it.
 
 ### The security contract
 
@@ -376,6 +406,9 @@ the machine. **Not** against something already running as you or as root.
 | S1 | No part of the API runs a command given as one string: there is no `spot.sh` |
 | S2 | Every command of a pipeline needs permission, or none of them starts |
 | S3 | Text from mods is data wherever it is shown: markup is escaped in dialogs, notifications and bar output, and control characters, terminal escape sequences included, are removed before printing to a terminal |
+| S25 | Data from `from` / `parse` never becomes part of shell text, [`[submit]`](#values-in-submit) included |
+| S30 | A value cannot add a row or a field to text output |
+| S31 | A mod's rows cannot name an image file |
 
 **What a mod can reach**
 
@@ -384,22 +417,26 @@ the machine. **Not** against something already running as you or as root.
 | S4 | A parser has no access to files, commands, network, environment, clock or its caller |
 | S5 | A provider acts only through `spot`; `io`, `os`, `package`, `debug` and every way of loading code are absent (allow-list) |
 | S6 | Nothing is granted without a permission that states its reason |
-| S7 | A mod can never run `spot`, nor write the mods folder, spot's configuration, approvals or logs |
+| S7 | `spot`'s own functions never run `spot`, nor write the mods folder, spot's configuration, approvals or logs. A program a mod runs is **not** bound by this |
 | S8 | File permissions are checked on the file that is actually opened, so that a symlink swapped in between does not pass |
 | S9 | `spot.require` stays inside the mod's own folder, links included |
 | S10 | A program is found in a fixed `PATH` of system folders. One in a folder your user can write, such as your own scripts, must be listed by full path; its hash is then part of the approval, and it is flagged |
 | S11 | A program started by a mod gets a small environment (`HOME`, `LANG`, the runtime folder, the fixed `PATH`) plus the variables the mod has `env` permission for, **not the daemon's**, which may hold secrets |
 | S12 | A program started by a mod inherits no open files, and never the channel to the daemon |
+| S26 | A program gets only the variables of S11 and those listed in `setenv` |
+| S27 | A program's working folder stays inside what the mod may read |
+| S28 | File functions handle only regular files; none under `/dev`, and under `/proc` and `/sys` only paths listed in `read`, never a process's own folder, never for writing |
 
 **Approval**
 
 | # | Rule |
 |---|------|
 | S13 | No provider runs without approval; none is exempt |
-| S14 | Approval needs a terminal and typing each dangerous permission; there is no `--yes` and no approve-all |
+| S14 | Approval needs a terminal and typing the name of **every** `run` entry and every dangerous permission; there is no `--yes` and no approve-all |
 | S15 | Approval covers a hash of every file of the mod, its `mod.toml`, the parsers it uses and the programs of S10. What is hashed is what is loaded |
 | S16 | A changed mod does not start, and you are told what is new |
-| S17 | spot refuses a mods folder, mod file or approval record that is not yours or that others can write |
+| S32 | Text from a mod cannot change how the approval reads |
+| S17 | spot refuses a mods folder, mod file or approval record that is not yours or that others can write, checking parent folders and symlinks too |
 | S18 | spot never downloads or updates a mod |
 
 **Daemon, hosts and clients**
@@ -410,16 +447,20 @@ the machine. **Not** against something already running as you or as root.
 | S20 | Everything from a host is checked: size, form, names. Garbled messages kill it |
 | S21 | Socket connections are accepted only from your own user, checked on both ends |
 | S22 | Neither the daemon nor a mod host runs as root; they refuse to start if they would |
-| S23 | A mod cannot exhaust spot: limits on time, memory, rows, message size, how many programs run at once, log size, and how often it can notify |
-| S24 | Every command, file access and refusal is logged where mods cannot write, readable only by you |
+| S23 | A mod cannot exhaust spot: the [limits](#limits) on time, memory, rows, values, message size, programs, bytes written, log size and notifications |
+| S24 | Every command, file access and refusal is logged where `spot`'s own functions cannot write, readable only by you |
+| S29 | Stopping a mod stops what it started |
 
 **Requests are open to your programs.** Any program of yours can `spot call` any request of an
 approved mod, so a request that does something drastic is a way for other programs to do it. A mod
 must check the arguments it gets, and `spot mods show` lists the requests a mod offers.
 
+S29 holds fully only with cgroups; without them, the tests and `spot mods` say what is not covered.
+
 #### Not promised
 
-- Permissions control **which programs start**, not what those programs then do or touch.
+- Permissions control **which programs start**, not what those programs then do or touch. A program a
+  mod runs can undo S7, S17 and S24: write approvals, change the mods, edit the audit log.
 - An approved mod can misuse what it was granted.
 - A reason shown at approval may be a lie.
 - spot, gopher-lua or the kernel may have bugs.
@@ -428,9 +469,9 @@ must check the arguments it gets, and `spot mods show` lists the requests a mod 
 
 | Question | Why it matters |
 |----------|----------------|
-| Can Landlock bind a mod host and its programs to the `read` and `write` lists? | It would make those lists true for programs too. Untried |
+| Is cgroup delegation available to the daemon, and what does a child subreaper miss? | Decides how far S29 and the process limits hold |
 | Should a `run` permission be able to limit arguments, for example `systemctl` only with `--user`? | `run = systemctl` alone grants a great deal |
-| How are S8 and S12 done in Go? | Both are easy to get subtly wrong |
+| How are S8 and S12 done in Go? (For S8: `openat2` with `RESOLVE_NO_SYMLINKS` on the resolved path) | Both are easy to get subtly wrong |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
 
 ### Data must not become commands
@@ -443,6 +484,25 @@ A network name, a file name, a process name or a parser's result may be chosen b
   with some, `ssh` for one, that can run other programs. Put `--` before such values, or check them.
 - Arguments of `spot call` and values from dialogs arrive as strings in a list, never as shell text.
 - A dialog's `run` takes no placeholders.
+
+### Values in `[submit]`
+
+`[submit]` puts `{id}` into `sh -c` **unquoted**, and with `from` or `parse` the value can be chosen
+by someone else. So for items filled by `from` or `parse`:
+
+- a config that uses their `{id}` in `submit.exec` or `spawn` is **refused**;
+- the value is passed in the environment instead, as `SPOT_VALUE_<ID>`:
+
+```toml
+[submit]
+exec = 'nmcli device wifi connect "$SPOT_VALUE_NETWORK"'
+```
+
+Quoting automatically would not be enough: inside a template's own `"{id}"`, `$(...)` would still
+run. Two ids that map to the same variable name are a config error, and a value containing NUL is
+refused. Lists with `stdin = true` have the same problem today; changing them would break existing
+configs, so they get the variables too and the documentation warns. A value can still be read as an
+option, so examples use `--` where the program supports it.
 
 ### A mod from someone else
 
@@ -463,6 +523,9 @@ systemctl = "start and stop the idle lock"
 [permissions.write]
 [permissions.env]                    # variables spot.env may read
 XDG_CURRENT_DESKTOP = "know which compositor runs"
+
+[permissions.setenv]                 # variables it may set for the programs it runs
+LC_ALL = "get untranslated output"
 ```
 
 - **Nothing is granted by default.** Anything not listed is refused, logged and **reported to you**:
@@ -474,10 +537,33 @@ XDG_CURRENT_DESKTOP = "know which compositor runs"
 - **`read` and `write` limit only `spot`'s own file functions, not the programs a mod runs.** A
   program does whatever your user can: a mod allowed to run `cat` can read any file, and one allowed
   `tee` can write any file, whatever `read` and `write` say.
-- The `env` option of `spot.run` cannot set `PATH`, `LD_*` or similar variables, which would turn an
-  allowed program into any program.
-- **Never granted, whatever is listed:** running `spot`; writing to the mods folder, to spot's
-  configuration, to its logs or to its record of approvals. A mod cannot widen its own permissions.
+- The `env` option of `spot.run` / `spot.pipe` sets only variables listed in `setenv`. `PATH`,
+  `HOME` and `LD_*` are refused even if listed.
+- The `dir` option must be inside a `read` entry. By default a program starts in an empty folder
+  owned by spot.
+- **Never granted to `spot`'s own functions, whatever is listed:** running `spot`; writing to the mods
+  folder, to spot's configuration, to its logs or to its record of approvals. A program the mod runs
+  is not bound by this.
+
+**Files.** Regular files only, opened non-blocking and checked on the open descriptor, with a size
+cap. `/dev` is refused. spot's protected files are recognised by device and
+inode as well as by path, and a file with more than one hard link is not written to.
+
+**`/proc` and `/sys`** are where battery, network and load are read, so they are not closed, but
+each path must be listed, and only for reading:
+
+```toml
+[permissions.read]
+"/sys/class/power_supply" = "know whether the laptop is on battery"
+```
+
+- A broad entry (`/sys` or `/proc` itself) is refused: name what is needed.
+- `/proc/self`, `/proc/thread-self` and every `/proc/<number>` are always refused: they hold
+  processes' environments and open files.
+- Folders under `/sys/class` are links into `/sys/devices`. Access through a listed path is allowed
+  as long as every link stays inside `/sys`; the same holds for `/proc`, whose links must not lead
+  into a refused folder.
+- Nothing under `/proc` or `/sys` can be written.
 
 #### Approval
 
@@ -490,6 +576,8 @@ $ spot mods allow keybinds
 keybinds 1.2.0 — "Lists your keybindings"
 CHANGED since you approved it on 2026-11-26
 
+  !! This mod can start programs. They can do anything you can.
+
   NEW  run  ssh      !! DANGER: reaches other machines
             the author says: "sync bindings"
 
@@ -501,20 +589,28 @@ CHANGED since you approved it on 2026-11-26
 
 Changed files: init.lua (+14 -2), mod.toml (+1)     see them: spot mods diff keybinds
 
-Type the name of each dangerous permission to accept it (ssh), or press Enter to refuse:
+Type the name of each program to accept it (ssh, hyprctl), or press Enter to refuse:
 ```
 
 - **What is new comes first**, and is marked. The reason is shown as the author's claim: it can be
   untrue.
-- **Dangers are named**, from a list spot keeps: other machines and the network (`ssh`, `scp`,
+- **The danger list only explains.** A program missing from it is not thereby safe. It names: other machines and the network (`ssh`, `scp`,
   `curl`, `wget`, `nc`, `rsync`), everything (`sh`, `bash`, `fish`, `python`, other interpreters),
   more rights (`sudo`, `pkexec`), any file despite `read` and `write` (`cat`, `cp`, `mv`, `rm`,
   `tee`, `dd`, `tar`, `sed`, `awk`), private data (`~/.ssh`, keyrings, browser profiles), running code
-  later (shell startup files, systemd user units, autostart, compositor config).
+  later (shell startup files, systemd user units, autostart, compositor config, `mimeapps.list`,
+  `~/.local/share/applications`, D-Bus service files, git config).
 - **Combinations are pointed out**, such as reading private data together with reaching the network.
-- **Accepting takes effort.** Each dangerous permission is accepted by typing its name; the prompt
+- **Accepting takes effort.** Every `run` entry and every dangerous permission is accepted by typing its name; the prompt
   appears after a short wait and ignores what was typed before it. There is no `--yes`, no "approve
   all", and no approval without a terminal.
+- **A mod cannot dress up the screen.** A reason is one line of at most 200 characters. Bidirectional
+  and invisible characters are removed from reasons and descriptions, and shown as `\u{...}` by
+  `show` and `diff`.
+- **Only the daemon reads approvals.** It finds them, and spot's configuration, from your home folder
+  in the system's user database, not from environment variables: a daemon started on demand inherits
+  the environment of whoever called, which could otherwise point it at another record.
+- **Revoking or changing a mod stops it**, with everything it started.
 - **Read the code:** `spot mods show` prints a mod, `spot mods diff` what changed since your approval.
 - The approval is **tied to a hash** of the mod's files, its `mod.toml` and the parsers it uses. After
   any change the mod does not start, and a notification says what is new: `keybinds changed and now
@@ -524,13 +620,16 @@ Type the name of each dangerous permission to accept it (ssh), or press Enter to
 #### Afterwards
 
 `spot mods audit <name>` lists what a mod really did: each command with its arguments, each file read
-or written, and everything refused, with times. The log cannot be written by mods.
+or written, and everything refused, with times. `spot`'s own functions cannot write it. It has mode
+0600, is rate limited with a count of what was dropped, and never records `stdin` or environment
+values.
 
 #### What this does not do
 
 **Permissions do not make a stranger's provider safe.**
 
-- `read` and `write` do not bind allowed programs, as above.
+- `read` and `write` do not bind allowed programs, as above; nor do the rules protecting approvals
+  and logs.
 - An allowed program can be abused: many (`systemctl`, `git`, `find`, …) can start others, and a
   file a mod may write can be a file that is run.
 - A reason can be a lie, and a list of danger names is never complete.
@@ -566,6 +665,8 @@ from  = "idle.enabled"
 call  = "idle.set"        # called with the new value; a list row adds its key first
 ```
 
+A mod's rows may name an icon from the **icon theme** only: a value containing `/` is ignored.
+
 As with commands, values are read when the dialog opens and after every change made in it. A list
 that updates by itself while open comes with live lists (0.11).
 
@@ -586,7 +687,9 @@ that updates by itself while open comes with live lists (0.11).
 | `spot mods audit <name>` | What it ran, read, wrote and was refused |
 | `spot mods revoke <name>` | Withdraw the approval |
 
-`--json` prints `get` and `watch` as one JSON value per line, which is what a bar wants.
+`--json` prints `get` and `watch` as one JSON value per line, which is what a bar wants. In text
+output, piped or not, backslash, tab and newline are escaped, so that a value cannot forge a row or a
+field.
 `get`, `watch`, `call`, `parse` and `mods` become reserved words: a config of that name needs a path.
 `watch` reconnects when the daemon is restarted, for instance after an upgrade.
 
@@ -720,7 +823,9 @@ that runs Lua.
 {"reply": 7, "ok": true, "data": false}
 ```
 
-`from`, `call` and the command line do not know which of the two is behind a name.
+`from`, `call` and the command line do not know which of the two is behind a name. Names are reserved
+from the start: one owner per name, and a backend cannot take the name of an installed mod. How
+backends are approved is decided before 0.12.
 
 ### What was tested
 
@@ -753,6 +858,11 @@ In: the mod host with its time and memory limits, loading and enabling, the `par
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
+
+Not in 0.9: **launch hooks**, which need their own design. Core data such as the app index and launch
+history needs a permission of its own and counts as private data in warnings. "Make executable and
+run" from [#13](https://github.com/KopyTKG/spot/issues/13) is not offered as a mod request: a
+confirmation in a dialog does not protect a request that `spot call` can reach.
 
 The API is **experimental** until menu trees (0.10) have used it.
 
