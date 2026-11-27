@@ -382,17 +382,16 @@ not start under the host's. Their memory is therefore **not limited**.
 
 ### What a permission promises
 
-**Permissions limit the mod's Lua code. A `run` permission means trusting the mod with your account.**
+**Permissions are enforced by the kernel.** Each mod host runs in a [sandbox](#the-sandbox) set up
+before it starts, which every program it starts inherits and none can lift. Files, the network and
+sockets are what was granted, for the mod's Lua and for its programs alike.
 
-A program a mod may run has your user's full access. It can write approvals or logs, talk to the
-daemon socket, or ask `systemd` to start something outside any limit, and checks inside spot cannot
-stop that. (Checking a socket peer's cgroup would not either: a process of yours can usually move
-itself, or have another service start it.) A mod with **no** `run` permission is the case spot can
-actually contain, and `spot mods` shows which mods those are.
+**With two exceptions, and both are shouted at approval:**
 
-Making permissions bind the programs too needs a sandbox in the kernel (Landlock, namespaces,
-including access to Unix sockets). That is a project of its own, [#29](https://github.com/KopyTKG/spot/issues/29); 0.9 does not
-promise it.
+- A **socket permission** hands the mod to whatever listens there. The user's D-Bus and Hyprland can
+  run any command for whoever asks, so granting either one **means the mod can do anything you can**.
+- **Write access to something that runs later** (shell startup files, autostart, systemd user units,
+  compositor config, …) runs the mod's code outside the sandbox.
 
 ### The security contract
 
@@ -421,7 +420,7 @@ the machine. **Not** against something already running as you or as root.
 | S4 | A parser has no access to files, commands, network, environment, clock or its caller |
 | S5 | A provider acts only through `spot`; `io`, `os`, `package`, `debug` and every way of loading code are absent (allow-list) |
 | S6 | Nothing is granted without a permission that states its reason |
-| S7 | `spot`'s own functions never run `spot`, nor write the mods folder, spot's configuration, approvals or logs. A program a mod runs is **not** bound by this |
+| S7 | Neither a mod nor a program it starts can write the mods folder, spot's configuration, approvals or logs, or run `spot` to any effect: it cannot reach the daemon |
 | S8 | File permissions are checked on the file that is actually opened, so that a symlink swapped in between does not pass |
 | S9 | `spot.require` stays inside the mod's own folder, links included |
 | S10 | A program is found in a fixed `PATH` of system folders. One in a folder your user can write, such as your own scripts, must be listed by full path; its hash is then part of the approval, and it is flagged |
@@ -436,10 +435,13 @@ the machine. **Not** against something already running as you or as root.
 | # | Rule |
 |---|------|
 | S13 | No provider runs without approval; none is exempt |
-| S14 | Approval needs a terminal and typing the name of **every** `run` entry and every dangerous permission; there is no `--yes` and no approve-all |
+| S14 | Approval needs a terminal and typing the name of **every** `run` entry and every new or dangerous permission; there is no `--yes` and no approve-all |
 | S15 | Approval covers a hash of every file of the mod, its `mod.toml`, the parsers it uses and the programs of S10. What is hashed is what is loaded |
 | S16 | A changed mod does not start, and you are told what is new |
 | S32 | Text from a mod cannot change how the approval reads |
+| S38 | A mod is scanned before approval by reading its code, never by running it, and the same bytes are then hashed and loaded |
+| S39 | The scanner never calls a mod safe; flagged or not, you are told to read it |
+| S40 | `spot` appears in a mod only as `spot.name`, `_G` not at all, and the program in `spot.run` / `spot.pipe` is written out; a mod that does otherwise is refused |
 | S17 | spot refuses a mods folder, mod file or approval record that is not yours or that others can write, checking parent folders and symlinks too |
 | S18 | spot never downloads or updates a mod |
 
@@ -455,27 +457,60 @@ the machine. **Not** against something already running as you or as root.
 | S24 | Every command, file access and refusal is logged where `spot`'s own functions cannot write, readable only by you |
 | S29 | Stopping a mod stops what it started |
 
+**The sandbox**
+
+| # | Rule |
+|---|------|
+| S33 | Every mod host runs under the sandbox, set before it starts. Where the kernel cannot provide it, no mod runs |
+| S34 | No network without a permission |
+| S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted |
+| S36 | A write grant that contains spot's configuration, mods, approvals or logs is refused: the kernel can only add access, not carve an exception out of it |
+| S37 | The base grant names what a host needs file by file; it does not include all of `/etc`, your home or `/run` |
+
 **Requests are open to your programs.** Any program of yours can `spot call` any request of an
 approved mod, so a request that does something drastic is a way for other programs to do it. A mod
 must check the arguments it gets, and `spot mods show` lists the requests a mod offers.
 
-S29 holds fully only with cgroups; without them, the tests and `spot mods` say what is not covered.
+S29 holds fully only with cgroups; without them, the tests and `spot mods` say what is not covered. A
+job handed to `systemd` needs the user bus, which the sandbox refuses unless granted.
 
 #### Not promised
 
-- Permissions control **which programs start**, not what those programs then do or touch. A program a
-  mod runs can undo S7, S17 and S24: write approvals, change the mods, edit the audit log.
-- An approved mod can misuse what it was granted.
-- A reason shown at approval may be a lie.
+- With a `socket` permission, or write access to something that runs later, a mod can leave the
+  sandbox.
+- `run` names the programs a mod's **Lua** starts. A program that is running can start others (any
+  system program, through the dynamic loader). They are in the same sandbox, with the same files and
+  network.
+- A network permission is **by port, not by destination**: a mod allowed to connect to port 443 can
+  connect to any machine.
+- Netlink, which `ss` uses, is not restricted by the sandbox.
+- An approved mod can misuse what it was granted, and a reason shown at approval may be a lie.
 - spot, gopher-lua or the kernel may have bugs.
 
 #### To be settled before coding
 
 | Question | Why it matters |
 |----------|----------------|
+| Which kernel features are the minimum, and what happens on older kernels? | S33 refuses to run mods without them; every user's kernel has to be considered |
+| What exactly is in the base grant? | Too little and programs fail, too much and S37 means nothing |
+| How are network permissions written, and do the port rules hold? | Port rules are untested |
 | How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
-| Should a `run` permission be able to limit arguments, for example `systemctl` only with `--user`? | `run = systemctl` alone grants a great deal |
+| Should a `run` permission be able to limit arguments? | Less pressing now that the sandbox holds, but it narrows what a granted socket gives |
 | Can approvals be writable only by root? | Raises the bar against a partly compromised account |
+
+### The sandbox
+
+[Landlock](https://docs.kernel.org/userspace-api/landlock.html), a Linux kernel feature that lets a
+process give up access for itself and everything it starts, without root.
+
+- The daemon restricts, then `exec`s the host. Landlock binds one thread, and a Go program has many,
+  so the host cannot do it to itself after starting.
+- What a host gets: the system programs and libraries (read, execute), the few files they need, its
+  own mod folder and the parsers it uses (read), what its permissions list, and `/dev/null`.
+- No other process can be read, traced or signalled, abstract sockets included.
+- `sudo` and `pkexec` do not work: a sandboxed process cannot gain rights.
+- Parser hosts started for `spot parse` or a dialog get the base only, so even a bug in the Lua
+  restrictions leaves them with nothing to reach.
 
 ### Data must not become commands
 
@@ -529,6 +564,12 @@ XDG_CURRENT_DESKTOP = "know which compositor runs"
 
 [permissions.setenv]                 # variables it may set for the programs it runs
 LC_ALL = "get untranslated output"
+
+[permissions.net]                    # none by default; TCP ports it may connect to
+"443" = "fetch the weather"
+
+[permissions.socket]                 # dangerous: see above
+"$XDG_RUNTIME_DIR/hypr" = "read the live key bindings"
 ```
 
 - **Nothing is granted by default.** Anything not listed is refused, logged and **reported to you**:
@@ -537,16 +578,14 @@ LC_ALL = "get untranslated output"
   your user can write, such as your own script, by its full path (S10). File permissions are matched
   after symlinks and `..` are resolved. The same rules hold for `spot.run` and
   for every command of `spot.pipe`.
-- **`read` and `write` limit only `spot`'s own file functions, not the programs a mod runs.** A
-  program does whatever your user can: a mod allowed to run `cat` can read any file, and one allowed
-  `tee` can write any file, whatever `read` and `write` say.
+- **`read` and `write` bind the programs too.** A mod allowed to run `cat` reads only what it may
+  read. A grant of a folder covers everything below it.
 - The `env` option of `spot.run` / `spot.pipe` sets only variables listed in `setenv`. `PATH`,
   `HOME` and `LD_*` are refused even if listed.
 - The `dir` option must be inside a `read` entry. By default a program starts in an empty folder
   owned by spot.
-- **Never granted to `spot`'s own functions, whatever is listed:** running `spot`; writing to the mods
-  folder, to spot's configuration, to its logs or to its record of approvals. A program the mod runs
-  is not bound by this.
+- **Never granted, whatever is listed:** the daemon's socket; writing to the mods folder, to spot's
+  configuration, to its logs or to its record of approvals, or to a folder containing any of them.
 
 **Files.** Regular files only, opened non-blocking and checked on the open descriptor, with a size
 cap. `/dev` is refused. spot's protected files are recognised by device and
@@ -585,28 +624,28 @@ $ spot mods allow keybinds
 keybinds 1.2.0 — "Lists your keybindings"
 CHANGED since you approved it on 2026-11-26
 
-  !! This mod can start programs. They can do anything you can.
+  NEW  socket  $XDG_RUNTIME_DIR/hypr     !! DANGER: Hyprland runs any command it is
+                                            asked to. This mod can do anything you can.
+               the author says: "read the live bindings"
 
-  NEW  run  ssh      !! DANGER: reaches other machines
-            the author says: "sync bindings"
+  NEW  net     443                       !! DANGER: can reach any machine on this port
+               the author says: "check for updates"
 
-       run  hyprctl     the author says: "read the live bindings"
-       read ~/.config/hypr
-                        the author says: "read your config"
+       run     hyprctl                   the author says: "ask Hyprland"
+       read    ~/.config/hypr            the author says: "read your config"
 
-  !! It can read files AND reach other machines: it could send them away.
+  !! It can read files AND reach the network: it could send them away.
 
-Changed files: init.lua (+14 -2), mod.toml (+1)     see them: spot mods diff keybinds
+Changed files: init.lua (+14 -2), mod.toml (+4)     see them: spot mods diff keybinds
 
-Type the name of each program to accept it (ssh, hyprctl), or press Enter to refuse:
+Type the name of each new or dangerous permission to accept it (socket, net, hyprctl),
+or press Enter to refuse:
 ```
 
 - **What is new comes first**, and is marked. The reason is shown as the author's claim: it can be
   untrue.
-- **The danger list only explains.** A program missing from it is not thereby safe. It names: other machines and the network (`ssh`, `scp`,
-  `curl`, `wget`, `nc`, `rsync`), everything (`sh`, `bash`, `fish`, `python`, other interpreters),
-  more rights (`sudo`, `pkexec`), any file despite `read` and `write` (`cat`, `cp`, `mv`, `rm`,
-  `tee`, `dd`, `tar`, `sed`, `awk`), private data (`~/.ssh`, keyrings, browser profiles), running code
+- **Dangers are named:** any `socket`, any `net`, interpreters and shells (they run whatever they are
+  given, inside the sandbox), programs that reach other machines, private data (`~/.ssh`, keyrings, browser profiles), running code
   later (shell startup files, systemd user units, autostart, compositor config, `mimeapps.list`,
   `~/.local/share/applications`, D-Bus service files, git config).
 - **Combinations are pointed out**, such as reading private data together with reaching the network.
@@ -626,6 +665,50 @@ Type the name of each program to accept it (ssh, hyprctl), or press Enter to ref
   asks to run ssh`. spot hashes and loads the same bytes.
 - **No mod skips approval, your own included.** Your files can be changed by someone else.
 
+#### The scanner
+
+Before you approve a mod, spot reads its code and **points at things that are known to be used for
+harm, and also have honest uses**. It decides nothing: it shows you where to look.
+
+```text
+$ spot mods allow keybinds
+...
+Flagged in the code (each also has honest uses):
+
+  init.lua:14  reads "~/.ssh/id_ed25519"
+               a private key; tools that list SSH hosts need ~/.ssh/config, not keys
+  init.lua:15  runs curl
+               can send data to other machines; honest use: fetching information
+  init.lua:15  contains the address "https://example.invalid/collect"
+  init.lua:31  a long encoded string
+               can hide what the code does; honest use: an embedded icon
+
+Read the mod before you enable it:  spot mods show keybinds
+```
+
+With nothing to point at, it says: **"Nothing flagged. This is not a safety check: read the mod before
+you enable it."** It never says that a mod is safe or clean.
+
+| Flagged | |
+|---------|---|
+| Programs | those that reach other machines, shells and interpreters, `sudo` and `pkexec`, `systemctl`, `crontab`, `chmod`, `base64`, `dd` and the like |
+| Paths | keys, keyrings, browser profiles; places that run code later |
+| Text | addresses and IP numbers, long encoded or escaped strings, text assembled from character codes |
+| Permissions | calls with no permission for them, and **permissions asked for but never used** |
+| Shape | arguments that are only known when the mod runs |
+
+Each finding gives the file and line, why it can be misused and what it is honestly used for. The
+list lives in spot and grows; a mod cannot change it or switch a finding off. The same scan runs in
+`spot mods check`, so authors and CI see it, and parsers are scanned like providers.
+
+**The strict form (S40)** is what makes scanning worth something. Without it, copying `spot` into a
+variable and building a name from pieces hid everything from a test scanner. With `spot` only ever
+written as `spot.name`, which of spot's functions a mod can call, and which programs its Lua starts,
+is known before it runs. It is a rule about how code is written, not a judgement of what it does.
+
+Arguments can still be built while the mod runs, and a scanner can be fooled. **The sandbox is the
+protection; the scanner helps you notice what to ask about.**
+
 #### Afterwards
 
 `spot mods audit <name>` lists what a mod really did: each command with its arguments, each file read
@@ -635,19 +718,11 @@ values.
 
 #### What this does not do
 
-**Permissions do not make a stranger's provider safe.**
-
-- `read` and `write` do not bind allowed programs, as above; nor do the rules protecting approvals
-  and logs.
-- An allowed program can be abused: many (`systemctl`, `git`, `find`, …) can start others, and a
-  file a mod may write can be a file that is run.
-- A reason can be a lie, and a list of danger names is never complete.
-- Warnings only help if they are read.
-- Something already running as you can change spot, its approvals or your shell without any mod.
-  These safeguards are against **mods**, not against an account that is already taken over.
-
-Read a mod before approving it. A sandbox enforced by the kernel (Landlock, seccomp) would be a
-stronger limit; it has not been tried.
+The sandbox limits what a mod can reach. It does not make a mod honest: within what you granted, it
+can do the wrong thing, and with a socket or a write to something that runs later it can do anything.
+Warnings only help if they are read. Something already running as you can change spot, its approvals
+or your shell without any mod: these safeguards are against **mods**, not against an account that is
+already taken over. Read a mod before approving it.
 
 ### Who may talk to the daemon
 
@@ -689,7 +764,7 @@ that updates by itself while open comes with live lists (0.11).
 | `spot mods` | List mods: running, failing or disabled, with the last error |
 | `spot mods reload [name]` | Load the files again |
 | `spot parse <parser>` | Run a parser on standard input, print its records as a JSON array |
-| `spot mods check [name] [-]` | Check a mod's contract and samples, or live input with `-` |
+| `spot mods check [name] [-]` | Check a mod's contract, samples and strict form, and scan it; live input with `-` |
 | `spot mods log <name>` | A mod's errors and log lines |
 | `spot mods allow <name>` | Show a mod's permissions and dangers, and approve them |
 | `spot mods show <name>`, `diff <name>` | Read a mod; what changed since you approved it |
@@ -795,17 +870,16 @@ publish. Parsers a mod uses run in its process, so a bad parser takes that mod's
 
 ## Trust
 
-See [security](#security). A provider can do what you approved, and what the programs you allowed it
-can do (which is more than its `read` and `write` list); the separate process protects the daemon from a broken mod, not you from a malicious one.
+See [security](#security). A provider can reach what you approved, no more, unless you granted it a
+way out (a socket, or writing something that runs later).
 
 A parser is given no way to run or write anything and shares nothing with its caller, which is what
 makes one from a stranger reasonable to use. What it returns is still data from that stranger: a
 provider should not paste it into a shell command. It can also waste time and memory until its host
 is killed, and with it the provider using it.
 
-This protection is spot's, not the operating system's: it rests on the allow-list, the separate
-state and the Lua library having no bugs. It has been checked by a few tests, not audited. Denying
-parser-only hosts file access in the kernel (Landlock) is a possible second layer, not yet tried.
+This rests on the allow-list and the separate Lua state, and, for a parser running by itself, on the
+[sandbox](#the-sandbox) as well. It has been checked by a few tests, not audited.
 
 The daemon never runs as root; privileged actions go through your own helper (`sudo`, `pkexec`).
 
@@ -871,11 +945,32 @@ The limit tests were on Linux. The transfer figures cover one hop, not drawing t
 | Stopping: process group / subreaper / `cgroup.kill` / the last two together | left detached programs / only `systemd` jobs / a program that moved itself / only `systemd` jobs |
 | "Links may go anywhere inside `/sys`" | permission for `/sys/class/power_supply` reached all of `/sys` |
 
-**Still to test:** the real host's size and start time, and enforcement of cgroup limits.
+**The sandbox**, a throwaway harness on Linux 7.3 (Landlock ABI 11), same probes with and without:
+
+| Attempt | Sandboxed |
+|---------|-----------|
+| Read or write outside the grants; follow a symlink out | refused |
+| Link or move a file from outside, or a read-only one, into a writable folder | refused (linking inside it works) |
+| Read through a hard link already inside a granted folder | **works** |
+| Read or signal the parent process | refused |
+| Connect to a socket file or an abstract socket | refused |
+| TCP connection; a UDP datagram arriving | refused |
+| Start a job through `systemd` | refused |
+| `sudo` | refused |
+| A program not granted, through the dynamic loader | **starts**, still confined |
+| `ss`, `node`, a battery read with only that device's folder | work |
+| `hyprctl`, `systemctl --user` without their socket | fail |
+| The same with the socket granted | work, **and can then run anything outside the sandbox** |
+
+Starting through the harness cost about 1.5 ms. `/etc` was granted whole in these runs, which exposed
+the UFW rules: hence S37.
+
+**Still to test:** older kernels, network port rules, the base grant, the real host's size and start
+time, and enforcement of cgroup limits.
 
 ### First version
 
-In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, mod health and notifications, permissions with reasons, approval and the audit log, the socket checks, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
+In: the mod host with its time and memory limits, loading and enabling, the `parser` and `provider` types, the parser contract and lockdown, `spot.use`, `spot parse`, `spot mods check`, mod health and notifications, permissions with reasons, the scanner and the strict form, approval and the audit log, the sandbox, the socket checks, `run` / `parse` in dialogs, `value` / `publish` / `refresh` / `on`, the helpers above except `watch_file`,
 `get` / `watch` / `call` / `mods`, and `from` / `call` in dialogs.
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
