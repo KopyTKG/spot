@@ -941,7 +941,8 @@ instead of `exec`. A password item cannot be used in either.
 a bar, which reads markup: `text` and `tooltip` are escaped and `class` is limited to `[a-z0-9_-]`. In text
 output, piped or not, backslash, tab and newline are escaped, so that a value cannot forge a row or a
 field.
-`get`, `watch`, `call`, `parse` and `mods` become reserved words: a config of that name needs a path.
+`get`, `watch`, `call`, `parse` and `mods` are reserved words, like `daemon`: a config of that name needs a
+path.
 `watch` reconnects when the daemon is restarted, for instance after an upgrade.
 
 ## Health and errors
@@ -986,7 +987,7 @@ off.
 | A provider (`spot.use`) | The call raises a Lua error, which the mod may catch |
 | ...uncaught in a value | Readers keep the last good result, marked as old |
 | ...uncaught in a request | The request fails, and a switch goes back to where it was |
-| It does not even load (two functions, no `[returns]`) | Every mod that `uses` it is marked failing at load, not at first use |
+| It does not even load (two functions, no `[returns]`) | Every mod that `uses` it fails when it loads, not at first use |
 
 A broken contract is a fault of the mod, not of its host: nothing is restarted.
 
@@ -1225,10 +1226,9 @@ In: the mod host with its time and memory limits, loading and enabling, the `par
 
 Later: `watch_file`, built-in system events (power, network), automatic reload on save.
 
-Not in 0.9: **launch hooks**, which need their own design. Core data such as the app index and launch
-history needs a permission of its own and counts as private data in warnings. "Make executable and
-run" from [#13](https://github.com/KopyTKG/spot/issues/13) is not offered as a mod request: a
-confirmation in a dialog does not protect a request that `spot call` can reach.
+Not in 0.9: **launch hooks**, which need their own design. spot offers mods no data of its own, such
+as the app index; reading its state folder, where the launch history is, counts as private data in
+warnings. No mod can make a file executable and run it: changing modes is refused.
 
 The API is **experimental** until menu trees (0.10) have used it.
 

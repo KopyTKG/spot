@@ -11,7 +11,6 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/approval"
 	"gitlab.com/KopyTKG/spot/internal/daemon"
 	"gitlab.com/KopyTKG/spot/internal/mod"
-	"gitlab.com/KopyTKG/spot/internal/modd"
 	"gitlab.com/KopyTKG/spot/internal/modload"
 	"gitlab.com/KopyTKG/spot/internal/modperm"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
@@ -221,8 +220,9 @@ func listMods() int {
 	return 0
 }
 
-func auditMod(s approval.Store, name string) int {
-	b, err := os.ReadFile(modd.AuditPath(s, name))
+// printRecord shows a mod's log or audit log, with nothing hidden or obeyed.
+func printRecord(path, name string) int {
+	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		fmt.Printf("Nothing recorded for %s\n", name)
 		return 0

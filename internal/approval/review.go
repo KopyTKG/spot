@@ -310,3 +310,30 @@ func findings(name string, r scan.Report) []string {
 	}
 	return out
 }
+
+// Asks says in a few words how what a changed mod asks for differs from what
+// was approved: for a notification, where the whole review does not fit.
+func Asks(m *Mod, old *Record) string {
+	before := map[string]map[string]string{}
+	if old != nil && old.Permissions != nil {
+		before = old.Permissions.Kinds()
+	}
+	var fresh []string
+	if m.Provider.Manifest.Permissions != nil {
+		now := m.Provider.Manifest.Permissions.Kinds()
+		for _, kind := range kinds {
+			for _, what := range keys(now[kind]) {
+				if _, had := before[kind][what]; !had {
+					fresh = append(fresh, kind+" "+Oneline(what))
+				}
+			}
+		}
+	}
+	switch {
+	case len(fresh) == 0:
+		return "it asks for nothing new"
+	case len(fresh) > 3:
+		return fmt.Sprintf("it now asks for %s and %d more", strings.Join(fresh[:3], ", "), len(fresh)-3)
+	}
+	return "it now asks for " + strings.Join(fresh, ", ")
+}

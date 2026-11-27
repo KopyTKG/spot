@@ -58,6 +58,9 @@ A `password` item cannot be used in `copy` or `args`.
 
 ## Running it
 
+A first argument of `daemon`, `get`, `watch`, `call`, `parse` or `mods` is a command, not a config. A
+config with one of those names is opened by its path: `spot ./watch.toml`.
+
 **A config is a program.** It can run commands when a dialog opens (`state`), as you
 type (`[[sources]]`), and when you submit. Open only configs you would run as a
 script, and read one from someone else first.

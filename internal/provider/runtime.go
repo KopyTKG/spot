@@ -159,6 +159,18 @@ func Open(l channel.Load) (*Runtime, channel.Reply) {
 		required: map[string]lua.LValue{}, loading: map[string]bool{}, ctx: context.Background(),
 		changed: map[string]bool{}, since: time.Now()}
 	err := r.within5(func() error {
+		// A parser that does not load fails the mod now, not at its first use.
+		names := make([]string, 0, len(l.Parsers))
+		for name := range l.Parsers {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if err := r.parsers.Load(r.ctx, name); err != nil {
+				return err
+			}
+		}
+		r.parsers.Log = nil
 		if err := r.install(l.Config); err != nil {
 			return err
 		}

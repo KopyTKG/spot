@@ -203,6 +203,7 @@ spot watch --waybar sockets.count   # now and on every change, for a bar
 spot mods                     # approved, running or failing
 spot mods reload sockets      # start it anew
 spot call sockets.refresh     # a request
+spot mods log sockets         # what it said, and how it failed
 spot mods audit sockets       # what it ran, read, wrote and was refused
 ```
 
@@ -212,7 +213,8 @@ starts a mod when it is first asked for.
 
 A running or watched mod is checked every two seconds, so that a change or a revocation stops it without
 anyone asking. You get a notification when a mod starts failing and one when it works again, at most six
-an hour for one mod. A `spot watch` carries on across a restart of the daemon, so after `spot --quit` it
+an hour for one mod. For a changed mod the notification says what it newly asks for, or that it asks
+for nothing new. A `spot watch` carries on across a restart of the daemon, so after `spot --quit` it
 starts a new one. See [modding](modding.md).
 
 ## Controlling it

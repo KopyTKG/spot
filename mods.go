@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/KopyTKG/spot/internal/mod"
 	"gitlab.com/KopyTKG/spot/internal/modcheck"
+	"gitlab.com/KopyTKG/spot/internal/modd"
 	"gitlab.com/KopyTKG/spot/internal/modhost"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
 )
@@ -18,6 +19,7 @@ const modsUsage = `usage: spot mods                       every mod and whether 
        spot mods show <name>           its permissions and all its code
        spot mods diff <name>           what changed since you approved it
        spot mods revoke <name>         take the approval back
+       spot mods log <name>            what it said, and how it failed
        spot mods audit <name>          what it ran, read, wrote and was refused
        spot mods reload [name]         start it anew
        spot mods check <name|folder> [-]
@@ -49,7 +51,7 @@ func modsCommand(args []string) int {
 			return usage()
 		}
 		return listMods()
-	case "allow", "show", "diff", "revoke", "audit":
+	case "allow", "show", "diff", "revoke", "audit", "log":
 		if len(args) != 1 {
 			return usage()
 		}
@@ -69,7 +71,9 @@ func modsCommand(args []string) int {
 		case "diff":
 			return diffMod(s, name)
 		case "audit":
-			return auditMod(s, name)
+			return printRecord(modd.AuditPath(s, name), name)
+		case "log":
+			return printRecord(modd.LogPath(s, name), name)
 		}
 		had, err := s.Revoke(name)
 		reloadMods(name) // stops it now

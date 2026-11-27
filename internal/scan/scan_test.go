@@ -204,3 +204,11 @@ end`
 		}
 	}
 }
+
+func TestLaunchHistoryIsPrivate(t *testing.T) {
+	for _, p := range []string{"~/.local/state/spot", "~/.local/state/spot/frecency.json", "/home/x/.local/state/spot/approvals"} {
+		if PlaceRisk(p, false) == "" {
+			t.Errorf("%s is not counted as private", p)
+		}
+	}
+}

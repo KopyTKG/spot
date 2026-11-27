@@ -91,6 +91,8 @@ var places = []place{
 		"anything written here runs later, outside the sandbox; honest use: reading your settings", true},
 	{regexp.MustCompile(`mimeapps\.list|share/applications|dbus-1/services|(^|/)\.gitconfig|config/git`),
 		"anything written here decides what is started later; honest use: reading your settings", true},
+	{regexp.MustCompile(`\.local/state/spot|frecency\.json`),
+		"what you have launched and how often, and what your mods did", false},
 	{regexp.MustCompile(`_history\b|fish_history|\.histfile`),
 		"what you have typed, often with secrets in it", false},
 }

@@ -242,6 +242,9 @@ func (m *Manager) note(p *provider, title, body string) {
 // health records that what (a value, a request, "" the mod itself) works or not.
 func (m *Manager) health(p *provider, what string, err error) {
 	if err == nil {
+		if len(p.broken) > 0 && (p.broken[what] != "" || p.broken[""] != "") && len(p.broken) <= 2 {
+			keep(LogPath(m.store, p.name), []string{"works again"})
+		}
 		delete(p.broken, what)
 		delete(p.broken, "")
 		if p.told && len(p.broken) == 0 {
@@ -255,6 +258,9 @@ func (m *Manager) health(p *provider, what string, err error) {
 	}
 	p.times++
 	p.fault = blame(err.Error())
+	if p.broken[what] != err.Error() { // each new way of failing, once
+		keep(LogPath(m.store, p.name), []string{"error " + strconv.Quote(err.Error()) + " (fault of " + p.fault + ")"})
+	}
 	p.broken[what] = err.Error()
 	if !p.told {
 		p.told = true
@@ -332,7 +338,7 @@ func (m *Manager) ready(p *provider) error {
 	}
 	store := m.store
 	store.Mods = conf.Dir
-	state, approved, _, err := store.State(name)
+	state, approved, record, err := store.State(name)
 	if err != nil {
 		p.stop()
 		clear(p.last)
@@ -347,7 +353,7 @@ func (m *Manager) ready(p *provider) error {
 		// It stops, and what it said is thrown away (S16).
 		p.stop()
 		clear(p.last)
-		err := fmt.Errorf("%s has changed since you approved it and will not run: spot mods allow %s", name, name)
+		err := fmt.Errorf("%s has changed since you approved it and will not run (%s): spot mods allow %s", name, approval.Asks(approved, record), name)
 		m.health(p, "", err)
 		return err
 	}
@@ -731,18 +737,19 @@ func AuditPath(store approval.Store, name string) string {
 	return filepath.Join(store.Dir, "audit", name+".log")
 }
 
-// record keeps what a mod said and did: its lines to the daemon's log, its
-// events to the audit log, which no mod can write.
-func (m *Manager) record(name string, r channel.Reply) {
-	for _, l := range r.Log {
-		log.Printf("mod %s says %s", name, strconv.Quote(l))
-	}
-	if len(r.Events) == 0 {
+// LogPath is where what a mod said, and how it failed, is written.
+func LogPath(store approval.Store, name string) string {
+	return filepath.Join(store.Dir, "logs", name+".log")
+}
+
+// keep appends lines to a file of the user's own, which no mod can write. One
+// older file is kept when it grows large.
+func keep(path string, lines []string) {
+	if len(lines) == 0 {
 		return
 	}
-	path := AuditPath(m.store, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		log.Printf("mod %s: audit: %v", name, err)
+		log.Printf("%s: %v", path, err)
 		return
 	}
 	if st, err := os.Lstat(path); err == nil && st.Size() > maxAudit {
@@ -750,19 +757,32 @@ func (m *Manager) record(name string, r channel.Reply) {
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
-		log.Printf("mod %s: audit: %v", name, err)
+		log.Printf("%s: %v", path, err)
 		return
 	}
 	defer f.Close()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	var b strings.Builder
-	for _, e := range r.Events {
-		// Quoted: what a mod names cannot make a line of its own.
-		fmt.Fprintf(&b, "%s %-8s %s\n", now, e.Kind, strconv.Quote(e.What))
+	for _, l := range lines {
+		b.WriteString(now + " " + l + "\n")
 	}
 	if _, err := f.WriteString(b.String()); err != nil {
-		log.Printf("mod %s: audit: %v", name, err)
+		log.Printf("%s: %v", path, err)
 	}
+}
+
+// record keeps what a mod said, in its log, and what it did, in the audit log.
+// Everything of the mod's is quoted: it cannot make a line of its own.
+func (m *Manager) record(name string, r channel.Reply) {
+	var said, did []string
+	for _, l := range r.Log {
+		said = append(said, "says  "+strconv.Quote(l))
+	}
+	for _, e := range r.Events {
+		did = append(did, fmt.Sprintf("%-8s %s", e.Kind, strconv.Quote(e.What)))
+	}
+	keep(LogPath(m.store, name), said)
+	keep(AuditPath(m.store, name), did)
 }
 
 // complaints passes on the first lines a host writes to its error output. A
