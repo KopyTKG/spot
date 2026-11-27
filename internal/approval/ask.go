@@ -50,10 +50,13 @@ func Ask(tty *os.File, items []Item, words []string, name string) (bool, error) 
 	if err := unix.IoctlSetInt(int(tty.Fd()), unix.TCFLSH, unix.TCIFLUSH); err != nil {
 		return false, fmt.Errorf("discarding earlier input: %w", err)
 	}
-	if len(words) == 1 && words[0] == name {
+	switch {
+	case len(words) == 1 && words[0] == name:
 		fmt.Fprintf(tty, "\nType the mod's name (%s) to approve it, or press Enter to refuse: ", name)
-	} else {
-		fmt.Fprintf(tty, "\nType each of these to accept it (%s), or press Enter to refuse: ", strings.Join(words, ", "))
+	case len(words) == 1:
+		fmt.Fprintf(tty, "\nType %s to accept it, or press Enter to refuse: ", words[0])
+	default:
+		fmt.Fprintf(tty, "\nType ALL %d of these on one line (%s) to accept them, or press Enter to refuse: ", len(words), strings.Join(words, " "))
 	}
 	line, err := bufio.NewReader(io.LimitReader(tty, 4096)).ReadString('\n')
 	if err != nil {

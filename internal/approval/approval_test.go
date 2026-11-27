@@ -210,3 +210,47 @@ func TestAModCannotDressUpTheScreen(t *testing.T) {
 		t.Errorf("code must be shown as it is: %q", got)
 	}
 }
+
+func TestAChangedModSaysWhatHappenedToItsPermissions(t *testing.T) {
+	h := newHome(t)
+	manifest := func(perms string) { h.write("mods/n/mod.toml", perms) }
+	h.write("mods/n/init.lua", "return 1\n")
+	manifest("[permissions.run]\nls='list'\ncat='read'\n")
+	h.approve("n")
+	review := func() string {
+		_, m, old, err := h.State("n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		Review(&out, m, old)
+		return out.String()
+	}
+	h.write("mods/n/init.lua", "return 2\n")
+	if got := review(); !strings.Contains(got, "THE SAME as when you approved it") || !strings.Contains(got, "Changed files: n/init.lua") {
+		t.Errorf("only the code:\n%s", got)
+	}
+	manifest("[permissions.run]\nls='other words'\nhead='first lines'\n")
+	got := review()
+	for _, want := range []string{"1 NEW", `no longer asked for: run "cat"`, `the reason given has changed for: run "ls"`, "NEW  run"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "THE SAME") {
+		t.Error("claims they are the same")
+	}
+	manifest("[permissions.run]\nls='list'\n")
+	if got := review(); !strings.Contains(got, "nothing new") || strings.Contains(got, "THE SAME") {
+		t.Errorf("only one dropped:\n%s", got)
+	}
+	h2 := newHome(t)
+	h2.approve("m")
+	h2.write("bin/tool", "#!/usr/bin/sh\necho 2\n")
+	_, m, old, _ := h2.State("m")
+	var out bytes.Buffer
+	Review(&out, m, old)
+	if !strings.Contains(out.String(), "a program of your own that it runs has changed") {
+		t.Errorf("a changed program:\n%s", &out)
+	}
+}

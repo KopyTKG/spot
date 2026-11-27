@@ -747,6 +747,7 @@ $ spot mods allow keybinds
 
 keybinds 1.2.0 — "Lists your keybindings"
 CHANGED since you approved it on 2026-11-26
+Permissions: 2 NEW, marked below.
 
   NEW  socket  $XDG_RUNTIME_DIR/hypr     !! DANGER: Hyprland runs any command it is
                                             asked to. This mod can do anything you can.
@@ -762,8 +763,7 @@ CHANGED since you approved it on 2026-11-26
 
 Changed files: init.lua (+14 -2), mod.toml (+4)     see them: spot mods diff keybinds
 
-Type the name of each new or dangerous permission to accept it (socket, net, hyprctl),
-or press Enter to refuse:
+Type ALL 3 of these on one line (socket net hyprctl) to accept them, or press Enter to refuse:
 ```
 
 - **What is new comes first**, and is marked. The reason is shown as the author's claim: it can be

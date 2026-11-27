@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"gitlab.com/KopyTKG/spot/internal/mod"
 	"gitlab.com/KopyTKG/spot/internal/scan"
 )
 
@@ -162,6 +163,9 @@ func Review(w io.Writer, m *Mod, old *Record) []Item {
 	fmt.Fprintf(w, "\n%s (%s)\n", title, man.Type)
 	if old != nil && old.Hash != m.Hash {
 		fmt.Fprintf(w, "CHANGED since you approved it on %s\n", old.Approved.Format("2006-01-02"))
+		for _, l := range permissionChanges(m, old) {
+			fmt.Fprintln(w, l)
+		}
 	}
 	fmt.Fprintln(w)
 
@@ -220,10 +224,57 @@ func Review(w io.Writer, m *Mod, old *Record) []Item {
 		}
 		if len(changed) > 0 {
 			fmt.Fprintf(w, "\nChanged files: %s\n  see them: spot mods diff %s\n", Visible(strings.Join(changed, ", ")), m.Name)
+		} else {
+			fmt.Fprintln(w, "\nNo file differs: a program of your own that it runs has changed.")
 		}
 	}
 	fmt.Fprintf(w, "\nRead the mod before you approve it:  spot mods show %s\n", m.Name)
 	return items
+}
+
+// permissionChanges says outright how what is asked for differs from what was
+// approved, also when it does not: silence is easy to take for either.
+func permissionChanges(m *Mod, old *Record) []string {
+	kindsOf := func(p *mod.Permissions) map[string]map[string]string {
+		if p == nil {
+			return map[string]map[string]string{}
+		}
+		return p.Kinds()
+	}
+	before, now := kindsOf(old.Permissions), kindsOf(m.Provider.Manifest.Permissions)
+	added := 0
+	var gone, reworded []string
+	for _, kind := range kinds {
+		for _, what := range keys(now[kind]) {
+			switch why, had := before[kind][what]; {
+			case !had:
+				added++
+			case why != now[kind][what]:
+				reworded = append(reworded, kind+" "+scan.Quote(what))
+			}
+		}
+		for _, what := range keys(before[kind]) {
+			if _, still := now[kind][what]; !still {
+				gone = append(gone, kind+" "+scan.Quote(what))
+			}
+		}
+	}
+	if added == 0 && len(gone) == 0 && len(reworded) == 0 {
+		return []string{"Permissions: THE SAME as when you approved it. The code is what changed."}
+	}
+	var out []string
+	if added > 0 {
+		out = append(out, fmt.Sprintf("Permissions: %d NEW, marked below.", added))
+	} else {
+		out = append(out, "Permissions: nothing new.")
+	}
+	if len(gone) > 0 {
+		out = append(out, "  no longer asked for: "+strings.Join(gone, ", "))
+	}
+	if len(reworded) > 0 {
+		out = append(out, "  the reason given has changed for: "+strings.Join(reworded, ", "))
+	}
+	return out
 }
 
 // findings leaves out what is about mod.toml: the permissions are shown above.
