@@ -34,7 +34,11 @@ func TestMain(m *testing.M) {
 			os.Stdout.WriteString(`{"error":"` + err.Error() + `"}`)
 			os.Exit(1)
 		}
-		os.Setenv("SPOT_PROBE", "probe")
+		next := os.Getenv("SPOT_PROBE_NEXT")
+		if next == "" {
+			next = "probe"
+		}
+		os.Setenv("SPOT_PROBE", next)
 		syscall.Exec("/proc/self/exe", os.Args, os.Environ())
 		os.Exit(3)
 	case "probe":
