@@ -481,12 +481,12 @@ the machine. **Not** against something already running as you or as root.
 | # | Rule |
 |---|------|
 | S33 | Every mod host puts itself under the sandbox, and checks that it is in it, before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
-| S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included |
+| S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included. A permission allows connecting out to the listed ports; no mod accepts connections |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
 | S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, is refused: the kernel can only add access, not carve an exception out of it |
 | S37 | The base grant is the short list in [the sandbox](#the-base-grant); it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run`, and libraries may be read, not executed |
 | S43 | A host whose file grant no longer matches the file, because an update replaced it, is restarted with new grants before it is asked anything else |
-| S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes |
+| S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes, and `listen` for a mod with network access |
 
 **Requests are open to your programs.** Any program of yours can `spot call` any request of an
 approved mod, so a request that does something drastic is a way for other programs to do it. A mod
@@ -506,7 +506,10 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
   sandbox and gain no access by it. Programs in `/usr/bin` that are not listed cannot even be read.
 - A network permission is **by port, not by destination**: port 443 reaches any machine, and a port
   also reaches whatever listens on **this machine** and your local network, such as a development
-  server that trusts local callers. Name lookups can carry data out.
+  server that trusts local callers.
+- **Any network permission can send data anywhere**, whatever port it names: name lookups need UDP
+  port 53, and that reaches any server. A mod's UDP socket also receives from whoever sends to its
+  port.
 - A mod can see that a file exists and its size and times (`stat`) anywhere you can; the kernel does
   not restrict that.
 - The audit log records what goes through `spot`. What a program a mod started opens or is refused
@@ -520,7 +523,7 @@ job handed to `systemd` needs the user bus, which the sandbox refuses unless gra
 | Question | Why it matters |
 |----------|----------------|
 | Does the base grant hold on other distributions, whose libraries lie elsewhere? | Only Arch is tested |
-| How are network permissions written, and do the port rules hold? | Port rules are untested |
+| Do very large DNS answers (which need TCP port 53) and `.local` names have to work? | Both are untested and would likely fail |
 | How should the daemon be started so that it has a delegated cgroup? | Decides how far S29 and the process limits hold |
 | How is one of your own scripts run without being swapped between hashing and starting it? (a sealed in-memory copy is one idea; scripts with `#!` and their imports are the difficulty) | S10 promises the approved bytes |
 | Should a security switch (a lock, a firewall) be able to say "unknown" instead of showing the last value when its mod is down? | A stale "on" is worse than no answer |
@@ -552,7 +555,9 @@ python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # t
   be opened (Landlock). Starting that stage by hand therefore runs no mod.
 - **The filter (seccomp)** allows Unix sockets (ruled by Landlock); with `net`, plain TCP, and UDP for
   name lookups; with `netlink`, only the granted families (`diag` does not open `route`). Every other
-  socket family and protocol is refused. It answers `clone3` and `pidfd_open` with "not implemented",
+  socket family and protocol is refused. **With `net` it also denies `listen`**: Landlock rules
+  `bind`, but a TCP socket that was never bound can still `listen`, on a port the kernel picks and on
+  every interface. It answers `clone3` and `pidfd_open` with "not implemented",
   so that callers fall back, refuses calls of another architecture, and denies:
 
   | Denied | Why |
@@ -566,7 +571,8 @@ python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # t
   | `io_uring`, `bpf`, `userfaultfd`, `perf_event_open` | large kernel surface that a mod has no use for |
 
 - Landlock ABI 11 limits UDP by port as well as TCP, so UDP is granted for port 53 only (to any
-  address). Sending also needs a rule for binding port 0.
+  address). Sending also needs a rule for binding port 0. TCP Fast Open and addressing another port
+  from a connected socket are both covered by the port rules.
 - What a host gets is the [base grant](#the-base-grant) and what its permissions list. **Not the mods
   folder**: the daemon reads every file once, checks the hash and sends the bytes to the host.
 - No other process can be read, traced or signalled, abstract sockets included.
@@ -583,10 +589,13 @@ python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # t
 | correct local time | `/etc/localtime`, `/usr/share/zoneinfo` (read) |
 | user and group names | `/etc/passwd`, `/etc/group` (read) |
 | each entry of `run` | that program, and its interpreter if it is a script (execute) |
+| a mod with `net` | TCP to the listed ports; UDP to port 53 and binding port 0; `/etc/resolv.conf`, `/etc/hosts`, `/etc/ssl/certs`, `/etc/ca-certificates` (read) |
 
 Nothing else of `/etc` is included: no tested program needed `ld.so.cache`, `nsswitch.conf`, the
-terminal descriptions, `/dev/urandom` or translations. Name lookups may need more; that comes with
-`net` and is still to be tested. What a program needs beyond this, such as `/proc` for `ps`,
+terminal descriptions, `/dev/urandom` or translations; name lookups and HTTPS did not need
+`nsswitch.conf` or `openssl.cnf` either. `/etc/hosts` was not needed with `systemd-resolved`; it is
+included for resolvers that read it themselves. Lookups do not go through the socket of
+`systemd-resolved`: programs that resolve names on their own, such as Go programs, cannot use it. What a program needs beyond this, such as `/proc` for `ps`,
 `/sys` for `brightnessctl` or its own configuration file, is a permission the mod asks for.
 
 **An update can take a grant away.** Landlock binds a rule to the file, not to its path. When a file
@@ -1123,7 +1132,22 @@ others), each with the sockets or folders its permissions would add:
 | A listed shell starting a program in `/usr/lib` through the loader | **starts**, still confined |
 | A file or program granted by name, then replaced by rename | **refused** from then on; through a folder grant it keeps working |
 
-**Still to test:** older kernels (if the minimum is to be lowered), other distributions, TCP port rules and name lookups through them, the real host's start
+**Network rules**, one port granted, against servers on the same machine:
+
+| Attempt | Result |
+|---|---|
+| TCP to the granted port | works |
+| TCP to another port, also through an IPv4-mapped IPv6 address | refused |
+| TCP Fast Open to another port (`sendto`, `sendmsg`) | refused |
+| `bind` and `listen` | refused |
+| `listen` without `bind` | **listens on every interface**; a connection to the machine's network address was accepted. Refused once the filter denies `listen` |
+| UDP to another port, also from a socket connected to the granted one | refused |
+
+**Name lookups and HTTPS** from `curl`, `getent`, Python and a Go program, with `resolv.conf` and
+the certificate folders added to the base grant: all worked, and ports 80 and 8443 of the same server
+were refused. Without the certificate folders HTTPS failed.
+
+**Still to test:** older kernels (if the minimum is to be lowered), other distributions, large DNS answers and `.local` names, the real host's start
 time, and enforcement of cgroup limits.
 
 ### First version
