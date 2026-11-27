@@ -35,6 +35,8 @@ const (
 	OpDismiss = "dismiss" // cancel everything that is showing or waiting
 	OpQuit    = "quit"    // exit once idle
 	OpPing    = "ping"    // liveness + version
+	OpGet     = "get"     // a value of a mod
+	OpCall    = "call"    // run a request of a mod
 )
 
 type Request struct {
@@ -54,6 +56,10 @@ type Request struct {
 	Last  bool `json:"last,omitempty"`  // nothing follows: release the window at once
 	Sub   bool `json:"sub,omitempty"`   // open on top of the current dialog, which returns when this one closes
 	Back  bool `json:"back,omitempty"`  // show the Back control (SPOT_BACK in Env asks for it too)
+
+	// opGet, opCall
+	Name string   `json:"name,omitempty"` // mod.value or mod.request
+	Args []string `json:"args,omitempty"`
 }
 
 type Response struct {
@@ -65,6 +71,8 @@ type Response struct {
 	// Fault: spot itself could not show the dialog (as opposed to a command of
 	// the dialog failing). The client tells the user when stderr goes unseen.
 	Fault bool `json:"fault,omitempty"`
+	// Result of opGet and opCall, as the mod gave it.
+	Result json.RawMessage `json:"result,omitempty"`
 }
 
 // RoundTrip sends req on conn and returns the daemon's answer.

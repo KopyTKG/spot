@@ -156,6 +156,7 @@ func TestFiles(t *testing.T) {
 	l.expect("a granted file", "read", `"alpha\nbeta\n"`, "~/readable/a")
 	l.expect("by its full path", "lines", `["alpha","beta"]`, d+"/readable/a")
 	l.expect("outside", "read", "!no permission", "~/outside/secret")
+	l.expect("outside and not there", "read", "!no permission", "~/outside/zzz")
 	l.expect("through dots", "read", "!no permission", "~/readable/../outside/secret")
 	l.expect("a link out", "read", "!no permission", "~/readable/link-out")
 	l.expect("a hard link out", "read", `"error: the file has more than one name"`, "~/readable/hard-out")

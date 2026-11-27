@@ -85,6 +85,12 @@ func usageError(format string, args ...any) {
 func main() {
 	protocol.Version = version
 
+	if len(os.Args) > 1 && (os.Args[1] == "get" || os.Args[1] == "call") {
+		os.Exit(askMod(os.Args[1], os.Args[2:]))
+	}
+	if len(os.Args) > 1 && (os.Args[1] == "watch" || os.Args[1] == "parse") {
+		fatal("spot %s is not built yet", os.Args[1])
+	}
 	if len(os.Args) > 1 && os.Args[1] == "mods" {
 		os.Exit(modsCommand(os.Args[2:]))
 	}

@@ -6,11 +6,14 @@ import (
 	"os"
 
 	"gitlab.com/KopyTKG/spot/internal/approval"
+	"gitlab.com/KopyTKG/spot/internal/daemon"
 )
+
+func init() { daemon.ModStore = modStore }
 
 // modStore, in a binary built for testing only, is where SPOT_TEST_HOME says.
 // No released spot is built with this.
 func modStore() (approval.Store, error) {
 	h := os.Getenv("SPOT_TEST_HOME")
-	return approval.Store{Mods: h + "/mods", Records: h + "/approvals", Home: h}, nil
+	return approval.Store{Mods: h + "/mods", Records: h + "/approvals", Home: h, Config: h, Dir: h + "/state"}, nil
 }

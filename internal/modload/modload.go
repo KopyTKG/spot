@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitlab.com/KopyTKG/spot/internal/approval"
 	"gitlab.com/KopyTKG/spot/internal/config"
 	"gitlab.com/KopyTKG/spot/internal/mod"
 	"gitlab.com/KopyTKG/spot/internal/modhost"
@@ -96,5 +97,25 @@ func Provider(dir string, o Options) (modhost.Config, channel.Load, error) {
 	}
 	c = modhost.Config{Name: m.Name, Policy: grants.Policy(o.Host), Protected: o.Protected}
 	l = channel.Load{Mod: m, Files: files, Parsers: parsers, Grants: grants, Config: o.Config, EmptyDir: o.EmptyDir}
+	return c, l, nil
+}
+
+// Approved prepares a provider from the bytes an approval was checked against.
+// Nothing is read from disk again, so what runs is what was approved (S15).
+func Approved(m *approval.Mod, o Options) (modhost.Config, channel.Load, error) {
+	var c modhost.Config
+	var l channel.Load
+	if m.Provider.Manifest.Type != "provider" {
+		return c, l, fmt.Errorf("mod %s is not a provider", m.Name)
+	}
+	if why := m.Refused(); len(why) > 0 {
+		return c, l, errors.New(m.Name + " would not be run:\n  " + strings.Join(why, "\n  "))
+	}
+	grants, err := modperm.Resolve(m.Provider.Manifest.Permissions, o.Env)
+	if err != nil {
+		return c, l, fmt.Errorf("mod %s: %w", m.Name, err)
+	}
+	c = modhost.Config{Name: m.Name, Policy: grants.Policy(o.Host), Protected: o.Protected}
+	l = channel.Load{Mod: m.Provider, Files: m.Files, Parsers: m.Parsers, Grants: grants, Config: o.Config, EmptyDir: o.EmptyDir}
 	return c, l, nil
 }

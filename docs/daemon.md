@@ -184,6 +184,27 @@ refuses to start as root.
 The daemon refuses such a dialog from any caller. At most 32 dialogs may wait their
 turn.
 
+## Mods (in development)
+
+```toml
+mods = ["sockets"]            # providers to run; each must also be approved
+mods_dir = "mods"             # optional, relative to this file
+
+[mod.sockets]                 # settings, spot.config in the mod
+limit = 10
+```
+
+```sh
+spot mods allow sockets       # approve it, at a terminal
+spot get sockets.table        # a value; --json for scripts
+spot call sockets.refresh     # a request
+spot mods audit sockets       # what it ran, read, wrote and was refused
+```
+
+A mod runs only if it is listed **and** approved as it is now. These settings and approvals are read
+from your home folder as the system's user database has it, not from `XDG_CONFIG_HOME`. The daemon
+starts a mod when it is first asked for. See [modding](modding.md).
+
 ## Controlling it
 
 | Command | |

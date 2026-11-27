@@ -85,6 +85,7 @@ func RunDaemon() int {
 		})
 	}()
 
+	defer closeMods()
 	if code := app.Run(nil); code > 0 {
 		return protocol.ExitError
 	}
@@ -143,7 +144,18 @@ func handle(conn net.Conn, sh *ui.Shell) {
 		return
 	}
 
+	if pid, err := protocol.PeerPID(conn); err == nil && fromAMod(pid) {
+		fmt.Fprintf(os.Stderr, "spot: refused a connection from a mod (pid %d)\n", pid)
+		return
+	}
+
 	switch req.Op {
+	case protocol.OpGet, protocol.OpCall:
+		if req.Version != protocol.Version {
+			reply(protocol.Response{Stale: true})
+			return
+		}
+		reply(modRequest(req))
 	case protocol.OpPing:
 		reply(protocol.Response{})
 	case protocol.OpQuit:

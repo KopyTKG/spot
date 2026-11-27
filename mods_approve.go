@@ -11,6 +11,7 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/approval"
 	"gitlab.com/KopyTKG/spot/internal/daemon"
 	"gitlab.com/KopyTKG/spot/internal/mod"
+	"gitlab.com/KopyTKG/spot/internal/modd"
 	"gitlab.com/KopyTKG/spot/internal/modload"
 	"gitlab.com/KopyTKG/spot/internal/modperm"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
@@ -26,13 +27,7 @@ func approvable(s approval.Store, m *approval.Mod) error {
 	if why := m.Refused(); len(why) > 0 {
 		return errors.New("its code would not be run:\n  " + strings.Join(why, "\n  "))
 	}
-	env := func(name string) string {
-		if name == "HOME" {
-			return s.Home
-		}
-		return os.Getenv(name)
-	}
-	grants, err := modperm.Resolve(m.Provider.Manifest.Permissions, env)
+	grants, err := modperm.Resolve(m.Provider.Manifest.Permissions, s.Getenv)
 	if err != nil {
 		return err
 	}
@@ -73,7 +68,11 @@ func allowMod(s approval.Store, name string) int {
 	if err := s.Approve(m); err != nil {
 		return modsError("%v", err)
 	}
-	fmt.Fprintf(tty, "Approved. (Starting mods is not built yet.)\n")
+	if m.Provider.Manifest.Type == "provider" {
+		fmt.Fprintf(tty, "Approved. It runs once \"%s\" is in mods in daemon.toml.\n", name)
+	} else {
+		fmt.Fprintf(tty, "Approved.\n")
+	}
 	return 0
 }
 
@@ -194,5 +193,18 @@ func listMods() int {
 			fmt.Printf("%-20s %-9s %s\n", name, m.Provider.Manifest.Type, describe(state, r))
 		}
 	}
+	return 0
+}
+
+func auditMod(s approval.Store, name string) int {
+	b, err := os.ReadFile(modd.AuditPath(s, name))
+	if errors.Is(err, fs.ErrNotExist) {
+		fmt.Printf("Nothing recorded for %s\n", name)
+		return 0
+	}
+	if err != nil {
+		return modsError("%v", err)
+	}
+	fmt.Print(approval.Visible(string(b)))
 	return 0
 }

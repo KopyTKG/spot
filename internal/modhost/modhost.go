@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -36,9 +37,9 @@ type Config struct {
 	Name      string // the mod's
 	Policy    sandbox.Policy
 	Protected sandbox.Protected
-	Memory    int64    // bytes; 0 is DefaultMemory
-	Tasks     int      // 0 is DefaultTasks
-	Stderr    *os.File // where the host and its programs complain
+	Memory    int64     // bytes; 0 is DefaultMemory
+	Tasks     int       // 0 is DefaultTasks
+	Stderr    io.Writer // where the host complains
 }
 
 // Host is a running mod host.
@@ -113,6 +114,7 @@ func Start(c Config) (*Host, error) {
 	h.cmd = exec.Command(argv[0], argv[1:]...)
 	h.cmd.Dir = "/"
 	h.cmd.Stderr = c.Stderr
+	h.cmd.WaitDelay = time.Second         // something it left behind may hold the pipe
 	h.cmd.ExtraFiles = []*os.File{theirs} // becomes fd 3
 	h.cmd.Env = []string{"PATH=" + sandbox.SystemPath}
 	// The last two are for systemd-run; the host drops them.

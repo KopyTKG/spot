@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -44,6 +45,11 @@ func (r *Runtime) real(asked string, dirs []string) (string, error) {
 	}
 	real, err := filepath.EvalSymlinks(p)
 	if err != nil {
+		// Reaching outside the grants is refused and recorded, also for what
+		// is not there; "not found" is only said of what the mod may read.
+		if !slices.ContainsFunc(dirs, func(d string) bool { return within(p, d) }) {
+			return "", errRefused
+		}
 		return "", err
 	}
 	if within(real, "/dev") || ofProcess.MatchString(real) && !own {

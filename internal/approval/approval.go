@@ -37,6 +37,8 @@ type Store struct {
 	Mods    string // folder of mods
 	Records string // folder of approval records
 	Home    string // for the paths in permissions
+	Config  string // spot's configuration folder
+	Dir     string // spot's state folder
 }
 
 // Default is the store of this user, found through the system's user database
@@ -50,11 +52,12 @@ func Default() (Store, error) {
 	if !filepath.IsAbs(u.HomeDir) {
 		return Store{}, errors.New("this user has no home folder")
 	}
-	mods, err := config.ModsDir(filepath.Join(u.HomeDir, ".config", "spot"))
+	conf, state := filepath.Join(u.HomeDir, ".config", "spot"), filepath.Join(u.HomeDir, ".local", "state", "spot")
+	mods, err := config.ModsDir(conf)
 	if err != nil {
 		return Store{}, err
 	}
-	return Store{Mods: mods, Records: filepath.Join(u.HomeDir, ".local", "state", "spot", "approvals"), Home: u.HomeDir}, nil
+	return Store{Mods: mods, Records: filepath.Join(state, "approvals"), Home: u.HomeDir, Config: conf, Dir: state}, nil
 }
 
 // Mod is a mod as read from disk, once: what is shown, hashed and later loaded
@@ -172,7 +175,7 @@ func (s Store) Read(name string) (*Mod, error) {
 			if !strings.ContainsRune(run, '/') {
 				continue
 			}
-			path, err := modperm.Expand(run, modperm.Vars(s.env))
+			path, err := modperm.Expand(run, modperm.Vars(s.Getenv))
 			if err != nil {
 				return nil, fmt.Errorf("mod %s: run %w", name, err)
 			}
@@ -187,11 +190,19 @@ func (s Store) Read(name string) (*Mod, error) {
 	return out, nil
 }
 
-func (s Store) env(name string) string {
-	if name == "HOME" {
+// Getenv is what paths in permissions mean, and where permitted variables come
+// from. The folders are those of the user, not what the environment of whoever
+// started us says; other variables are ours.
+func (s Store) Getenv(name string) string {
+	switch name {
+	case "HOME":
 		return s.Home
+	case "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME":
+		return "" // the usual places under HOME
+	case "XDG_RUNTIME_DIR":
+		return "/run/user/" + strconv.Itoa(os.Getuid())
 	}
-	return ""
+	return os.Getenv(name)
 }
 
 func program(path string) ([]byte, error) {

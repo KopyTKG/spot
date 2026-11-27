@@ -44,3 +44,26 @@ func checkPeer(conn net.Conn, want uint32) error {
 	}
 	return nil
 }
+
+// PeerPID is the process at the other end of conn.
+func PeerPID(conn net.Conn) (int, error) {
+	uc, ok := conn.(*net.UnixConn)
+	if !ok {
+		return 0, fmt.Errorf("not a Unix socket: %T", conn)
+	}
+	raw, err := uc.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	var cred *syscall.Ucred
+	var cerr error
+	if err := raw.Control(func(fd uintptr) {
+		cred, cerr = syscall.GetsockoptUcred(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
+	}); err != nil {
+		return 0, err
+	}
+	if cerr != nil {
+		return 0, cerr
+	}
+	return int(cred.Pid), nil
+}

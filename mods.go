@@ -18,6 +18,7 @@ const modsUsage = `usage: spot mods                       every mod and whether 
        spot mods show <name>           its permissions and all its code
        spot mods diff <name>           what changed since you approved it
        spot mods revoke <name>         take the approval back
+       spot mods audit <name>          what it ran, read, wrote and was refused
        spot mods check <name|folder> [-]
                                        while writing one: read its code and, for
                                        a parser, hold it to its contract (with -,
@@ -47,7 +48,7 @@ func modsCommand(args []string) int {
 			return usage()
 		}
 		return listMods()
-	case "allow", "show", "diff", "revoke":
+	case "allow", "show", "diff", "revoke", "audit":
 		if len(args) != 1 {
 			return usage()
 		}
@@ -66,6 +67,8 @@ func modsCommand(args []string) int {
 			return showMod(s, name)
 		case "diff":
 			return diffMod(s, name)
+		case "audit":
+			return auditMod(s, name)
 		}
 		had, err := s.Revoke(name)
 		if err != nil {
