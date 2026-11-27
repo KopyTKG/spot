@@ -126,6 +126,10 @@ func watchMod(req protocol.Request, how format) int {
 	}
 }
 
+// shows is whether a character may pass as it is: a printable one, or one of the
+// private-use characters that icon fonts draw their icons with.
+func shows(r rune) bool { return unicode.IsPrint(r) || unicode.Is(unicode.Co, r) }
+
 // field escapes a text so that it stays one field of one line, and cannot steer
 // a terminal (S30).
 func field(s string) string {
@@ -140,7 +144,7 @@ func field(s string) string {
 			b.WriteString(`\n`)
 		case r == '\r':
 			b.WriteString(`\r`)
-		case !unicode.IsPrint(r) && r != '‍':
+		case !shows(r) && r != '\u200d':
 			fmt.Fprintf(&b, `\u{%04x}`, r)
 		default:
 			b.WriteRune(r)
@@ -157,9 +161,9 @@ func line(raw json.RawMessage) string {
 		switch {
 		case r == '\n' || r == '\r' || r == '\t':
 			b.WriteByte(' ') // only ever between the parts of JSON
-		case !unicode.IsPrint(r) && r != '\u200d' && r < 0x10000:
+		case !shows(r) && r != '\u200d' && r < 0x10000:
 			fmt.Fprintf(&b, `\u%04x`, r)
-		case !unicode.IsPrint(r) && r != '\u200d':
+		case !shows(r) && r != '\u200d':
 			// beyond four digits: as the pair JSON writes it
 			r -= 0x10000
 			fmt.Fprintf(&b, `\u%04x\u%04x`, 0xd800+(r>>10), 0xdc00+(r&0x3ff))
@@ -217,7 +221,7 @@ func forBar(r protocol.Response) string {
 			s = string(r[:n]) + "..."
 		}
 		return markup(strings.Map(func(c rune) rune {
-			if c != '\n' && !unicode.IsPrint(c) {
+			if c != '\n' && !shows(c) {
 				return ' '
 			}
 			return c

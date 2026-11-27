@@ -3,6 +3,11 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` and `spot-mod-host-linux-x64` binaries, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.9.2 — unreleased
+
+- **Icons from a mod disappeared:** `spot get` and `watch`, with `--waybar` too, replaced or escaped the
+  private-use characters that icon fonts such as Nerd Fonts are made of, so a bar module showed nothing.
+
 ## 0.9.1 — 2026-11-27
 
 What was left over from 0.9 ([#32](https://github.com/KopyTKG/spot/issues/32)).
