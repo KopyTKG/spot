@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/diamondburned/gotk4-layer-shell/pkg/gtk4layershell"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
@@ -114,6 +113,12 @@ func view(j *scheduler.Job) *dialog {
 	return d
 }
 
+// Raise puts the window above ordinary dialogs. For a dialog shown by its own
+// process, which cannot be stacked inside the daemon's window.
+func (s *Shell) Raise() {
+	gtk4layershell.SetLayer(&s.win.Window, gtk4layershell.LayerShellLayerOverlay)
+}
+
 // live is the dialog that currently takes input, or nil.
 func (s *Shell) live() *dialog {
 	if cur := s.Sched.Cur; cur != nil {
@@ -222,7 +227,7 @@ func (s *Shell) setStyle(path string) {
 	if path == "" {
 		return
 	}
-	css, err := os.ReadFile(path)
+	css, err := readSmall(path, 4<<20)
 	if err != nil {
 		log.Printf("css: %v (continuing without styles)", err)
 		return

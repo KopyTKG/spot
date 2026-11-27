@@ -94,8 +94,9 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 			return
 		}
 		cmd := config.Expand(b.cfg.Submit.Exec, b.activeID, vals)
+		env := config.SubmitEnv(b.env, b.activeID, vals)
 		if b.cfg.Submit.Spawn {
-			spawn(cmd, b.env, b.dir)
+			spawn(cmd, env, b.dir)
 			finish()
 			return
 		}
@@ -104,7 +105,7 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 		// wait on a loop that is waiting on it.
 		setBusy(true)
 		go func() {
-			stdout, stderr, status := runCommand(cmd, b.env, b.dir)
+			stdout, stderr, status := runCommand(cmd, env, b.dir)
 			coreglib.IdleAdd(func() {
 				setBusy(false)
 				if d.done {

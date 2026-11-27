@@ -24,5 +24,6 @@ label = "Port"
 default = "22"
 
 [submit]
-exec  = "setsid -f xdg-terminal-exec ssh {user}@{host} -p {port} >/dev/null 2>&1"
+# Quoted variables, and "--" so that a value starting with "-" is no option.
+exec  = 'setsid -f xdg-terminal-exec ssh -p "$SPOT_VALUE_PORT" -- "$SPOT_VALUE_USER@$SPOT_VALUE_HOST" >/dev/null 2>&1'
 spawn = true

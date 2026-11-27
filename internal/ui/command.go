@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"bytes"
 	"errors"
 	"log"
 	"os/exec"
+
+	"gitlab.com/KopyTKG/spot/internal/capture"
 )
 
 // spawn starts cmd and does not wait for it to finish.
@@ -21,7 +22,7 @@ func spawn(cmd string, env []string, dir string) {
 // runCommand runs cmd to completion and returns what it wrote to stdout and
 // stderr and its exit status (0 on success).
 func runCommand(cmd string, env []string, dir string) (stdout, stderr string, status int) {
-	var so, se bytes.Buffer
+	var so, se capture.Buffer
 	c := exec.Command("sh", "-c", cmd)
 	c.Env, c.Dir = env, dir
 	c.Stdout, c.Stderr = &so, &se

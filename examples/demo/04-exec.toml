@@ -23,5 +23,5 @@ pattern  = "^[0-9]+$"
 error    = "Digits only"
 
 [submit]
-exec     = "[ {n} -eq 42 ] && echo 'correct!' || { echo 'nope, try again' >&2; exit 1; }"
+exec     = "[ \"$SPOT_VALUE_N\" = 42 ] && echo 'correct!' || { echo 'nope, try again' >&2; exit 1; }"
 on_error = "show"   # or "exit"

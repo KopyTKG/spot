@@ -177,7 +177,9 @@ func main() {
 	}
 
 	var resp protocol.Response
-	if oneshot || os.Getenv("SPOT_NO_DAEMON") != "" || os.Getenv("WAYLAND_DISPLAY") == "" {
+	// A password never goes through the daemon, and root gets no daemon: one
+	// running with its rights would take requests for as long as it lives.
+	if oneshot || cfg.HasPassword() || os.Geteuid() == 0 || os.Getenv("SPOT_NO_DAEMON") != "" || os.Getenv("WAYLAND_DISPLAY") == "" {
 		resp = daemon.RunOneshot(req)
 	} else if r, ok := client.ViaDaemon(req); ok {
 		resp = r

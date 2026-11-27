@@ -248,6 +248,9 @@ func (c *Config) validate() error {
 	if err := ValidateSources(c.Sources); err != nil {
 		return err
 	}
+	if err := c.checkValueVars(); err != nil {
+		return err
+	}
 	if c.MarginTop < 0 || c.MarginBottom < 0 || c.MarginLeft < 0 || c.MarginRight < 0 {
 		return errors.New("margin_top, margin_bottom, margin_left and margin_right must not be negative (use offset_x / offset_y to shift)")
 	}

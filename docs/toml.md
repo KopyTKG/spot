@@ -38,6 +38,13 @@ For a single commented file with every key and its default, see
 
 ## Running it
 
+**A config is a program.** It can run commands when a dialog opens (`state`), as you
+type (`[[sources]]`), and when you submit. Open only configs you would run as a
+script, and read one from someone else first.
+
+A dialog with a `password` item is always shown by the calling process, never by the
+daemon, so the password does not pass through it.
+
 ```
 spot [flags] <config>
 ```
@@ -668,9 +675,25 @@ Sources work only on an `apps` item. To open the launcher already in a mode, set
 
 `{id}` becomes that item's current value; `{_active}` becomes the id of the last
 tiles section used. Substitution happens in one pass, so a value that happens to
-contain `{other}` is not expanded again. Values are **not** shell-quoted: use
-`format = "json"`, or a `pattern` that rules out metacharacters, when a value
-ends up in a shell command.
+contain `{other}` is not expanded again.
+
+**`{id}` is pasted into the command as it is, not quoted.** A value holding `$(…)`
+or `;` runs. Use `{id}` for `stdout`; in `exec` read the value from the
+environment instead:
+
+| Variable | Holds |
+|----------|-------|
+| `SPOT_VALUE_<ID>` | the value of the item `id` (upper-cased, other characters as `_`) |
+| `SPOT_ACTIVE` | what `{_active}` would be |
+
+```toml
+[submit]
+exec = 'ping -c 1 -- "$SPOT_VALUE_HOST"'    # quotes around it, "--" before it
+```
+
+Quoted like this nothing in a value can run. `--` keeps a value starting with `-`
+from being read as an option, where the program supports it. This matters most for
+values you did not type yourself: rows from `stdin`, such as file or network names.
 
 ### `exec`
 

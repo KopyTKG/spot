@@ -39,6 +39,9 @@ func RunOneshot(req protocol.Request) protocol.Response {
 	sh := ui.NewShell(app, true, &config.DaemonConfig{})
 	app.ConnectActivate(func() {
 		sh.Init()
+		if j.Cfg.HasPassword() {
+			sh.Raise() // it may be asked for while a dialog of the daemon is up
+		}
 		sh.Sched.Enqueue(j)
 	})
 	app.Run(nil)

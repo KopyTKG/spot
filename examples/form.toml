@@ -24,5 +24,6 @@ options = ["note", "todo", "journal"]
 default = "note"
 
 [submit]
-exec  = "touch ~/{kind}-{name}.md"
+# Values come in the environment: quoted like this, nothing in them can run.
+exec  = 'touch -- "$HOME/$SPOT_VALUE_KIND-$SPOT_VALUE_NAME.md"'
 spawn = true

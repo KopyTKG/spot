@@ -176,6 +176,12 @@ directory of yours that nobody else can enter. When the socket cannot be trusted
 leaves the daemon alone and shows the dialog itself. A daemon run as another user (`sudo` pointed at
 your socket, say) is refused for the same reason.
 
+### What does not go through the daemon
+
+A dialog with a `password` item is shown by the calling `spot` itself, above the
+daemon's dialog if one is up. Run as root, `spot` uses no daemon, and a daemon
+refuses to start as root.
+
 ## Controlling it
 
 | Command | |

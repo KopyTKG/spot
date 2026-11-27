@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"gitlab.com/KopyTKG/spot/internal/capture"
 	"gitlab.com/KopyTKG/spot/internal/config"
 )
 
@@ -101,7 +102,10 @@ func RunSource(ctx context.Context, s *config.SourceConfig, query string, env []
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 300 * time.Millisecond
-	out, err := cmd.Output()
+	var kept capture.Buffer
+	cmd.Stdout = &kept
+	err := cmd.Run()
+	out := kept.Bytes()
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}

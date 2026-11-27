@@ -43,5 +43,12 @@ func newTarget(raw, dir string) target {
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(dir, p)
 	}
+	if !filepath.IsAbs(p) { // the caller's folder is unknown
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return target{}
+		}
+		p = abs
+	}
 	return target{path: p, uri: (&url.URL{Scheme: "file", Path: p}).String()}
 }

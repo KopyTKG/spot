@@ -629,7 +629,7 @@ func (s *frecencyStore) bump(id string, now time.Time) {
 	s.data[id] = r
 	b, _ := json.Marshal(s.data)
 	s.mu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err == nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err == nil {
 		tmp := s.path + ".tmp"
 		_ = os.Remove(tmp) // a leftover would keep its mode
 		if os.WriteFile(tmp, b, 0o600) == nil {

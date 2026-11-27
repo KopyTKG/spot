@@ -21,8 +21,8 @@ options   = [
   "Idle lock\tidle\ton",
   "Display\tdisplay",
 ]
-state     = "for f in /tmp/spot-demo-row-*; do [ -f \"$f\" ] && printf '%s\\t%s\\n' \"${f##*-}\" \"$(cat \"$f\")\"; done; true"
-on_change = "echo {value} > /tmp/spot-demo-row-{key}"
+state     = "for f in $XDG_RUNTIME_DIR/spot-demo-row-*; do [ -f \"$f\" ] && printf '%s\\t%s\\n' \"${f##*-}\" \"$(cat \"$f\")\"; done; true"
+on_change = "echo {value} > $XDG_RUNTIME_DIR/spot-demo-row-{key}"
 
 [submit]
 stdout = "{choice}"

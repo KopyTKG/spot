@@ -6,7 +6,6 @@ package ui
 // control: one setting may well change another.
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"os/exec"
@@ -17,6 +16,7 @@ import (
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 
+	"gitlab.com/KopyTKG/spot/internal/capture"
 	"gitlab.com/KopyTKG/spot/internal/config"
 	"gitlab.com/KopyTKG/spot/internal/launcher"
 )
@@ -35,7 +35,7 @@ func fill(tmpl, id, key, value string) string {
 func runBounded(cmd string, env []string, dir string, limit time.Duration) (stdout, stderr string, status int) {
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
-	var so, se bytes.Buffer
+	var so, se capture.Buffer
 	c := exec.CommandContext(ctx, "sh", "-c", cmd)
 	c.Env, c.Dir = env, dir
 	c.Stdout, c.Stderr = &so, &se

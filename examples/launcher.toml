@@ -52,7 +52,7 @@ name     = "calc"
 prefix   = "="
 icon     = "accessories-calculator"
 exec     = "calc.sh {query}"
-activate = "wl-copy {value}"
+activate = "wl-copy -- {value}"
 
 [[sources]]
 name     = "files"

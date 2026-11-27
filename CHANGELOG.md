@@ -3,6 +3,18 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` binary, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
+## 0.8.4 — 2026-11-27
+
+Security, from an audit ([#31](https://github.com/KopyTKG/spot/issues/31)):
+
+- **Passwords no longer pass through the daemon.** A dialog with a `password` item is shown by the
+  calling process.
+- **`SPOT_VALUE_<ID>`** hands values to `submit.exec` and `spawn` in the environment, where quoting
+  works; `{id}` is still pasted unquoted. The examples use the variables.
+- The daemon refuses to run as root; requests, command output, stylesheets and images are bounded in size; the socket is never briefly open to
+  others.
+- A relative `SPOT_TARGET` is made absolute even when the caller's folder is unknown.
+
 ## 0.8.3 — 2026-11-27
 
 - The daemon's log and the launch history (`frecency.json`) are readable by their owner only (mode

@@ -121,7 +121,7 @@ func spawnDaemon() error {
 	}
 	logf := os.NewFile(0, os.DevNull)
 	if path := config.LogPath(); path != "" {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err == nil {
 			if f, err := openLog(path); err == nil {
 				defer f.Close()
 				logf = f

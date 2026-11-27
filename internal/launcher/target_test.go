@@ -121,3 +121,9 @@ func noFrecency() *config.AppsConfig {
 	off := false
 	return &config.AppsConfig{Frecency: &off}
 }
+
+func TestTargetWithoutAFolderIsStillAbsolute(t *testing.T) {
+	if got := newTarget("-rf", "").path; !filepath.IsAbs(got) {
+		t.Errorf("%q could be read as an option", got)
+	}
+}

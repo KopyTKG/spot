@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
@@ -25,6 +26,12 @@ func onMain(f func()) { coreglib.IdleAdd(f) }
 
 // RunDaemon serves dialogs until told to quit. It returns the process exit status.
 func RunDaemon() int {
+	if os.Geteuid() == 0 {
+		fmt.Fprintln(os.Stderr, "spot: the daemon does not run as root")
+		return protocol.ExitError
+	}
+	// Not PR_SET_DUMPABLE 0, tempting as it is: the desktop portal then cannot
+	// identify the process and refuses GTK the desktop's settings.
 	sock := config.SocketPath()
 	if err := config.PrepareSocket(sock); err != nil {
 		fmt.Fprintf(os.Stderr, "spot: %v\n", err)
@@ -42,13 +49,14 @@ func RunDaemon() int {
 		return protocol.ExitSubmitted
 	}
 
-	os.Remove(sock) // a leftover from a crash; the lock says nobody is using it
+	os.Remove(sock)             // a leftover from a crash; the lock says nobody is using it
+	old := syscall.Umask(0o177) // the socket is never open to others, not even briefly
 	ln, err := net.Listen("unix", sock)
+	syscall.Umask(old)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "spot: %v\n", err)
 		return protocol.ExitError
 	}
-	os.Chmod(sock, 0o600)
 	defer os.Remove(sock)
 	defer ln.Close()
 
@@ -89,6 +97,21 @@ func serve(ln net.Listener, sh *ui.Shell) {
 	}
 }
 
+// A request is a config's path, the caller's environment and its stdin lines.
+const (
+	maxRequest  = 32 << 20
+	requestWait = 10 * time.Second
+)
+
+// readRequest reads one request, bounded in size and in the time it may take.
+// Afterwards the connection waits without limit: a dialog can stay up for long.
+func readRequest(conn net.Conn) (req protocol.Request, err error) {
+	conn.SetReadDeadline(time.Now().Add(requestWait))
+	defer conn.SetReadDeadline(time.Time{})
+	err = json.NewDecoder(io.LimitReader(conn, maxRequest)).Decode(&req)
+	return req, err
+}
+
 func handle(conn net.Conn, sh *ui.Shell) {
 	defer conn.Close()
 	if err := protocol.CheckPeer(conn); err != nil {
@@ -100,8 +123,8 @@ func handle(conn net.Conn, sh *ui.Shell) {
 		json.NewEncoder(conn).Encode(r)
 	}
 
-	var req protocol.Request
-	if err := json.NewDecoder(conn).Decode(&req); err != nil {
+	req, err := readRequest(conn)
+	if err != nil {
 		return
 	}
 

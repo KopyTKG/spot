@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -42,4 +43,46 @@ func BuildJSON(items []Item, values map[string]string, multi map[string][]string
 	}
 	b, err := json.Marshal(obj)
 	return string(b), err
+}
+
+// valueVar is the variable an item's value is handed to submit commands in.
+func valueVar(id string) string { return "SPOT_VALUE_" + strings.ToUpper(SanitizeID(id)) }
+
+// SubmitEnv is env for submit.exec and submit.spawn: each item's value as
+// SPOT_VALUE_<ID> and the active tiles section as SPOT_ACTIVE. A command that
+// reads these, quoted, is safe whatever a value contains, unlike {id}, which is
+// pasted into the command. Variables of these names inherited from the caller are
+// removed, so that an empty item cannot take someone else's value.
+func SubmitEnv(env []string, active string, values map[string]string) []string {
+	out := make([]string, 0, len(env)+len(values)+1)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "SPOT_VALUE_") && !strings.HasPrefix(kv, "SPOT_ACTIVE=") {
+			out = append(out, kv)
+		}
+	}
+	for id, v := range values {
+		if id != "" && !strings.ContainsRune(v, 0) {
+			out = append(out, valueVar(id)+"="+v)
+		}
+	}
+	return append(out, "SPOT_ACTIVE="+active)
+}
+
+// checkValueVars rejects ids that would share a variable.
+func (c *Config) checkValueVars() error {
+	if c.Submit.Exec == "" {
+		return nil
+	}
+	seen := map[string]string{}
+	for _, it := range c.Items {
+		if it.ID == "" {
+			continue
+		}
+		v := valueVar(it.ID)
+		if other, ok := seen[v]; ok && other != it.ID {
+			return fmt.Errorf("items %q and %q would both be %s in submit.exec: rename one", other, it.ID, v)
+		}
+		seen[v] = it.ID
+	}
+	return nil
 }
