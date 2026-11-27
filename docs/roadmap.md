@@ -1,7 +1,8 @@
 # Roadmap
 
 Where spot is going, and what it is not. Shipped work is in the [changelog](../CHANGELOG.md).
-Nothing below the Shipped table exists yet, and the version numbers show order, not dates.
+Nothing below the Shipped table is released; [0.9 is built on a branch](#where-09-stands). The version
+numbers show order, not dates.
 
 ## Direction
 
@@ -54,11 +55,57 @@ trees have used it.
 
 Open design questions, to settle before the release that needs them:
 
-- 0.9: the mod API: publish and request, enabling, errors and reloading.
 - 0.9: how a mod host and an external backend (0.12) share one model, so there are not two systems.
 - 0.10: whether a menu tree is one file or includes others.
 - 0.11: how containers nest in TOML without becoming unreadable.
 - 0.12: the backend protocol, its versioning, and what happens when the backend dies.
+
+## Where 0.9 stands
+
+As of 2026-11-27. **Not released.** The work is on the
+[`mods` branch](https://github.com/KopyTKG/spot/tree/mods); installed spot has none of it.
+
+**Built and tested**
+
+- Mod hosts in a kernel sandbox (Landlock ABI 11 and seccomp), each in a `systemd` scope with memory
+  and task limits. Without that kernel, no mod runs.
+- Parser and provider mods; a scanner that refuses code hiding what it does and flags what deserves a
+  look.
+- Approval at a terminal, typing every program and every new or dangerous permission. Any change to a
+  mod voids it.
+- The daemon runs listed and approved mods: `spot get`, `watch` (also for waybar) and `call`, timers,
+  notifications when a mod breaks and recovers, an audit log. Configured in `mods.toml`.
+- Packaging of the mod host, and an [example](https://github.com/KopyTKG/spot/tree/mods/examples/mods):
+  an `ss` parser and a sockets provider, with a searchable table. The table, approval and
+  re-approval after a change have been used by hand.
+
+**Before it is released**
+
+- The verdict on the proof ([#24](https://github.com/KopyTKG/spot/issues/24)): is the mod clearly
+  simpler than the script it replaces? If not, the API is revisited first. It has the same numbers in
+  about 55 lines against 130, but cannot name processes or use root.
+- A second person trying it, above all the approval screen.
+- The bar counter in a real bar.
+- Merging and tagging in one go: the `spot-bin` recipe expects a download that only a new release has.
+
+**Not built, and 0.9 waits for it**
+
+- Dialogs that read mods directly, `from` and `call`
+  ([#23](https://github.com/KopyTKG/spot/issues/23)). Until then a script feeds the dialog.
+- Security items of [#19](https://github.com/KopyTKG/spot/issues/19) and
+  [#29](https://github.com/KopyTKG/spot/issues/29): a second way to stop a mod's detached programs,
+  which matters without `systemd`; refusing to run with Linux capabilities; the daemon's socket in a
+  folder of its own; a script of your own being swapped between its check and its start.
+- An item-by-item check of #19 and #29 against the code and tests, which may add to that list.
+
+**Not built, smaller**
+
+- `spot parse`, and a log view per mod.
+- Gaps in [#21](https://github.com/KopyTKG/spot/issues/21) and
+  [#22](https://github.com/KopyTKG/spot/issues/22): a permission for private data, saying what is new
+  in the notification.
+- The sandbox is tested on Arch only, on `x86_64`. The CI machine cannot test it, so
+  `just test-mods` runs it before a release.
 
 ## Also wanted
 
