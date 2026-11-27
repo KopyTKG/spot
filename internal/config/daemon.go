@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,11 +17,12 @@ import (
 // daemon reads it once, at start; clients read it on every call, because they
 // need the socket and log paths too.
 type DaemonConfig struct {
-	Socket string  `toml:"socket"` // listen here (SPOT_SOCKET wins)
-	Log    string  `toml:"log"`    // stdout/stderr of a daemon a client starts
-	Grace  *int    `toml:"grace"`  // ms the surface waits for a follow-up dialog (default graceMs)
-	Chain  *int    `toml:"chain"`  // ms an answered --chain dialog stays up (default chainMs)
-	Notify *string `toml:"notify"` // command reporting a failure nobody would see; "" = off (default notify-send)
+	Socket  string  `toml:"socket"`   // listen here (SPOT_SOCKET wins)
+	Log     string  `toml:"log"`      // stdout/stderr of a daemon a client starts
+	Grace   *int    `toml:"grace"`    // ms the surface waits for a follow-up dialog (default graceMs)
+	Chain   *int    `toml:"chain"`    // ms an answered --chain dialog stays up (default chainMs)
+	Notify  *string `toml:"notify"`   // command reporting a failure nobody would see; "" = off (default notify-send)
+	ModsDir string  `toml:"mods_dir"` // where mods are (default: mods beside this file)
 }
 
 // daemonConfigPath is where daemon.toml is looked for.
@@ -164,3 +166,27 @@ const (
 	// this long, so a menu hands over to the next without a gap.
 	DefaultChainMs = 1500
 )
+
+// ModsDir is where mods are, for the spot configuration in dir. It is read from
+// that folder and from no environment variable.
+func ModsDir(dir string) (string, error) {
+	path := filepath.Join(dir, "daemon.toml")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return filepath.Join(dir, "mods"), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	c, err := parseDaemonConfig(data, dir)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", path, err)
+	}
+	switch {
+	case c.ModsDir == "":
+		return filepath.Join(dir, "mods"), nil
+	case filepath.IsAbs(c.ModsDir):
+		return filepath.Clean(c.ModsDir), nil
+	}
+	return filepath.Join(dir, c.ModsDir), nil
+}

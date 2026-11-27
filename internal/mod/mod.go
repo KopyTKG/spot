@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -65,6 +66,7 @@ type Mod struct {
 	Name     string   `json:"name"`
 	Manifest Manifest `json:"manifest"`
 	Source   []byte   `json:"source"` // init.lua
+	Raw      []byte   `json:"-"`      // mod.toml as read; nil when there is none
 }
 
 var name = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
@@ -197,6 +199,7 @@ func Load(dir string) (Mod, error) {
 	if err != nil {
 		return m, fmt.Errorf("mod %s: %w", m.Name, err)
 	}
+	m.Raw = data
 	if m.Manifest, err = parseManifest(data); err != nil {
 		return m, fmt.Errorf("mod %s: mod.toml: %w", m.Name, err)
 	}
@@ -226,6 +229,11 @@ func Files(dir string) (map[string][]byte, error) {
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
+		}
+		// A name is shown in reviews: one with a newline or invisible
+		// characters could write lines that look like spot's.
+		if strings.ContainsFunc(rel, func(r rune) bool { return !unicode.IsPrint(r) }) {
+			return fmt.Errorf("a file name with control or invisible characters: %q", rel)
 		}
 		if d.Type()&fs.ModeSymlink != 0 && rel != "." {
 			return fmt.Errorf("%s: a symlink in a mod", rel)

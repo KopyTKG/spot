@@ -777,6 +777,12 @@ or press Enter to refuse:
 - **Accepting takes effort.** Every `run` entry and every dangerous permission is accepted by typing its name; the prompt
   appears after a short wait, is read from the terminal itself (`/dev/tty`) and discards what was
   typed before it. There is no `--yes`, no "approve all", and no approval without a terminal.
+- **What is typed:** the name of each program in `run`, and the kind (`net`, `socket`, `write`, …)
+  for each kind with something new or dangerous; a mod with neither is approved by typing its own
+  name. Exactly those words, in any order, and nothing else.
+- **The review goes to the terminal too**, not to standard output, so that redirecting output cannot
+  leave a prompt without what it is about.
+- A file of a mod whose name has control or invisible characters is refused.
 - **A mod cannot dress up the screen.** A reason is one line of at most 200 characters. Bidirectional
   and invisible characters are removed from reasons and descriptions. `show`, `diff`, `log` and
   `audit` print every control, bidirectional and invisible character **visibly** (`\x1b`,

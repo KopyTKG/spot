@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"gitlab.com/KopyTKG/spot/internal/mod"
 )
 
 // What is known to be used for harm and has honest uses too. The list is spot's:
@@ -87,6 +89,8 @@ var places = []place{
 		"a browser's profile: cookies and saved logins; honest use: bookmarks", false},
 	{regexp.MustCompile(`\.(bashrc|bash_profile|zshrc|profile|xinitrc|xprofile)\b|config/fish|autostart|systemd/user|/etc/(profile|cron)|config/hypr|config/sway|\.local/bin`),
 		"anything written here runs later, outside the sandbox; honest use: reading your settings", true},
+	{regexp.MustCompile(`mimeapps\.list|share/applications|dbus-1/services|(^|/)\.gitconfig|config/git`),
+		"anything written here decides what is started later; honest use: reading your settings", true},
 	{regexp.MustCompile(`_history\b|fish_history|\.histfile`),
 		"what you have typed, often with secrets in it", false},
 }
@@ -134,4 +138,29 @@ func (s *scanner) rawText(src []byte) {
 			s.flag(i+1, "text that cannot be read as written; honest use: binary markers", "text written as escape codes, on line %d", i+1)
 		}
 	}
+}
+
+// ProgramRisk says why a program deserves a second look, "" if it is not known.
+func ProgramRisk(name string) string {
+	s := &scanner{seen: map[string]int{}, perms: &mod.Permissions{}}
+	s.program(0, name, "runs")
+	var why []string
+	for _, n := range s.r.Flagged {
+		why = append(why, n.Why)
+	}
+	return strings.Join(why, "; ")
+}
+
+// PlaceRisk says why a file or folder permission deserves a second look: what
+// it holds, or what writing there would do. "" if neither is known.
+func PlaceRisk(path string, write bool) string {
+	if wideFolders.MatchString(filepath.Clean(path)) {
+		return "everything under it, with keys, tokens and other programs' files"
+	}
+	for _, p := range places {
+		if p.re.MatchString(path) && (write || !p.writeOnly) {
+			return p.why
+		}
+	}
+	return ""
 }

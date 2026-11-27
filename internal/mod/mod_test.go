@@ -1,6 +1,8 @@
 package mod
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -28,5 +30,18 @@ func TestManifestMistakes(t *testing.T) {
 	}
 	if _, err := parseManifest([]byte(ok)); err != nil {
 		t.Errorf("a correct one: %v", err)
+	}
+}
+
+func TestFileNamesThatCouldForgeALine(t *testing.T) {
+	for _, name := range []string{"x\nsock: approved.lua", "a\x1b[31m.lua", "b\u202ec.lua", "sub\n/d.lua"} {
+		dir := t.TempDir()
+		p := filepath.Join(dir, name)
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("return 1"), 0o600)
+		_, err := Files(dir)
+		if err == nil || strings.ContainsAny(err.Error(), "\n\x1b\u202e") {
+			t.Errorf("%q: %v", name, err)
+		}
 	}
 }
