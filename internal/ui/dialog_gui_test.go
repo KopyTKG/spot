@@ -33,7 +33,7 @@ func guiDialog(t *testing.T, toml string, back *config.BackSpec, env []string) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newDialog(cfg, env, t.TempDir(), back)
+	d := newDialog(cfg, env, t.TempDir(), back, nil)
 	var ended []result
 	d.finish = func(r result) { ended = append(ended, r) }
 	return d, &ended

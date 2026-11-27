@@ -98,7 +98,7 @@ stdout = "{c}"
 			t.Fatal(err)
 		}
 		c.Items[0].Options = rows
-		d := newDialog(c, nil, t.TempDir(), &config.BackSpec{Label: "Back"})
+		d := newDialog(c, nil, t.TempDir(), &config.BackSpec{Label: "Back"}, nil)
 		ref := coreglib.NewWeakRef(d.root)
 		d.release()
 		return ref

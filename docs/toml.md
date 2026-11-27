@@ -36,6 +36,13 @@ For a single commented file with every key and its default, see
 - [`[submit]`](#submit)
 - [Environment overrides](#environment-overrides)
 
+## Mods
+
+`from`, `call`, `run` and `parse` connect items to [mods](modding.md#in-a-dialog), which are in
+development. A value that a mod or a parser chose is never pasted into `submit.exec`: read it from
+`$SPOT_VALUE_<ID>`. A value starting with `-` stops the submit unless the item sets
+`allow_leading_dash = true`.
+
 ## Running it
 
 **A config is a program.** It can run commands when a dialog opens (`state`), as you

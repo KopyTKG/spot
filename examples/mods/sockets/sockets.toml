@@ -1,4 +1,4 @@
-# A searchable table of the sockets mod's rows (see sockets.sh).
+# A searchable table of the sockets mod. Enter copies the local address.
 title    = "Sockets"
 width    = 760
 style    = "style.css"
@@ -7,10 +7,13 @@ keyboard = "exclusive"
 [[items]]
 type        = "list"
 id          = "row"
+from        = "sockets.table"   # or sockets.listening
 placeholder = "Filter…  tcp listen 22 · estab"
 match       = "smart"
-stdin       = true
 height      = 480
 
 [submit]
-stdout = "{row}"
+# The row's key is the address. It comes from the mod, so it is read from the
+# environment and never pasted into the command.
+exec  = 'printf %s "$SPOT_VALUE_ROW" | wl-copy'
+spawn = true

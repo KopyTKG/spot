@@ -95,6 +95,13 @@ func modRequest(req protocol.Request) protocol.Response {
 	if err != nil {
 		return fail(err)
 	}
+	if req.Op == protocol.OpParse {
+		result, err := m.Parse(req.Name, []byte(req.Stdin))
+		if err != nil {
+			return fail(err)
+		}
+		return protocol.Response{Result: result}
+	}
 	if req.Op == protocol.OpCall {
 		result, err := m.Call(req.Name, req.Args)
 		if err != nil {
@@ -159,4 +166,32 @@ func watch(conn net.Conn, req protocol.Request, reply func(protocol.Response) er
 			}
 		}
 	}
+}
+
+// dialogMods is how the daemon's own dialogs reach mods.
+type dialogMods struct{}
+
+func (dialogMods) Get(full string) (json.RawMessage, string, error) {
+	m, err := manager()
+	if err != nil {
+		return nil, "", err
+	}
+	return m.Get(full)
+}
+
+func (dialogMods) Call(full string, args []string) error {
+	m, err := manager()
+	if err != nil {
+		return err
+	}
+	_, err = m.Call(full, args)
+	return err
+}
+
+func (dialogMods) Parse(parser string, input []byte) (json.RawMessage, error) {
+	m, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return m.Parse(parser, input)
 }

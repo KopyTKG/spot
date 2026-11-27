@@ -39,7 +39,7 @@ test:
 test-mods:
     #!/usr/bin/env bash
     set -uo pipefail
-    out=$(go test -count=1 -v ./internal/mod ./internal/sandbox ./internal/modhost ./internal/modcheck ./internal/parser ./internal/scan ./internal/modtest ./internal/approval ./internal/modd ./internal/daemon . 2>&1); status=$?
+    out=$(go test -count=1 -v ./internal/mod ./internal/sandbox ./internal/modhost ./internal/modcheck ./internal/parser ./internal/scan ./internal/modtest ./internal/approval ./internal/modd ./internal/daemon ./internal/config ./internal/scheduler . 2>&1); status=$?
     echo "$out" | grep -E '^(ok|FAIL)|^\s*--- (SKIP|FAIL)|_test\.go:[0-9]+:'
     skipped=$(grep -c -- '--- SKIP' <<<"$out")
     echo "$(grep -c -- '--- PASS' <<<"$out") passed, $skipped skipped"

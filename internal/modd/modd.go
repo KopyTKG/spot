@@ -793,3 +793,77 @@ func (c *complaints) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+// parserTime is how long one parse may take inside Lua.
+const parserTime = 5 * time.Second
+
+// Parse runs an approved parser on input, in a host of its own that lives for
+// this one call and is granted nothing. A parser is approved by itself, or as
+// part of a provider that is.
+func (m *Manager) Parse(name string, input []byte) (json.RawMessage, error) {
+	if !mod.ValidName(name) {
+		return nil, fmt.Errorf("%q is not a parser's name", name)
+	}
+	if len(input) > 8<<20 {
+		return nil, errors.New("more than 8 MB to parse")
+	}
+	conf, err := config.ModsConfig(m.store.Config)
+	if err != nil {
+		return nil, err
+	}
+	store := m.store
+	store.Mods = conf.Dir
+	for _, path := range []string{m.host, sandbox.SystemPath} {
+		if err := approval.Trusted(path); err != nil {
+			return nil, fmt.Errorf("mods do not run: %w", err)
+		}
+	}
+	set, err := approvedParser(store, name)
+	if err != nil {
+		return nil, err
+	}
+	h, err := modhost.Start(modhost.Config{Name: name, Policy: sandbox.Policy{Self: m.host}, Stderr: &complaints{mod: name, left: 3}})
+	if err != nil {
+		return nil, err
+	}
+	defer h.Stop()
+	result, lines, err := h.Parse(channel.Parse{Name: name, Mods: set, Input: input}, parserTime)
+	m.record(name, channel.Reply{Log: lines})
+	return result, err
+}
+
+// approvedParser is the parser name with those it uses, from the bytes that
+// were approved.
+func approvedParser(store approval.Store, name string) (map[string]mod.Mod, error) {
+	state, a, _, err := store.State(name)
+	if err != nil {
+		return nil, err
+	}
+	if a.Provider.Manifest.Type != "parser" {
+		return nil, fmt.Errorf("%s is not a parser", name)
+	}
+	with := func(root mod.Mod, used map[string]mod.Mod) map[string]mod.Mod {
+		set := map[string]mod.Mod{name: root}
+		for n, p := range used {
+			set[n] = p
+		}
+		return set
+	}
+	if state == approval.Approved {
+		return with(a.Provider, a.Parsers), nil
+	}
+	entries, err := os.ReadDir(store.Mods)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range entries {
+		s, m, _, err := store.State(e.Name())
+		if err != nil || s != approval.Approved {
+			continue
+		}
+		if p, uses := m.Parsers[name]; uses {
+			return with(p, m.Parsers), nil // the bytes that provider was approved with
+		}
+	}
+	return nil, fmt.Errorf("parser %s is not approved: spot mods allow %s", name, name)
+}

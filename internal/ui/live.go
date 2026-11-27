@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"slices"
 	"strings"
@@ -100,6 +101,7 @@ type control struct {
 	busy  func(bool)                      // mark the widget while a change runs
 	value string
 
+	unsure   func(bool) // mark the widget as of unknown position
 	changing bool
 	pending  *string     // picked while a change was still running
 	reads    int         // only the newest state read counts
@@ -119,13 +121,12 @@ func (c *control) set(v string) {
 	prev := c.value
 	c.value = v
 	c.show(v)
-	if c.item.OnChange == "" {
+	if c.item.OnChange == "" && c.item.Call == "" {
 		return
 	}
 	c.changing = true
 	c.busy(true)
-	cmd := fill(c.item.OnChange, c.item.ID, c.item.ID, v)
-	c.b.command(cmd, v, c.item.CommandTimeout(), func(stdout, stderr string, status int) {
+	done := func(stdout, stderr string, status int) {
 		c.changing = false
 		c.busy(false)
 		c.b.report(stderr, status)
@@ -133,7 +134,7 @@ func (c *control) set(v string) {
 		case status != 0:
 			c.value, c.pending = prev, nil // it did not happen: say so
 			c.show(prev)
-		case c.item.State == "":
+		case c.item.State == "" && c.item.From == "" && c.item.Call == "":
 			if got, ok := c.read(stdout); ok { // on_change may print what it settled on
 				c.value = got
 				c.show(got)
@@ -145,12 +146,87 @@ func (c *control) set(v string) {
 			return
 		}
 		c.b.refreshAll()
-	})
+	}
+	if c.item.Call != "" {
+		c.b.call(c.item.Call, []string{v}, done)
+		return
+	}
+	cmd := fill(c.item.OnChange, c.item.ID, c.item.ID, v)
+	c.b.command(cmd, v, c.item.CommandTimeout(), done)
 }
 
-// refresh reads the state command, if there is one.
+// call makes a mod's request off the main loop, answering like a command.
+func (b *builder) call(request string, args []string, done func(stdout, stderr string, status int)) {
+	go func() {
+		err := errNoMods
+		if b.mods != nil {
+			err = b.mods.Call(request, args)
+		}
+		coreglib.IdleAdd(func() {
+			if b.d.done {
+				return
+			}
+			if err != nil {
+				done("", err.Error()+"\n", 1)
+				return
+			}
+			done("", "", 0)
+		})
+	}()
+}
+
+var errNoMods = errors.New("mods are not available here")
+
+// follow reads a control's position from a mod. When the mod cannot say what it
+// is now, the control shows no position: an old one could mislead, a lock or a
+// firewall shown on when it is off.
+func (c *control) follow() {
+	c.reads++
+	n := c.reads
+	go func() {
+		var value, warning string
+		err := errNoMods
+		if c.b.mods != nil {
+			var raw []byte
+			raw, warning, err = c.b.mods.Get(c.item.From)
+			if err == nil && warning == "" {
+				value, err = config.Scalar(raw)
+			}
+		}
+		coreglib.IdleAdd(func() {
+			if c.b.d.done || n != c.reads || c.changing {
+				return
+			}
+			v, ok := "", false
+			if err == nil && warning == "" {
+				v, ok = c.read(value)
+			}
+			if !ok {
+				why := warning
+				if err != nil {
+					why = err.Error()
+				} else if why == "" {
+					why = fmt.Sprintf("%s gave %q, which is no position of this control", c.item.From, value)
+				}
+				c.value = ""
+				c.unsure(true)
+				c.b.report("unknown: "+why, 1)
+				return
+			}
+			c.unsure(false)
+			c.value = v
+			c.show(v)
+		})
+	}()
+}
+
+// refresh reads the state command or the mod's value, if there is one.
 func (c *control) refresh() {
-	if c.item.State == "" || c.changing || c.holding != nil && c.holding() {
+	if c.item.State == "" && c.item.From == "" || c.changing || c.holding != nil && c.holding() {
+		return
+	}
+	if c.item.From != "" {
+		c.follow()
 		return
 	}
 	c.reads++

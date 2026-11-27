@@ -38,10 +38,20 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 		opts = match.EntryTexts(entries)
 	}
 	var sw *switchRows
-	if item.Switches {
+	switch {
+	case item.From != "" || item.Parse != "":
+		sw = modRows(item.Rows)
+		opts = sw.labels
+		if item.Note != "" && item.From == "" {
+			b.errLabel.SetText(item.Note)
+			b.errLabel.SetVisible(true)
+		}
+	case item.Switches:
 		sw = parseSwitchRows(&item, opts)
 		opts = sw.labels
 	}
+	// A click flips a switch row; where there is none a click only selects.
+	clickActs := gsOrSwitches(item, sw)
 	model := gtk.NewStringList(opts)
 
 	search := gtk.NewSearchEntry()
@@ -215,7 +225,7 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 
 	lv := gtk.NewListView(selModel, &factory.ListItemFactory)
 	lv.AddCSSClass("spot-list")
-	lv.SetSingleClickActivate(gs != nil || sw != nil) // a click on a group header folds it, on a switch flips it
+	lv.SetSingleClickActivate(clickActs) // a click on a group header folds it, on a switch flips it
 	b.listView = lv
 
 	scrolled := gtk.NewScrolledWindow()
@@ -417,7 +427,7 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 		}
 		if item.Default != nil && gs == nil && apps == nil {
 			for i, opt := range opts {
-				if opt == item.DefaultString() {
+				if opt == item.DefaultString() || sw != nil && (item.From != "" || item.Parse != "") && sw.key(opt) == item.DefaultString() {
 					selection.SetSelected(uint(i))
 					break
 				}
@@ -432,4 +442,23 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 	input = search
 	b.focus(search)
 	return input
+}
+
+// gsOrSwitches reports whether one click on a row of the list does something.
+func gsOrSwitches(item config.Item, sw *switchRows) bool {
+	if item.Collapsible {
+		return true
+	}
+	if sw == nil {
+		return false
+	}
+	if item.From == "" && item.Parse == "" {
+		return true // switches = true, as before
+	}
+	for _, r := range sw.rows {
+		if r.has {
+			return true
+		}
+	}
+	return false
 }

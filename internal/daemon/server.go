@@ -151,7 +151,7 @@ func handle(conn net.Conn, sh *ui.Shell) {
 	}
 
 	switch req.Op {
-	case protocol.OpGet, protocol.OpCall, protocol.OpWatch, protocol.OpReload, protocol.OpMods:
+	case protocol.OpGet, protocol.OpCall, protocol.OpWatch, protocol.OpReload, protocol.OpMods, protocol.OpParse:
 		if req.Version != protocol.Version {
 			reply(protocol.Response{Stale: true})
 			return
@@ -182,7 +182,7 @@ func show(conn net.Conn, sh *ui.Shell, req protocol.Request, reply func(protocol
 		reply(protocol.Response{Stale: true})
 		return
 	}
-	j, err := scheduler.BuildJob(req)
+	j, err := scheduler.BuildJob(req, dialogMods{})
 	if err != nil {
 		reply(protocol.Response{Code: protocol.ExitError, Stderr: fmt.Sprintf("spot: %v\n", err), Fault: true})
 		return

@@ -132,7 +132,7 @@ func (s *Shell) live() *dialog {
 // ---- presenter ------------------------------------------------------------
 
 func (s *Shell) Present(j *scheduler.Job) {
-	d := newDialog(j.Cfg, j.Env, j.Dir, j.Back)
+	d := newDialog(j.Cfg, j.Env, j.Dir, j.Back, j.Mods)
 	d.finish = func(r result) { s.Sched.Complete(j, s.answer(d, r)) }
 	j.View = d
 	s.show(j)

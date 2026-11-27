@@ -40,6 +40,7 @@ const (
 	OpWatch   = "watch"   // a value of a mod, again on every change
 	OpReload  = "reload"  // start mods anew; Name is one, "" all
 	OpMods    = "mods"    // how the mods are doing
+	OpParse   = "parse"   // run a parser on Stdin; Name is the parser
 )
 
 type Request struct {

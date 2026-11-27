@@ -880,9 +880,10 @@ one, and the daemon refuses a peer that is a mod host or something it started.
 
 | Key | On | Meaning |
 |-----|----|---------|
-| `from` | `list` | Rows come from the value. Rows with a `state` are switches |
-| `from` | `switch`, `segmented`, `scale` | The value is the control's state (instead of `state`) |
+| `from` | `list` | Rows come from the value: texts, or records with `label`, `key`, `state`. The item's value is the row's `key`. Rows with a `state` are switches |
+| `from` | `switch`, `segmented`, `scale` | The value is the control's position (instead of `state`) |
 | `call` | the same, and `button` | The request a change or a press makes (instead of `on_change` / `exec`) |
+| `run` + `parse` | `list` | A command's output through a parser, without a provider |
 
 ```toml
 [[items]]
@@ -891,12 +892,23 @@ id    = "idle"
 label = "Idle lock"
 from  = "idle.enabled"
 call  = "idle.set"        # called with the new value; a list row adds its key first
+
+[[items]]
+type  = "list"
+id    = "socket"
+run   = "ss -H -tuna"     # your command, run as you, like `state`
+parse = "ss"              # only the parser is sandboxed; it must be approved
 ```
 
-A mod's rows may name an icon from the **icon theme** only: a value containing `/` is ignored.
-
-As with commands, values are read when the dialog opens and after every change made in it. A list
-that updates by itself while open comes with live lists (0.11).
+- Rows are fetched **before** the dialog opens, off the drawing thread. A dialog always opens: what
+  could not be had is said under it.
+- A control that follows a mod **never shows an old position**. While the mod cannot say what it is
+  now, the control is marked unknown (CSS class `spot-unknown`) and cannot be moved.
+- Old rows of a list may be shown, without their switches, with a note saying how old.
+- Values are read again after every change made in the dialog. A list that updates by itself while
+  open comes with live lists (0.11); the rows stay as they were, only switch positions are read again.
+- A dialog that uses mods, and that others than you or root could change, is refused.
+- Row icons are not shown yet.
 
 ### From the command line
 

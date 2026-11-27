@@ -15,7 +15,7 @@ func TestBuildJobAppliesCallerEnvAndStdin(t *testing.T) {
 	if err := writeFile(path, toml); err != nil {
 		t.Fatal(err)
 	}
-	j, err := BuildJob(protocol.Request{Op: protocol.OpShow, Config: path, Env: []string{"SPOT_TITLE=From caller"}, Stdin: "a\nb\n", Dir: "/x"})
+	j, err := BuildJob(protocol.Request{Op: protocol.OpShow, Config: path, Env: []string{"SPOT_TITLE=From caller"}, Stdin: "a\nb\n", Dir: "/x"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestBuildJobReportsBadConfigWithPath(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/bad.toml"
 	writeFile(path, "title = = nope\n")
-	_, err := BuildJob(protocol.Request{Config: path})
+	_, err := BuildJob(protocol.Request{Config: path}, nil)
 	if err == nil {
 		t.Fatal("want an error")
 	}

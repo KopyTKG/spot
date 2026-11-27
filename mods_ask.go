@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -284,4 +285,29 @@ func modStates() map[string]modd.Status {
 func reloadMods(name string) bool {
 	_, ok := client.IfRunning(protocol.Request{Op: protocol.OpReload, Version: protocol.Version, Name: name})
 	return ok
+}
+
+// parseCommand is `spot parse`: standard input through a parser, printed as a
+// JSON array.
+func parseCommand(args []string) int {
+	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
+		fmt.Fprintln(os.Stderr, "usage: spot parse <parser>   (reads standard input)")
+		return protocol.ExitUsage
+	}
+	input, err := io.ReadAll(io.LimitReader(os.Stdin, protocol.MaxStdin+1))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "spot: reading the input: %v\n", err)
+		return protocol.ExitError
+	}
+	if len(input) > protocol.MaxStdin {
+		fmt.Fprintf(os.Stderr, "spot: more than %d MB to parse\n", protocol.MaxStdin>>20)
+		return protocol.ExitError
+	}
+	result, err := client.Mods{}.Parse(args[0], input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "spot: %v\n", err)
+		return protocol.ExitError
+	}
+	fmt.Println(line(result))
+	return 0
 }

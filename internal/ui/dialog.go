@@ -70,7 +70,7 @@ func (d *dialog) focusFirst() {
 
 // newDialog builds the widgets for cfg. env and dir are what submit.exec and
 // submit.spawn commands run with: the caller's, not the daemon's.
-func newDialog(cfg *config.Config, env []string, dir string, back *config.BackSpec) *dialog {
+func newDialog(cfg *config.Config, env []string, dir string, back *config.BackSpec, mods config.ModSource) *dialog {
 	d := &dialog{}
 	var goBack func() // late-bound: needs `end`, defined below
 
@@ -123,7 +123,7 @@ func newDialog(cfg *config.Config, env []string, dir string, back *config.BackSp
 
 	b := &builder{
 		errLabel: execErr,
-		d:        d, cfg: cfg, env: env, dir: dir,
+		d:        d, cfg: cfg, env: env, dir: dir, mods: mods,
 		envOf:       launcher.EnvGetter(env),
 		values:      map[string]func() string{},
 		multiValues: map[string]func() []string{},

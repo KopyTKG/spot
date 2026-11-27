@@ -89,7 +89,7 @@ func main() {
 		os.Exit(askMod(os.Args[1], os.Args[2:]))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "parse" {
-		fatal("spot %s is not built yet", os.Args[1])
+		os.Exit(parseCommand(os.Args[2:]))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "mods" {
 		os.Exit(modsCommand(os.Args[2:]))
@@ -171,6 +171,9 @@ func main() {
 	cfg, err := config.ParseConfig(data, os.LookupEnv)
 	if err != nil {
 		failDialog(cfgPath, "%s: %v", cfgPath, err)
+	}
+	for _, w := range append(config.UnknownKeys(data), cfg.UnquotedStdin()...) {
+		fmt.Fprintf(os.Stderr, "spot: %s: warning: %s\n", cfgPath, w)
 	}
 	for _, it := range cfg.Items {
 		if it.Type == "list" && it.Stdin {

@@ -93,6 +93,11 @@ func (b *builder) submitter(root *gtk.Box, execErr *gtk.Label, end func(result))
 			finish()
 			return
 		}
+		if err := b.cfg.LeadingDash(vals); err != nil {
+			execErr.SetText(err.Error())
+			execErr.SetVisible(true)
+			return
+		}
 		cmd := config.Expand(b.cfg.Submit.Exec, b.activeID, vals)
 		env, err := config.SubmitEnv(b.env, b.activeID, vals)
 		if err != nil {
