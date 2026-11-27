@@ -286,6 +286,8 @@ any mod code runs:
 - `io`, `os`, `package` and `debug` are not loaded.
 - The Lua library's base functions include some that read files, `dofile` and `loadfile`, even with
   `io` left out. An allow-list keeps them out, and also whatever a later version of the library adds.
+- `spot` is not a table but a userdata with read-only access: assigning to it fails, `rawset` cannot
+  touch it, and its metatable is hidden. (A table guarded by a metatable is still open to `rawset`.)
 - The Lua state is created with no libraries opened (not opened and then removed), a bounded call
   stack and registry, and metatables of what spot hands out cannot be reached.
 - Code is loaded only by spot, and only from the mods folder: `spot.use` (parsers) and
@@ -458,7 +460,7 @@ the machine. **Not** against something already running as you or as root.
 | S32 | Text from a mod cannot change how the approval, `show`, `diff`, `log` or `audit` read |
 | S38 | A mod is scanned before approval by reading its code, never by running it, and the same bytes are then hashed and loaded |
 | S39 | The scanner never calls a mod safe; flagged or not, you are told to read it |
-| S40 | `spot` appears in a mod only as what is being called (`spot.run(…)`, `spot.json.encode(…)`) or as `spot.config`; `_G` not at all; the program in `spot.run` / `spot.pipe` is written out. A mod that does otherwise is refused |
+| S40 | `spot` appears in a mod only as what is being called (`spot.run(…)`, `spot.json.encode(…)`) or as `spot.config`; `_G` not at all; `spot.run` / `spot.pipe` get their list written out in the call, with plain entries only and the program first as a literal string. A mod that does otherwise is refused |
 | S17 | spot refuses a mods folder, mod file, approval record, `daemon.toml`, dialog that uses mods, system `PATH` folder or host binary that others than you or root can write, checking parent folders and symlinks too. The host binary is the one beside spot's own, never one found in `PATH` |
 | S18 | spot never downloads or updates a mod |
 
@@ -478,12 +480,12 @@ the machine. **Not** against something already running as you or as root.
 
 | # | Rule |
 |---|------|
-| S33 | Every mod host puts itself under the sandbox before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
+| S33 | Every mod host puts itself under the sandbox, and checks that it is in it, before reading any mod code. Where the kernel cannot provide it (Landlock ABI 11 or newer, and seccomp), no mod runs |
 | S34 | No network without a permission, by any protocol: Multipath TCP, ICMP and VM sockets included |
 | S35 | No Unix socket without a `socket` permission; the daemon's own socket is never granted, nor a folder that contains it |
 | S36 | A `read`, `write` or `socket` grant that contains spot's socket, or a `write` grant that contains its configuration, mods, approvals or logs, is refused: the kernel can only add access, not carve an exception out of it |
 | S37 | The base grant names what a host needs file by file; it does not include all of `/etc`, `/usr/bin`, your home or `/run`. Programs are granted one by one, from `run` |
-| S41 | A seccomp filter allows sockets by list and denies what Landlock does not cover: changing modes, owners and extended attributes, new user namespaces, `io_uring` |
+| S41 | A seccomp filter allows sockets by list, netlink only for the granted families, and denies what Landlock does not cover: changing modes, owners and extended attributes, shared memory and message queues, kernel keyrings, running a program from memory, new namespaces and mounts, `io_uring`, looking into other processes |
 
 **Requests are open to your programs.** Any program of yours can `spot call` any request of an
 approved mod, so a request that does something drastic is a way for other programs to do it. A mod
@@ -538,13 +540,30 @@ python3 -c 'import ctypes; print(ctypes.CDLL(None).syscall(444, 0, 0, 1))'   # t
 ```
 
 - **The host restricts itself, then executes itself again**, before it reads any mod code. Landlock
-  and the filter bind one thread and a Go program has many; what is set on a thread that then executes
-  covers the new program. The daemon is never restricted: doing it there would leave some of its
-  threads sandboxed.
+  and the filter bind one thread and a Go program has many, so the thread is locked from the first
+  restriction to the exec, and the filter is also installed on all threads (`TSYNC`). What the
+  executing thread has then covers the new program. The daemon is never restricted: doing it there
+  would leave some of its threads sandboxed.
+- **The second stage proves it is restricted before it reads anything**, and exits otherwise:
+  `no_new_privs` is set, a VM socket is refused (the filter) and a file outside the base grant cannot
+  be opened (Landlock). Starting that stage by hand therefore runs no mod.
 - **The filter (seccomp)** allows Unix sockets (ruled by Landlock); with `net`, plain TCP, and UDP for
-  name lookups; with `netlink`, netlink. Every other socket family and protocol is refused. It denies
-  `chmod`, `chown`, extended attributes, new user namespaces and `io_uring`, answers `clone3` with
-  "not implemented" because its flags cannot be inspected, and refuses calls of another architecture.
+  name lookups; with `netlink`, only the granted families (`diag` does not open `route`). Every other
+  socket family and protocol is refused. It answers `clone3` and `pidfd_open` with "not implemented",
+  so that callers fall back, refuses calls of another architecture, and denies:
+
+  | Denied | Why |
+  |--------|-----|
+  | `chmod`, `fchmod`, `fchmodat`, `fchmodat2`, `chown` and relatives, extended attributes | Landlock does not cover them |
+  | SysV shared memory, semaphores and queues; POSIX message queues | two mods could pass secrets: one that may read to one that may connect |
+  | `add_key`, `request_key`, `keyctl` | the same, and your Kerberos or filesystem keys may be there |
+  | `memfd_create`, `memfd_secret`, `execveat` | a program run from memory needs no file anyone could see |
+  | new user namespaces, `unshare`, `setns`, mounts, `chroot`, `pivot_root` | |
+  | `ptrace`, `process_vm_readv` / `writev`, `pidfd_getfd`, `kcmp`, `open_by_handle_at` | reaching into other processes and past paths |
+  | `io_uring`, `bpf`, `userfaultfd`, `perf_event_open` | large kernel surface that a mod has no use for |
+
+- Landlock ABI 11 limits UDP by port as well as TCP, so UDP is granted for port 53 only (to any
+  address). Sending also needs a rule for binding port 0.
 - What a host gets: the system libraries, the programs listed in `run` and their interpreters (read,
   execute), the few files they need, what its permissions list, and `/dev/null`. **Not the mods
   folder**: the daemon reads every file once, checks the hash and sends the bytes to the host.
@@ -755,7 +774,7 @@ you enable it."** It never says that a mod is safe or clean.
 | Paths | keys, keyrings, browser profiles; places that run code later |
 | Text | addresses and IP numbers, long encoded or escaped strings, text assembled from character codes |
 | Permissions | calls with no permission for them, and **permissions asked for but never used** |
-| Shape | arguments that are only known when the mod runs, `unpack` inside `spot.run`, `string.reverse`, paths assembled from pieces |
+| Shape | arguments that are only known when the mod runs, `unpack` among later arguments of `spot.run`, `string.reverse`, paths assembled from pieces |
 
 Each finding gives the file and line, why it can be misused and what it is honestly used for. The
 list lives in spot and grows; a mod cannot change it or switch a finding off. The same scan runs in
@@ -765,7 +784,11 @@ list lives in spot and grows; a mod cannot change it or switch a finding off. Th
 variable and building a name from pieces hid everything from a test scanner. Allowing `spot.name` as a
 value was still not enough: `pcall(spot.run, …)`, or handing `spot.run` to another function, hid the
 program again. With `spot` only ever written where it is called, which of spot's functions a mod can call, and which programs its Lua starts,
-is known before it runs. It is a rule about how code is written, not a judgement of what it does.
+is known before it runs.
+
+For programs this means the list itself is literal: `spot.run({ "ss", "-tun", port })`. A list built
+elsewhere, a keyed entry (`[1] = …`) or `unpack` in first place is **refused**, not just flagged. A
+duplicate key shows why: `{ [1] = "ss", [1] = x }` runs `x`. It is a rule about how code is written, not a judgement of what it does.
 
 Arguments can still be built while the mod runs, and a scanner can be fooled. **The sandbox is the
 protection; the scanner helps you notice what to ask about.**
@@ -1047,7 +1070,24 @@ then tried with a seccomp filter added:
 With the filter, `sh`, `python3`, `node`, `java`, `cp`, `mv`, `sed -i`, `hyprctl` and `systemctl --user`
 (with their sockets) still worked; `cp -p` and `install -m` failed.
 
-**Still to test:** older kernels (if the minimum is to be lowered), network port rules and UDP for name lookups, the base grant, the real host's size and start
+**A second round**, on the filter as first tried and then extended, netlink `diag` granted:
+
+| Attempt | First filter | Extended |
+|---|---|---|
+| SysV shared memory, semaphores, message queue | **works** | refused |
+| Add to or read a kernel keyring | **works** | refused |
+| `memfd_create`; run a program with `execveat` | **works** | refused |
+| netlink `route` and `audit` (only `diag` granted) | **works** | refused |
+| `userfaultfd`, `pidfd_open`, `perf_event_open` | **works** | refused |
+| POSIX message queue | refused (Landlock) | refused |
+| UDP to a port that was not granted | refused (Landlock) | refused |
+
+With the extended filter, `sh` pipelines, `python3` and `node` and Go starting programs, `java`,
+`git`, `ss`, `hyprctl`, `systemctl --user`, `wpctl`, `pactl`, `bluetoothctl`, `powerprofilesctl` and
+`brightnessctl` still worked. The re-exec was checked from 200 threads, and the second stage started on
+its own refused to go on.
+
+**Still to test:** older kernels (if the minimum is to be lowered), TCP port rules and name lookups through them, the base grant, the real host's size and start
 time, and enforcement of cgroup limits.
 
 ### First version
