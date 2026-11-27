@@ -92,11 +92,10 @@ As of 2026-11-27. **Not released.** The work is on the
 
 - Dialogs that read mods directly, `from` and `call`
   ([#23](https://github.com/KopyTKG/spot/issues/23)). Until then a script feeds the dialog.
-- Security items of [#19](https://github.com/KopyTKG/spot/issues/19) and
-  [#29](https://github.com/KopyTKG/spot/issues/29): a second way to stop a mod's detached programs,
-  which matters without `systemd`; refusing to run with Linux capabilities; the daemon's socket in a
-  folder of its own; a script of your own being swapped between its check and its start.
-- An item-by-item check of #19 and #29 against the code and tests, which may add to that list.
+- From the item-by-item check of [#19](https://github.com/KopyTKG/spot/issues/19) and
+  [#29](https://github.com/KopyTKG/spot/issues/29), done on 2026-11-27: the `memory` setting of a mod;
+  the 32 MB a mod may keep; refusing to run with Linux capabilities; `spot mods` saying when there are
+  no limits, how often a mod failed and whose fault it was.
 
 **Not built, smaller**
 
