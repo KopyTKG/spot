@@ -968,6 +968,13 @@ off.
 
 A broken contract is a fault of the mod, not of its host: nothing is restarted.
 
+### Timers and changes
+
+The host never speaks on its own: every reply says when its next timer is due and which values changed,
+and the daemon comes back for them. So a mod that is stuck is handled the same way whatever it was doing.
+`every` is at least 250 ms and runs only while somebody watches; timers are at least 100 ms. A mod may
+write 64 MB within an hour.
+
 ### Broken messages between daemon and host
 
 The other side is not trusted, all the less once any program can be a backend (0.12).

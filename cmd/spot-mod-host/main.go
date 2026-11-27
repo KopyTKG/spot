@@ -132,6 +132,8 @@ func run() {
 			out.Encode(mods.Get(m.Name))
 		case m.Op == channel.OpCall && mods != nil:
 			out.Encode(mods.Call(m.Name, m.Args))
+		case m.Op == channel.OpTick && mods != nil:
+			out.Encode(mods.Tick())
 		case m.Op == channel.OpPing:
 			out.Encode(channel.Reply{Ready: true})
 		case m.Op == channel.OpParse && m.Parse != nil:

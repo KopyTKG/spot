@@ -30,7 +30,16 @@ const (
 	maxLines     = 200
 	maxEvents    = 500
 	maxText      = 4 << 10
+	maxTimers    = 64
+	minTimer     = 100 * time.Millisecond
+	minEvery     = 250 * time.Millisecond
 )
+
+type timer struct {
+	fn    *lua.LFunction
+	due   time.Time
+	every time.Duration // 0: once
+}
 
 // published bounds a value or the answer of a request.
 var published = luaenv.Limits{Depth: 32, Values: 1 << 19, Bytes: 8 << 20, String: maxText}
@@ -44,6 +53,7 @@ type value struct {
 	cached any
 	at     time.Time
 	has    bool
+	every  time.Duration // recompute this often, while somebody watches
 }
 
 // Runtime is a loaded provider.
@@ -60,6 +70,11 @@ type Runtime struct {
 	requests map[string]*lua.LFunction
 	required map[string]lua.LValue
 	loading  map[string]bool
+
+	timers  []*timer
+	changed map[string]bool // published or refreshed since the last reply
+	written int             // bytes since writtenSince
+	since   time.Time
 
 	ctx     context.Context // of the function running now
 	log     []string
@@ -85,6 +100,17 @@ func (r *Runtime) reply(result any, err error) channel.Reply {
 		out.Events = append(out.Events, channel.Event{Kind: "dropped", What: fmt.Sprintf("%d more events", r.dropped)})
 	}
 	r.log, r.events, r.dropped = nil, nil, 0
+	for name := range r.changed {
+		out.Changed = append(out.Changed, name)
+	}
+	sort.Strings(out.Changed)
+	clear(r.changed)
+	for _, t := range r.timers {
+		in := max(time.Until(t.due).Milliseconds(), 1)
+		if out.Next == 0 || in < out.Next {
+			out.Next = in
+		}
+	}
 	if err == nil && result != nil {
 		out.Result, err = json.Marshal(result)
 		if len(out.Result) > channel.MaxMessage-2<<20 {
@@ -128,7 +154,8 @@ func Open(l channel.Load) (*Runtime, channel.Reply) {
 	r := &Runtime{L: luaenv.New(false), name: l.Mod.Name, grants: l.Grants, files: l.Files,
 		parsers: parser.Call{Mods: l.Parsers}, uses: l.Mod.Manifest.Uses, emptyDir: l.EmptyDir,
 		values: map[string]*value{}, requests: map[string]*lua.LFunction{},
-		required: map[string]lua.LValue{}, loading: map[string]bool{}, ctx: context.Background()}
+		required: map[string]lua.LValue{}, loading: map[string]bool{}, ctx: context.Background(),
+		changed: map[string]bool{}, since: time.Now()}
 	err := r.within5(func() error {
 		if err := r.install(l.Config); err != nil {
 			return err
@@ -141,8 +168,12 @@ func Open(l channel.Load) (*Runtime, channel.Reply) {
 		return r.L.PCall(0, 0, nil)
 	})
 	out := r.reply(nil, err)
-	for name := range r.values {
+	out.Every = map[string]int64{}
+	for name, v := range r.values {
 		out.Values = append(out.Values, name)
+		if v.every > 0 {
+			out.Every[name] = v.every.Milliseconds()
+		}
 	}
 	for name := range r.requests {
 		out.Requests = append(out.Requests, name)
@@ -196,6 +227,34 @@ func (r *Runtime) Get(name string) channel.Reply {
 		return r.reply(nil, fmt.Errorf("value %q: %w", name, err))
 	}
 	return r.reply(v.cached, nil)
+}
+
+// Tick runs every timer that is due. One that fails does not stop the others;
+// the first failure is reported.
+func (r *Runtime) Tick() channel.Reply {
+	now := time.Now()
+	var due []*timer
+	keep := r.timers[:0]
+	for _, t := range r.timers {
+		if t.due.After(now) {
+			keep = append(keep, t)
+			continue
+		}
+		due = append(due, t)
+		if t.every > 0 {
+			t.due = now.Add(t.every)
+			keep = append(keep, t)
+		}
+	}
+	r.timers = keep
+	var failed error
+	for _, t := range due {
+		err := r.within5(func() error { return r.L.CallByParam(lua.P{Fn: t.fn, Protect: true}) })
+		if err != nil && failed == nil {
+			failed = fmt.Errorf("a timer: %w", err)
+		}
+	}
+	return r.reply(nil, failed)
 }
 
 // Call runs a request with its arguments, a list of strings.
@@ -571,8 +630,8 @@ func (r *Runtime) install(config json.RawMessage) error {
 			if ms, ok := m["ttl"].(float64); ok && ms > 0 {
 				v.ttl = time.Duration(ms) * time.Millisecond
 			}
-			if _, ok := m["every"]; ok {
-				return raise(L, "value %q: every is not built yet", name)
+			if ms, ok := m["every"].(float64); ok && ms > 0 {
+				v.every = max(time.Duration(ms)*time.Millisecond, minEvery)
 			}
 		}
 		r.values[name] = v
@@ -586,11 +645,14 @@ func (r *Runtime) install(config json.RawMessage) error {
 			return raise(L, "publish %q: %v", name, err)
 		}
 		r.values[name] = &value{cached: out, has: true}
+		r.changed[name] = true
 		return 0
 	})
 	add("refresh", func(L *lua.LState) int {
-		if v, ok := r.values[named(L)]; ok && v.fn != nil {
+		name := named(L)
+		if v, ok := r.values[name]; ok && v.fn != nil {
 			v.has = false
+			r.changed[name] = true
 		}
 		return 0
 	})
@@ -602,9 +664,27 @@ func (r *Runtime) install(config json.RawMessage) error {
 		r.requests[name] = L.CheckFunction(2)
 		return 0
 	})
-	for _, later := range []string{"every", "after"} {
-		add(later, func(L *lua.LState) int { return raise(L, "spot.%s is not built yet", later) })
+	schedule := func(repeat bool) lua.LGFunction {
+		return func(L *lua.LState) int {
+			ms := float64(L.CheckNumber(1))
+			fn := L.CheckFunction(2)
+			if !(ms >= 0 && ms <= 1e10) {
+				return raise(L, "a timer takes a number of milliseconds")
+			}
+			if len(r.timers) >= maxTimers {
+				return raise(L, "more than %d timers", maxTimers)
+			}
+			d := max(time.Duration(ms)*time.Millisecond, minTimer)
+			t := &timer{fn: fn, due: time.Now().Add(d)}
+			if repeat {
+				t.every = d
+			}
+			r.timers = append(r.timers, t)
+			return 0
+		}
 	}
+	add("every", schedule(true))
+	add("after", schedule(false))
 
 	var cfg any = map[string]any{}
 	if len(config) > 0 {

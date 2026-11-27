@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,10 +16,28 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/sandbox"
 )
 
+type heard struct {
+	mu    sync.Mutex
+	notes []string
+}
+
+func (h *heard) add(title, body string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.notes = append(h.notes, title+" | "+body)
+}
+
+func (h *heard) all() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Clone(h.notes)
+}
+
 type fixture struct {
 	t *testing.T
 	*Manager
-	home string
+	home  string
+	heard *heard
 }
 
 func newFixture(t *testing.T) fixture {
@@ -39,7 +58,9 @@ func newFixture(t *testing.T) fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Close)
-	f := fixture{t, m, d}
+	// A test must never reach the desktop of whoever runs it.
+	f := fixture{t, m, d, &heard{}}
+	m.Notify = f.heard.add
 	f.write("readable/a", "x")
 	f.write("mods/m/mod.toml", "[permissions.read]\n\"~/readable\"='r'\n")
 	f.write("mods/m/init.lua", `
@@ -94,6 +115,8 @@ func (f fixture) get(what, item, want string) {
 
 func (f fixture) running() bool {
 	p, _ := f.provider("m")
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.h != nil
 }
 

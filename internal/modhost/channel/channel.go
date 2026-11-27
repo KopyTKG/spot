@@ -27,6 +27,7 @@ const (
 	OpLoad  = "load"  // load the provider this host is for
 	OpGet   = "get"   // a value of it
 	OpCall  = "call"  // a request of it
+	OpTick  = "tick"  // run the timers that are due
 )
 
 // Message is any later message from the daemon.
@@ -79,6 +80,12 @@ type Reply struct {
 
 	Values   []string `json:"values,omitempty"`   // after load
 	Requests []string `json:"requests,omitempty"` // after load
+
+	// The host never speaks on its own. Each reply says what the daemon has to
+	// come back for.
+	Every   map[string]int64 `json:"every,omitempty"`   // values to recompute while watched, ms
+	Next    int64            `json:"next,omitempty"`    // ms until a timer is due, 0 for none
+	Changed []string         `json:"changed,omitempty"` // values published or refreshed
 }
 
 // ReadLine reads one message without ever holding more than MaxMessage of it.

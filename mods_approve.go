@@ -173,6 +173,7 @@ func listMods() int {
 	if err != nil {
 		return modsError("%v", err)
 	}
+	doing := modStates()
 	for _, e := range entries {
 		name := e.Name()
 		if strings.HasPrefix(name, ".") {
@@ -190,7 +191,14 @@ func listMods() int {
 		case err != nil:
 			fmt.Printf("%-20s broken: %s\n", name, approval.Oneline(err.Error()))
 		default:
-			fmt.Printf("%-20s %-9s %s\n", name, m.Provider.Manifest.Type, describe(state, r))
+			now := ""
+			switch d, known := doing[name]; {
+			case known && d.Error != "":
+				now = ", FAILING since " + d.Since + ": " + approval.Oneline(d.Error)
+			case known && d.Running:
+				now = ", running"
+			}
+			fmt.Printf("%-20s %-9s %s%s\n", name, m.Provider.Manifest.Type, describe(state, r), now)
 		}
 	}
 	return 0

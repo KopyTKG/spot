@@ -19,6 +19,7 @@ const modsUsage = `usage: spot mods                       every mod and whether 
        spot mods diff <name>           what changed since you approved it
        spot mods revoke <name>         take the approval back
        spot mods audit <name>          what it ran, read, wrote and was refused
+       spot mods reload [name]         start it anew
        spot mods check <name|folder> [-]
                                        while writing one: read its code and, for
                                        a parser, hold it to its contract (with -,
@@ -71,6 +72,7 @@ func modsCommand(args []string) int {
 			return auditMod(s, name)
 		}
 		had, err := s.Revoke(name)
+		reloadMods(name) // stops it now
 		if err != nil {
 			return fail("%v", err)
 		}
@@ -78,6 +80,14 @@ func modsCommand(args []string) int {
 			return fail("%s was not approved", name)
 		}
 		fmt.Printf("%s is no longer approved\n", name)
+		return 0
+	case "reload":
+		if len(args) > 1 {
+			return usage()
+		}
+		if !reloadMods(strings.Join(args, "")) {
+			fmt.Println("no daemon is running: mods start when they are asked for")
+		}
 		return 0
 	case "check":
 	default:

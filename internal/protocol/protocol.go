@@ -37,6 +37,9 @@ const (
 	OpPing    = "ping"    // liveness + version
 	OpGet     = "get"     // a value of a mod
 	OpCall    = "call"    // run a request of a mod
+	OpWatch   = "watch"   // a value of a mod, again on every change
+	OpReload  = "reload"  // start mods anew; Name is one, "" all
+	OpMods    = "mods"    // how the mods are doing
 )
 
 type Request struct {

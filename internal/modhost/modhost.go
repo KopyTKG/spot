@@ -233,6 +233,11 @@ func (h *Host) Call(name string, args []string) (channel.Reply, error) {
 	return h.ask(channel.Message{Op: channel.OpCall, Name: name, Args: args}, functionTime)
 }
 
+// Tick runs the provider's timers that are due.
+func (h *Host) Tick() (channel.Reply, error) {
+	return h.ask(channel.Message{Op: channel.OpTick}, functionTime)
+}
+
 // HostPath is the host binary beside spot's own, never one found in PATH (S17).
 func HostPath() (string, error) {
 	exe, err := os.Executable()

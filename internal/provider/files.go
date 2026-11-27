@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -20,7 +21,10 @@ import (
 // hard links, no pipes or devices, nothing of a process, and errors that say
 // what was refused.
 
-const maxFile = 8 << 20
+const (
+	maxFile    = 8 << 20
+	maxWritten = 64 << 20 // per hour
+)
 
 var errRefused = errors.New("no permission")
 
@@ -132,6 +136,14 @@ func (r *Runtime) writeFile(asked string, data []byte) error {
 	if len(data) > maxFile {
 		return fmt.Errorf("larger than %d bytes", maxFile)
 	}
+	// A mod must not be able to fill the disk by writing in a loop.
+	if time.Since(r.since) > time.Hour {
+		r.written, r.since = 0, time.Now()
+	}
+	if r.written+len(data) > maxWritten {
+		return fmt.Errorf("more than %d MB written within an hour", maxWritten>>20)
+	}
+	r.written += len(data)
 	d, err := open(real, unix.O_PATH|unix.O_DIRECTORY)
 	if err != nil {
 		return err

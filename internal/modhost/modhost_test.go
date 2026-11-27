@@ -135,7 +135,7 @@ func TestAStuckHostGoesWithTheDaemon(t *testing.T) {
 	stuck := mod.Mod{Name: "p", Manifest: mod.Manifest{Type: "parser"}, Source: []byte(`return function() ("a"):rep(100000):match(".-.-.-.-b$") return {} end`)}
 	go h.Parse(channel.Parse{Name: "p", Mods: map[string]mod.Mod{"p": stuck}}, time.Minute)
 	time.Sleep(500 * time.Millisecond)
-	h.conn.Close() // what the daemon dying looks like from the host
+	h.Abandon() // what the daemon dying looks like from the host
 	done := make(chan error, 1)
 	go func() { done <- h.cmd.Wait() }()
 	select {

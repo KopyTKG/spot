@@ -178,6 +178,7 @@ type Mods struct {
 	Dir      string
 	Enabled  []string
 	Settings map[string]map[string]any
+	Notify   *string // the notify command; nil is notify-send, "" off
 }
 
 // ModsConfig reads it from the spot configuration in dir, and from no
@@ -199,7 +200,7 @@ func ModsConfig(dir string) (Mods, error) {
 		}
 		return m, fmt.Errorf("%s: %w", path, err)
 	}
-	m.Enabled, m.Settings = c.Mods, c.Mod
+	m.Enabled, m.Settings, m.Notify = c.Mods, c.Mod, c.Notify
 	switch {
 	case c.ModsDir == "":
 	case filepath.IsAbs(c.ModsDir):

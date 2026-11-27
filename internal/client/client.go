@@ -3,6 +3,7 @@
 package client
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -175,4 +176,45 @@ func Control(op string) int {
 		fmt.Printf("spot daemon: running (%s), client %s\n", resp.Version, protocol.Version)
 	}
 	return protocol.ExitSubmitted
+}
+
+// IfRunning asks a daemon that is already there; it starts none.
+func IfRunning(req protocol.Request) (protocol.Response, bool) {
+	conn, err := dialDaemon(false)
+	if err != nil {
+		return protocol.Response{}, false
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	resp, err := protocol.RoundTrip(conn, req)
+	return resp, err == nil && !resp.Stale
+}
+
+// Watch sends req and passes on every answer until the connection ends or each
+// fails. It starts a daemon if none runs. It reports whether the daemon asked to
+// be replaced, having been built differently.
+func Watch(req protocol.Request, each func(protocol.Response) error) (stale bool, err error) {
+	conn, err := dialDaemon(true)
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
+		return false, err
+	}
+	in := json.NewDecoder(conn)
+	for {
+		var r protocol.Response
+		if err := in.Decode(&r); err != nil {
+			return false, err
+		}
+		if r.Stale {
+			conn.Close()
+			stopDaemon()
+			return true, nil
+		}
+		if err := each(r); err != nil {
+			return false, err
+		}
+	}
 }

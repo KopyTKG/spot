@@ -132,10 +132,11 @@ func handle(conn net.Conn, sh *ui.Shell) {
 		fmt.Fprintf(os.Stderr, "spot: refused a connection: %v\n", err)
 		return
 	}
-	reply := func(r protocol.Response) {
+	send := func(r protocol.Response) error {
 		r.Version = protocol.Version
-		json.NewEncoder(conn).Encode(r)
+		return json.NewEncoder(conn).Encode(r)
 	}
+	reply := func(r protocol.Response) { _ = send(r) }
 
 	reading <- struct{}{}
 	req, err := readRequest(conn)
@@ -150,9 +151,13 @@ func handle(conn net.Conn, sh *ui.Shell) {
 	}
 
 	switch req.Op {
-	case protocol.OpGet, protocol.OpCall:
+	case protocol.OpGet, protocol.OpCall, protocol.OpWatch, protocol.OpReload, protocol.OpMods:
 		if req.Version != protocol.Version {
 			reply(protocol.Response{Stale: true})
+			return
+		}
+		if req.Op == protocol.OpWatch {
+			watch(conn, req, send)
 			return
 		}
 		reply(modRequest(req))
