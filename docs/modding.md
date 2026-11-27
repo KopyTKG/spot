@@ -925,7 +925,7 @@ instead of `exec`. A password item cannot be used in either.
 
 | Command | Does |
 |---------|------|
-| `spot get <mod.value>` | Print it once: text as it is, rows as `label<TAB>key<TAB>state`, tables as JSON |
+| `spot get <mod.value>` | Print it once: text as it is, rows as `label<TAB>key<TAB>state`, tables as JSON. When the mod cannot say now, its last value comes with a warning on stderr; with `--fresh` that is a failure instead: nothing on stdout, a non-zero exit |
 | `spot watch <mod.value>` | Print it now and on every change, one per line, until killed |
 | `spot call <mod.request> [args…]` | Run a request, print what it returns |
 | `spot mods` | List mods: running, failing or disabled, with the last error |

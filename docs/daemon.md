@@ -198,7 +198,7 @@ limit = 10
 
 ```sh
 spot mods allow sockets       # approve it, at a terminal
-spot get sockets.table        # a value; --json for scripts
+spot get sockets.table        # a value; --json for scripts, --fresh to refuse an old one
 spot watch --waybar sockets.count   # now and on every change, for a bar
 spot mods                     # approved, running or failing
 spot mods reload sockets      # start it anew

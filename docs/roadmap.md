@@ -81,14 +81,16 @@ Open design questions, to settle before the release that needs them:
   an `ss` parser, a sockets provider and a searchable table, with no shell script. The table, copying,
   approval and re-approval after a change have been used by hand.
 
-**Still to find out**, with the API marked experimental until then
+**What using it showed** (a sockets bar count, and a firewall tool with a parser and a provider)
 
-- Whether writing a mod is clearly better than writing the script it replaces
-  ([#24](https://github.com/KopyTKG/spot/issues/24)). The sockets example has the same numbers as its
-  script, in about 55 lines of Lua and a short dialog against 130 lines of shell; it cannot name
-  processes or use root.
+- Verdict ([#24](https://github.com/KopyTKG/spot/issues/24)): a narrow pass. Mods pay off where several
+  things need the same data, such as a bar and a dialog; the code is not smaller, and for a tool with
+  one consumer a script stays simpler.
+- It led to `spot get --fresh` and to icon-font characters passing `--waybar`.
+
+**Still to find out**, with the API marked experimental until menu trees (0.10) have used it
+
 - What a second person makes of it, above all of the approval screen.
-- The bar counter in a real bar.
 
 **Known limits of 0.9**
 

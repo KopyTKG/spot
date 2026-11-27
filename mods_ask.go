@@ -15,7 +15,7 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/protocol"
 )
 
-const askUsage = `usage: spot get <mod.value> [--json|--waybar]    print a value of a mod
+const askUsage = `usage: spot get <mod.value> [--json|--waybar] [--fresh]   print a value of a mod
        spot watch <mod.value> [--json|--waybar]  print it now and on every change
        spot call <mod.request> [args...]         run a request of a mod
 `
@@ -30,7 +30,7 @@ const (
 
 // askMod is `spot get`, `spot watch` and `spot call`.
 func askMod(verb string, args []string) int {
-	how := asPlain
+	how, fresh := asPlain, false
 	if verb != protocol.OpCall {
 		var rest []string
 		for _, a := range args {
@@ -39,6 +39,8 @@ func askMod(verb string, args []string) int {
 				how = asJSON
 			case a == "--waybar" && how != asJSON:
 				how = asBar
+			case a == "--fresh" && verb == protocol.OpGet:
+				fresh = true
 			default:
 				rest = append(rest, a)
 			}
@@ -57,6 +59,10 @@ func askMod(verb string, args []string) int {
 	resp, ok := client.ViaDaemon(req)
 	if !ok {
 		resp = protocol.Response{Code: protocol.ExitError, Stderr: "spot: mods run in the daemon, and it could not be reached\n"}
+	}
+	// A warning on a value says that it is old.
+	if fresh && resp.Code == 0 && resp.Stderr != "" {
+		resp = protocol.Response{Code: protocol.ExitError, Stderr: resp.Stderr}
 	}
 	os.Stderr.WriteString(resp.Stderr)
 	if how == asBar {
