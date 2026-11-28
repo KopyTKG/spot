@@ -61,6 +61,11 @@ func (c *Config) UsesMods() bool {
 		if it.foreign() || it.Call != "" {
 			return true
 		}
+		for _, t := range it.Tiles {
+			if it.Type == "tiles" && (t.From != "" || t.Call != "") {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -75,9 +80,9 @@ func (it *Item) validateMods() error {
 			if len(it.Options) > 0 || it.Stdin || it.Multi || it.Collapsible || it.Run != "" || it.Parse != "" {
 				return fail("a list with from takes no options, stdin, multi, collapsible, run or parse")
 			}
-		case "switch", "segmented", "scale":
+		case "switch", "segmented", "scale", "meter":
 		default:
-			return fail("from only applies to lists, switch, segmented and scale")
+			return fail("from only applies to lists, switch, segmented, scale and meter")
 		}
 		if !modItem.MatchString(it.From) {
 			return fail("from: say <mod>.<value>")

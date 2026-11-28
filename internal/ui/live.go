@@ -106,6 +106,7 @@ type control struct {
 	pending  *string     // picked while a change was still running
 	reads    int         // only the newest state read counts
 	holding  func() bool // the user is still moving it (a slider); nil = never
+	strict   bool        // a state that cannot be read is shown as unknown, not kept
 }
 
 // set applies a value the user picked.
@@ -153,6 +154,15 @@ func (c *control) set(v string) {
 	}
 	cmd := fill(c.item.OnChange, c.item.ID, c.item.ID, v)
 	c.b.command(cmd, v, c.item.CommandTimeout(), done)
+}
+
+// forget drops what a strict control showed: it is not known any more.
+func (c *control) forget() {
+	if !c.strict {
+		return
+	}
+	c.value = ""
+	c.unsure(true)
 }
 
 // call makes a mod's request off the main loop, answering like a command.
@@ -238,11 +248,18 @@ func (c *control) refresh() {
 		}
 		if status != 0 {
 			c.b.report(stderr, status)
+			c.forget()
 			return
 		}
 		if v, ok := c.read(stdout); ok {
+			if c.strict {
+				c.unsure(false)
+			}
 			c.value = v
 			c.show(v)
+		} else if c.strict {
+			c.b.report(fmt.Sprintf("unknown: %q is no position of this", config.LastLine(stdout)), 1)
+			c.forget()
 		}
 	})
 }

@@ -103,6 +103,9 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 			if b.rowActivate != nil && b.rowActivate() { // a switch row flips and stays
 				return true
 			}
+			if b.nav.flip() { // a tile that switches something flips and stays
+				return true
+			}
 			if b.nav.active != nil {
 				b.activeID = b.nav.choose()
 			}

@@ -118,6 +118,9 @@ The widget inside an `.spot-item`, by `type`:
 | `.spot-tile-body` | Box inside a tile holding icon and caption |
 | `.spot-tile-icon` | A tile's `icon` |
 | `.spot-tile-label` | A tile's `label` |
+| `.spot-value-<value>` | The tile with that `value`; plus the tile's own `class` |
+| `.spot-tile-state` | "On" / "Off" on a tile that switches; the tile has `.spot-on`, `.spot-unknown`, `.spot-busy` |
+| `.spot-meter-row`, `.spot-meter`, `.spot-meter-text` | A `meter`: its box, bar (`trough` and `progress` inside) and text |
 | `.spot-text-scroll` | `text` scroller |
 | `.spot-text` | `text` view (`GtkTextView`) |
 | `.spot-text-placeholder` | `text` placeholder label |

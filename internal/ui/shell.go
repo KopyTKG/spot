@@ -46,7 +46,7 @@ func (s *Shell) Init() {
 	}
 	// Default look of the keyboard cursor; any theme CSS overrides it.
 	cursor := gtk.NewCSSProvider()
-	cursor.LoadFromString(".spot-picked { background: alpha(currentColor, 0.18); }\n.spot-cursor { outline: 2px solid alpha(currentColor, 0.8); outline-offset: -2px; border-radius: 12px; }")
+	cursor.LoadFromString(".spot-picked { background: alpha(currentColor, 0.18); }\n.spot-tile.spot-on { box-shadow: inset 0 -4px currentColor; }\n.spot-tile.spot-unknown { opacity: 0.5; }\n.spot-cursor { outline: 2px solid alpha(currentColor, 0.8); outline-offset: -2px; border-radius: 12px; }")
 	gtk.StyleContextAddProviderForDisplay(
 		gdk.DisplayGetDefault(), cursor, uint(gtk.STYLE_PROVIDER_PRIORITY_FALLBACK))
 

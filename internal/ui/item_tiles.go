@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -25,6 +26,7 @@ func (b *builder) tiles(item config.Item, row *gtk.Box) {
 	tiles := item.Tiles
 	children := make([]*gtk.FlowBoxChild, len(tiles))
 	picks := make([]*gtk.Label, len(tiles)) // "●" marker, shown on the picked tile
+	flips := make([]func(), len(tiles))     // of the tiles that switch something; else nil
 	for i, tl := range tiles {
 		tileBox := gtk.NewBox(gtk.OrientationVertical, 6)
 		tileBox.AddCSSClass("spot-tile-body")
@@ -63,6 +65,19 @@ func (b *builder) tiles(item config.Item, row *gtk.Box) {
 		if isCurrent {
 			child.AddCSSClass("spot-active")
 		}
+		if v := config.CSSValue(tl.Value); v != "" {
+			child.AddCSSClass("spot-value-" + v)
+		}
+		for _, c := range strings.Fields(tl.Class) {
+			child.AddCSSClass(c)
+		}
+		if tl.Live() {
+			state := gtk.NewLabel("")
+			state.AddCSSClass("spot-tile-state")
+			state.SetHAlign(gtk.AlignCenter)
+			tileBox.Append(state)
+			flips[i] = b.liveTile(item, tl, child, state)
+		}
 		child.SetChild(tileBox)
 		flow.Append(child)
 		children[i] = child
@@ -87,7 +102,7 @@ func (b *builder) tiles(item config.Item, row *gtk.Box) {
 		b.activeID = item.ID
 	}
 	itemID := item.ID
-	group := &tileGroup{id: itemID, flow: flow, children: children, cols: cols}
+	group := &tileGroup{id: itemID, flow: flow, children: children, cols: cols, flips: flips}
 	b.nav.groups = append(b.nav.groups, group)
 	markPicked := func() {
 		for i, c := range children {
@@ -96,7 +111,8 @@ func (b *builder) tiles(item config.Item, row *gtk.Box) {
 		}
 		if i := group.selected(); i >= 0 {
 			children[i].AddCSSClass("spot-picked")
-			picks[i].SetVisible(true)
+			// A "●" on a tile that switches something would read as "on".
+			picks[i].SetVisible(flips[i] == nil)
 		}
 	}
 	markPicked()
@@ -132,6 +148,10 @@ func (b *builder) tiles(item config.Item, row *gtk.Box) {
 	d.hook(flow, flow.ConnectChildActivated(func(child *gtk.FlowBoxChild) {
 		flow.SelectChild(child)
 		b.activeID = itemID
+		if i := child.Index(); i >= 0 && i < len(flips) && flips[i] != nil {
+			flips[i]()
+			return
+		}
 		if b.submit != nil {
 			b.submit()
 		}
@@ -140,12 +160,61 @@ func (b *builder) tiles(item config.Item, row *gtk.Box) {
 	b.focus(flow)
 }
 
+// liveTile makes a tile show a state: spot-on while it is on, spot-unknown
+// while nobody can say, spot-busy while it changes. It returns what picking the
+// tile does, or nil for one that only shows.
+func (b *builder) liveTile(item config.Item, tl config.Tile, child *gtk.FlowBoxChild, state *gtk.Label) func() {
+	as := config.Item{Type: "switch", ID: tl.Value, State: tl.State, OnChange: tl.OnChange,
+		From: tl.From, Call: tl.Call, Timeout: item.Timeout}
+	c := &control{b: b, item: as, strict: true}
+	c.read = func(out string) (string, bool) {
+		on, ok := as.ParseSwitch(out)
+		if on {
+			return "on", ok
+		}
+		return "off", ok
+	}
+	c.show = func(v string) {
+		classOn(child, "spot-on", v == "on")
+		switch v {
+		case "on":
+			state.SetText("On")
+		case "off":
+			state.SetText("Off")
+		}
+	}
+	c.busy = func(busy bool) { classOn(child, "spot-busy", busy) }
+	c.unsure = func(unsure bool) {
+		classOn(child, "spot-unknown", unsure)
+		if unsure {
+			classOn(child, "spot-on", false)
+			state.SetText("…")
+		}
+	}
+	c.unsure(true) // until it has been read
+	b.refreshers = append(b.refreshers, c.refresh)
+	if !tl.Flips() {
+		return nil
+	}
+	return func() {
+		switch c.value {
+		case "on":
+			c.set("off")
+		case "off":
+			c.set("on")
+		default: // what it is now is not known: ask again rather than guess
+			c.refresh()
+		}
+	}
+}
+
 // tileGroup is one `tiles` section.
 type tileGroup struct {
 	id       string
 	flow     *gtk.FlowBox
 	children []*gtk.FlowBoxChild
 	cols     int
+	flips    []func()
 }
 
 // selected is the index of the section's selected tile, or -1.
@@ -164,6 +233,16 @@ type tileNav struct {
 	groups []*tileGroup
 	active *tileGroup // section holding keyboard focus, nil if none
 	cur    int        // cursor tile within active
+}
+
+// flip switches the tile under the cursor, if it is one that does.
+func (n *tileNav) flip() bool {
+	if n.active == nil || n.cur < 0 || n.cur >= len(n.active.flips) || n.active.flips[n.cur] == nil {
+		return false
+	}
+	n.active.flow.SelectChild(n.active.children[n.cur])
+	n.active.flips[n.cur]()
+	return true
 }
 
 // choose selects the tile under the cursor and returns its section's id.

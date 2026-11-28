@@ -197,7 +197,7 @@ status 1, and no command is run).
 
 | Key | Applies to | Description |
 |-----|------------|-------------|
-| `type` | all | `field`, `password`, `text`, `select`, `list`, `apps`, `tiles`, `toggle`, `scale`, `switch`, `segmented`, `button`, `separator`. An unknown type is skipped with a log line |
+| `type` | all | `field`, `password`, `text`, `select`, `list`, `apps`, `tiles`, `toggle`, `scale`, `switch`, `segmented`, `button`, `separator`, `meter`. An unknown type is skipped with a log line |
 | `id` | all | Name used in `{id}` templates and as the JSON key |
 | `label` | all | Shown above the widget. For `toggle`, `switch` and `button` it is the text of the control; for `tiles` it is a section heading |
 | `placeholder` | field, password, text, list | Greyed-out hint text |
@@ -401,7 +401,7 @@ placeholder = "Search apps…"
 ### `tiles`
 
 A grid of large icon-and-label buttons. Clicking a tile, or pressing Enter on
-it, picks it **and submits the whole dialog**.
+it, picks it **and submits the whole dialog**, unless the tile [switches something](#tiles-that-switch).
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -416,6 +416,9 @@ Each tile is an `[[items.tiles]]` table:
 | `icon` | Large text above the label (Nerd Font glyph, emoji, a few letters...) |
 | `label` | Caption. Omit it to centre the icon alone |
 | `value` | What the item evaluates to when this tile is chosen |
+| `class` | CSS classes for this tile. Every tile also has `spot-value-<value>` (other characters as `-`) |
+| `state`, `on_change` | See [tiles that switch](#tiles-that-switch) |
+| `from`, `call` | The same with a mod |
 
 ```toml
 [[items]]
@@ -438,6 +441,28 @@ you used: `{_active}` expands to the `id` of the section last interacted with.
 [submit]
 stdout = "{_active} {action} {battery}"
 ```
+
+#### Tiles that switch
+
+A tile with a `state` shows whether something is on, for a grid of quick settings:
+
+```toml
+[[items.tiles]]
+label     = "Waybar"
+value     = "waybar"
+state     = "my-settings get waybar"             # prints on or off
+on_change = "my-settings set waybar {value}"     # {value} is on or off
+```
+
+- Picking it **flips it and keeps the dialog open**; the states are then all read again.
+- It shows "On" or "Off" and has `.spot-on` while on, `.spot-busy` while changing.
+- While the state is **unknown** (not read yet, the command failed or printed something else) it has
+  `.spot-unknown`, and picking it asks again instead of guessing. An old state is never kept on show.
+- `on_change` should return only once the change has happened; the state is read right after.
+- With `state` alone the tile only shows: picking it submits like any tile.
+- `from = "mod.value"` and `call = "mod.request"` do the same with a [mod](modding.md); `{value}` goes
+  to the request as its argument.
+- `timeout` on the item bounds the commands (ms, default 10000).
 
 ### `toggle`
 
@@ -541,6 +566,28 @@ A few options side by side, one of them chosen.
 ### `separator`
 
 A line between groups of items, under its `label` if it has one.
+
+### `meter`
+
+A bar that shows a number without changing it: battery, disk use, progress.
+
+```toml
+[[items]]
+type   = "meter"
+label  = "Battery"
+state  = "cat /sys/class/power_supply/BAT0/capacity"
+format = "{value} %"
+```
+
+| Key | Default | |
+|-----|---------|---|
+| `state`, or `from` | one is needed | A command printing the number (a trailing `%` is fine), or a mod's value |
+| `min`, `max` | `0`, `100` | The ends of the bar; a number outside is shown as it is, with the bar full or empty |
+| `format` | `{value}` | The text beside the bar |
+
+It is read when the dialog opens and after every change made in it, not on a timer. A value that
+cannot be read shows `…`. Classes: `.spot-meter-row`, `.spot-meter` (a `progressbar`),
+`.spot-meter-text`, `.spot-unknown`.
 
 ### Lists with switches
 

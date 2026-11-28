@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -37,8 +39,27 @@ func (it *Item) validateLive() error {
 		return fail("switches only applies to a plain list (not multi or collapsible)")
 	}
 	live := it.Type == "switch" || it.Type == "segmented" || it.Type == "scale" || it.Switches
-	if !live && (it.State != "" || it.OnChange != "") {
-		return fail("state and on_change only apply to switch, segmented, scale and lists with switches")
+	if !live && it.Type != "meter" && (it.State != "" || it.OnChange != "") {
+		return fail("state and on_change only apply to switch, segmented, scale, meter, lists with switches and tiles")
+	}
+	if it.Type == "meter" {
+		switch {
+		case it.State == "" && it.From == "":
+			return fail("a meter needs state or from")
+		case it.OnChange != "" || it.Call != "":
+			return fail("a meter only shows: it takes no on_change or call")
+		case it.Min != nil && it.Max != nil && *it.Max <= *it.Min:
+			return fail("max must be greater than min")
+		}
+	} else if it.Format != "" {
+		return fail("format only applies to a meter")
+	}
+	if it.Type == "tiles" {
+		for i := range it.Tiles {
+			if err := it.Tiles[i].validate(); err != nil {
+				return fail("tile %d: %v", i+1, err)
+			}
+		}
 	}
 	if it.Look != "" && it.Type != "switch" {
 		return fail("look only applies to a switch")
@@ -86,4 +107,39 @@ func (it *Item) ParseSwitch(out string) (on, ok bool) {
 func LastLine(out string) string {
 	out = strings.TrimSpace(out)
 	return strings.TrimSpace(out[strings.LastIndexByte(out, '\n')+1:])
+}
+
+var cssClass = regexp.MustCompile(`^-?[A-Za-z_][A-Za-z0-9_-]*$`)
+
+func (t *Tile) validate() error {
+	for _, c := range strings.Fields(t.Class) {
+		if !cssClass.MatchString(c) {
+			return fmt.Errorf("class: %q is not a CSS class name", c)
+		}
+	}
+	switch {
+	case t.State != "" && t.From != "":
+		return errors.New("state or from, not both")
+	case t.OnChange != "" && t.Call != "":
+		return errors.New("on_change or call, not both")
+	case t.OnChange != "" && t.State == "":
+		return errors.New("on_change needs state: to flip, the tile must know what is on")
+	case t.Call != "" && t.From == "":
+		return errors.New("call needs from")
+	case t.From != "" && !modItem.MatchString(t.From):
+		return errors.New("from: say <mod>.<value>")
+	case t.Call != "" && !modItem.MatchString(t.Call):
+		return errors.New("call: say <mod>.<request>")
+	}
+	return nil
+}
+
+// CSSValue is a tile's value as the end of a class name.
+func CSSValue(value string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			return r
+		}
+		return '-'
+	}, value)
 }

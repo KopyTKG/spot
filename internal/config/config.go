@@ -65,7 +65,7 @@ type Opacity struct {
 }
 
 type Item struct {
-	Type        string // field | password | text | select | list | apps | tiles | toggle | scale | switch | button | segmented | separator
+	Type        string // field | password | text | select | list | apps | tiles | toggle | scale | switch | button | segmented | separator | meter
 	ID          string
 	Label       string
 	Placeholder string
@@ -101,6 +101,7 @@ type Item struct {
 	Exec     string   // button: the command it runs
 	Close    bool     // button: start the command and close the dialog
 	Timeout  int      // ms a control's command may take (default 10000)
+	Format   string   // meter: the text beside the bar, with {value} (default "{value}")
 	Switches bool     // list: rows are "LABEL<TAB>KEY<TAB>on|off"; rows with a state are switches
 
 	// Mods (see mods.go).
@@ -119,7 +120,19 @@ type Tile struct {
 	Icon  string // text rendered large above the label (NF glyph, emoji, etc.)
 	Label string
 	Value string // returned as the item's value when selected
+	Class string // CSS classes of this tile, beside spot-value-<value>
+
+	// A tile with a state shows whether something is on. With on_change (or
+	// call) picking it flips that, and the dialog stays open.
+	State    string // command printing on or off
+	OnChange string `toml:"on_change"` // command that applies {value}
+	From     string // or a mod's value, and
+	Call     string // the request a flip makes
 }
+
+// Live reports whether the tile shows a state; Flips whether picking it changes it.
+func (t *Tile) Live() bool  { return t.State != "" || t.From != "" }
+func (t *Tile) Flips() bool { return t.OnChange != "" || t.Call != "" }
 
 type Submit struct {
 	Exec   string // command template; {id} substituted from field values

@@ -81,6 +81,8 @@ func (b *builder) item(item config.Item) *gtk.Box {
 		b.toggle(item, row)
 	case "scale":
 		b.scale(item, row)
+	case "meter":
+		b.meter(item, row)
 	case "switch":
 		b.switchItem(item, row)
 	case "segmented":
