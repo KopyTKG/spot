@@ -9,6 +9,14 @@ AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [
   place, and show an unreadable state as unknown, never as the old one.
 - **`type = "meter"`:** a bar for a number, such as battery or disk use.
 - **Per-tile CSS:** a `class` key, and `spot-value-<value>` on every tile.
+- **Controls work from the keyboard.** The focused control is now marked; Up and Down leave a slider
+  instead of moving it, and get past a tile grid; Left and Right move between segments; keys in an open
+  drop-down stay there.
+- **More than one list in a dialog works:** all keys went to the last one, whichever you were in. Up and
+  Down now leave a list or text area past its ends, and reach into a multi-select list, which they could
+  not before.
+- **Component demos:** [`examples/components`](examples/components/) is a menu that opens a demo of
+  every component, changing nothing real.
 
 ## 0.10.0 — 2026-11-28
 

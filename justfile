@@ -67,6 +67,15 @@ package:
 clean:
     rm -rf {{dist}} spot spot-mod-host
 
+# Where the keyboard goes, in real windows on a display without a screen.
+test-keys:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    gtk4-broadwayd --address 127.0.0.1 :7 >/dev/null 2>&1 &
+    trap "kill $!" EXIT
+    sleep 1
+    GDK_BACKEND=broadway BROADWAY_DISPLAY=:7 go test -count=1 -tags gui -run 'Keys|Keyboard' ./internal/ui
+
 # Run this build beside your installed spot, with a daemon and socket of its own:
 # `just dev get sockets.count`. Your installed spot is not touched.
 [positional-arguments]

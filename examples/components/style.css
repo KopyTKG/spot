@@ -1,0 +1,41 @@
+/* The look of the component demos. */
+.spot-window { background: transparent; }
+.spot-root { background: #1c1917; color: #fafaf9; border-radius: 18px; padding: 16px; border: 1px solid rgba(245, 245, 244, 0.1); }
+.spot-title { font-weight: bold; }
+.spot-label { font-size: 9pt; color: rgba(214, 211, 209, 0.7); }
+.spot-list { background: transparent; }
+.spot-list-row { padding: 6px 8px; }
+.spot-error { color: #f7768e; font-size: 9pt; }
+
+.spot-tiles { background: transparent; }
+.spot-tile { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(245, 245, 244, 0.08); border-radius: 12px; margin: 4px; min-width: 96px; min-height: 96px; }
+.spot-tile-body { padding: 12px 8px; }
+.spot-tile-icon { font-size: 24pt; }
+.spot-tile-label, .spot-tile-state { font-size: 9pt; color: #d6d3d1; }
+.spot-tile-pick { opacity: 0; font-size: 1px; }
+.spot-tile.spot-cursor { outline: 2px solid #7aa2f7; outline-offset: -2px; }
+
+/* Where the keyboard is. */
+.spot-control:focus-visible, .spot-scale:focus-visible, .spot-toggle:focus-visible, .spot-select:focus-within {
+  outline: 2px solid #7aa2f7;
+  outline-offset: 2px;
+}
+
+/* Which list the keys are in: its search is ringed, its row is bright. */
+.spot-search:focus-within { outline: 2px solid #7aa2f7; outline-offset: -2px; }
+.spot-list row:selected { background: rgba(245, 245, 244, 0.05); }
+.spot-item:focus-within .spot-list row:selected { background: rgba(122, 162, 247, 0.28); }
+
+/* On, unknown, changing. */
+.spot-tile.spot-on { background: rgba(166, 227, 161, 0.16); border-color: rgba(166, 227, 161, 0.55); box-shadow: none; }
+.spot-tile.spot-on .spot-tile-icon, .spot-tile.spot-on .spot-tile-state { color: #a6e3a1; }
+.spot-tile.spot-unknown { opacity: 0.5; }
+.spot-tile.spot-busy { opacity: 0.7; }
+
+/* A class of a tile's own (class = "warm"). */
+.spot-tile.warm.spot-on { background: rgba(249, 226, 175, 0.16); border-color: #f9e2af; }
+.spot-tile.warm.spot-on .spot-tile-icon, .spot-tile.warm.spot-on .spot-tile-state { color: #f9e2af; }
+
+.spot-meter trough { min-height: 8px; border-radius: 4px; background: rgba(245, 245, 244, 0.08); }
+.spot-meter progress { min-height: 8px; border-radius: 4px; background: #a6c8ff; }
+.spot-meter-text { font-size: 9pt; min-width: 52px; }

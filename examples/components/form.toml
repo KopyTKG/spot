@@ -1,0 +1,50 @@
+# Inputs that take effect on Enter.
+
+title  = "A form"
+width  = 420
+style  = "style.css"
+toggle = true
+
+[[items]]
+type        = "field"
+id          = "name"
+label       = "Name"
+placeholder = "letters only"
+required    = true
+pattern     = "[A-Za-z ]+"
+error       = "Letters and spaces"
+
+[[items]]
+type    = "select"
+id      = "colour"
+label   = "Colour"
+options = ["red", "green", "blue"]
+
+[[items]]
+type    = "list"
+id      = "days"
+label   = "Days (several: Space)"
+multi   = true
+height  = 140
+options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+separator = ", "
+
+[[items]]
+type  = "toggle"
+id    = "mail"
+label = "Send me mail"
+
+[[items]]
+type  = "scale"
+id    = "age"
+label = "How sure"
+
+[[items]]
+type  = "text"
+id    = "note"
+label = "Note (Ctrl+Enter sends)"
+height = 60
+
+# Values come from the environment, never pasted into the command.
+[submit]
+exec = 'command -v notify-send >/dev/null && notify-send -- "spot demo" "$SPOT_VALUE_NAME, $SPOT_VALUE_COLOUR, $SPOT_VALUE_DAYS"; true'

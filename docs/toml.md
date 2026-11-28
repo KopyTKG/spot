@@ -110,6 +110,13 @@ newline; Ctrl+Enter submits. When the caller offers [Back](#back), Backspace
 (on tiles, a list, or an empty search box) and Alt+Left go back. The layer surface covers the whole output, so a
 click outside the dialog cancels it.
 
+**Moving around.** Up and Down go from item to item; Left and Right work within one: a slider, the
+segments of a `segmented`, a row of tiles. Enter or Space flips or presses what the keyboard is on (in a list with switch rows, Space does so
+while the search is empty).
+In a `list` and a `text` item they move through the rows and lines, and go on to the next item past the
+first or last one. With several lists, the keys are for the one the keyboard is in. The focused control
+has `:focus-visible` to style.
+
 ## Window
 
 | Key | Default | Description |

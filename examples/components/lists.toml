@@ -1,0 +1,28 @@
+# A list with switches in it, and a list with groups that fold.
+
+title  = "Lists"
+width  = 420
+style  = "style.css"
+toggle = true
+
+[[items]]
+type     = "list"
+id       = "setting"
+label    = "Switches among ordinary rows"
+match    = "smart"
+switches = true
+height   = 150
+options  = ["Nightlight\tnight\toff", "Auto lock\tlock\ton", "Display…\tdisplay"]
+state    = "for n in night lock; do printf '%s\\t%s\\n' $n \"$(./demo.sh get $n off)\"; done"
+on_change = "./demo.sh set {key} {value}"
+
+[[items]]
+type        = "list"
+id          = "food"
+label       = "Groups that fold (Left and Right)"
+collapsible = true
+height      = 200
+options     = ["Fruit\tApple", "Fruit\tPear", "Vegetable\tCarrot", "Vegetable\tLeek", "Bread\tRye"]
+
+[submit]
+stdout = "{food}"

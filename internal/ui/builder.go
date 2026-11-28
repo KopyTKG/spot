@@ -9,6 +9,17 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/launcher"
 )
 
+// listKeys is what the keyboard needs of one list. A dialog can have several:
+// each keeps its own, and the keys go to the one they are pressed in.
+type listKeys struct {
+	listSelection *gtk.SingleSelection // single-select list
+	listView      *gtk.ListView        // for ScrollTo on key nav
+	multiSearch   *gtk.SearchEntry     // multi-select list: Down moves into it
+	multiView     *gtk.ListView
+	groupToggle   func(delta int) bool // collapsible list: fold/unfold the selected group; false = not handled
+	rowActivate   func() bool          // list with switches: flip the selected row; false = not a switch
+}
+
 // builder holds what the items of one dialog share while it is built and used.
 type builder struct {
 	d     *dialog
@@ -24,13 +35,10 @@ type builder struct {
 	firstFocus  gtk.Widgetter
 
 	// for the key handler
-	listSelection *gtk.SingleSelection // single-select list
-	listView      *gtk.ListView        // for ScrollTo on key nav
-	multiSearch   *gtk.SearchEntry     // multi-select list: Up/Down move focus into the list
-	multiView     *gtk.ListView
-	nav           *tileNav             // keyboard cursor across all tile sections
-	textViews     []*gtk.TextView      // Enter inserts a newline in these; Ctrl+Enter submits
-	groupToggle   func(delta int) bool // collapsible list: fold/unfold the selected group; false = not handled
+	listKeys // of the list the keys are for
+
+	nav       *tileNav        // keyboard cursor across all tile sections
+	textViews []*gtk.TextView // Enter inserts a newline in these; Ctrl+Enter submits
 
 	activeID string            // id of the last tiles group interacted with ({_active})
 	appsRes  *launcher.Results // type = "apps": the index the list shows
@@ -38,10 +46,11 @@ type builder struct {
 	submit   func()            // set once every item is built; tile and list clicks call it
 	end      func(result)      // set with it; a closing button calls it
 
+	stops []stop // the items the keyboard can walk between, top to bottom
+
 	// live controls (see live.go)
-	refreshers  []func()    // re-read each state
-	errLabel    *gtk.Label  // where a failed command is reported
-	rowActivate func() bool // list with switches: flip the selected row; false = not a switch
+	refreshers []func()   // re-read each state
+	errLabel   *gtk.Label // where a failed command is reported
 }
 
 // focus makes w the widget the dialog starts on, unless an earlier one is.
@@ -62,6 +71,7 @@ func (b *builder) item(item config.Item) *gtk.Box {
 		lbl.SetXAlign(0)
 		row.Append(lbl)
 	}
+	groups := len(b.nav.groups)
 	var input gtk.Widgetter // the widget .spot-invalid is put on and focus goes to
 	var onEdit func(func()) // registers a callback for edits (clears .spot-invalid)
 	switch item.Type {
@@ -94,6 +104,19 @@ func (b *builder) item(item config.Item) *gtk.Box {
 	default:
 		log.Printf("unknown item type: %q (skipping)", item.Type)
 		return nil
+	}
+	if item.Type != "meter" && item.Type != "separator" {
+		s := stop{row: row, kind: item.Type}
+		if len(b.nav.groups) > groups {
+			s.tiles = b.nav.groups[groups]
+			s.tiles.stop = len(b.stops)
+		}
+		if b.listSelection != nil || b.multiView != nil {
+			k := b.listKeys
+			s.list = &k
+			b.listKeys = listKeys{}
+		}
+		b.stops = append(b.stops, s)
 	}
 	if item.Required || item.HasPattern() {
 		if _, ok := b.values[item.ID]; ok {

@@ -1,0 +1,55 @@
+# Controls that apply at once: switches in three looks, a segmented control,
+# live sliders and a button.
+
+title  = "Controls"
+width  = 420
+style  = "style.css"
+toggle = true
+
+[[items]]
+type      = "switch"
+id        = "sw"
+label     = "A switch"
+look      = "switch"
+state     = "./demo.sh get sw"
+on_change = "./demo.sh set sw {value}"
+
+[[items]]
+type      = "switch"
+id        = "btn"
+label     = "A button that stays pressed"
+look      = "button"
+state     = "./demo.sh get btn"
+on_change = "./demo.sh set btn {value}"
+
+[[items]]
+type      = "switch"
+id        = "box"
+label     = "A check box"
+look      = "checkbox"
+state     = "./demo.sh get box"
+on_change = "./demo.sh set box {value}"
+
+[[items]]
+type = "separator"
+
+[[items]]
+type      = "segmented"
+id        = "profile"
+label     = "Profile"
+options   = ["saver", "balanced", "fast"]
+labels    = ["Saver", "Balanced", "Fast"]
+state     = "./demo.sh get profile balanced"
+on_change = "./demo.sh set profile {value}"
+
+[[items]]
+type      = "scale"
+id        = "volume"
+label     = "Volume"
+state     = "./demo.sh get volume 40"
+on_change = "./demo.sh set volume {value}"
+
+[[items]]
+type  = "meter"
+label = "The same volume, as a meter"
+state = "./demo.sh get volume 40"

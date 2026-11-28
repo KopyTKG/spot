@@ -1,0 +1,42 @@
+# A menu that opens a demo of every component. Run it from this folder, so that
+# its commands find their neighbours:
+#
+#   cd examples/components && spot demo.toml
+
+width   = 380
+style   = "style.css"
+toggle  = true
+title   = "spot components"
+include = ["menu/*.toml"]
+
+[menu]
+placeholder = "Search…  (try: bottom)"
+height      = 320
+
+[[page.main.entry]]
+label = "  Tiles that switch, and meters"
+exec = 'spot toggles.toml'
+back = true
+
+[[page.main.entry]]
+label = "  Controls that apply at once"
+exec = 'spot controls.toml'
+back = true
+
+[[page.main.entry]]
+label = "  Lists"
+exec = 'spot lists.toml'
+back = true
+
+[[page.main.entry]]
+label = "  A form"
+exec = 'spot form.toml'
+back = true
+
+[[page.main.entry]]
+label = "  Menu pages"
+page = 'pages'
+
+[[page.main.entry]]
+label = "  Documentation"
+open = 'https://github.com/KopyTKG/spot/blob/main/docs/toml.md'

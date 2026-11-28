@@ -12,7 +12,7 @@ import (
 func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) func(uint, gdk.ModifierType, gtk.Widgetter) bool {
 	d := b.d
 	return func(keyval uint, state gdk.ModifierType, focus gtk.Widgetter) bool {
-		if d.busy {
+		if d.busy || inPopup(focus) && keyval != gdk.KEY_Escape {
 			return false
 		}
 		if back != nil {
@@ -23,6 +23,25 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 			case keyval == gdk.KEY_BackSpace && state&(gdk.ShiftMask|gdk.ControlMask|gdk.AltMask) == 0 &&
 				backspaceGoesBack(focus):
 				goBack()
+				return true
+			}
+		}
+		if len(b.stops) > 0 {
+			b.listKeys = b.listFor(focus)
+		}
+		// Up and Down leave a list or a text area at its first and last line.
+		if state&(gdk.ControlMask|gdk.AltMask|gdk.ShiftMask) == 0 && focus != nil {
+			by := 0
+			switch keyval {
+			case gdk.KEY_Up, gdk.KEY_KP_Up:
+				by = -1
+			case gdk.KEY_Down, gdk.KEY_KP_Down:
+				by = 1
+			}
+			if tv, ok := focus.(*gtk.TextView); ok && by != 0 && b.leaveText(tv, by) {
+				return true
+			}
+			if by != 0 && b.leaveList(focus, by) {
 				return true
 			}
 		}
@@ -49,7 +68,7 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 		}
 		// Multi-select lists: Up/Down hand focus to the list, whose own
 		// keys (arrows, Space, Shift/Ctrl+arrows) do the selecting.
-		if b.multiView != nil && b.multiSearch.HasFocus() {
+		if b.multiView != nil && within(focus, b.multiSearch) {
 			switch keyval {
 			case gdk.KEY_Up, gdk.KEY_KP_Up, gdk.KEY_Down, gdk.KEY_KP_Down:
 				b.multiView.GrabFocus()
@@ -73,21 +92,45 @@ func (b *builder) keys(back *config.BackSpec, goBack func(), end func(result)) f
 			if (dx != 0 || dy != 0) && b.nav.move(dx, dy) {
 				return true
 			}
+			if dy != 0 { // past the first or last row: on to what is above or below
+				b.walk(b.nav.active.stop, dy, b.nav.cur%b.nav.active.cols)
+				return true
+			}
 		}
-		// A focused switch, segment or button takes Enter itself; Up and Down walk
-		// between controls (a slider needs them for itself).
+		if state&(gdk.ControlMask|gdk.AltMask|gdk.ShiftMask) == 0 {
+			switch keyval {
+			case gdk.KEY_Up, gdk.KEY_KP_Up, gdk.KEY_Down, gdk.KEY_KP_Down:
+				if b.walks(focus) {
+					by := 1
+					if keyval == gdk.KEY_Up || keyval == gdk.KEY_KP_Up {
+						by = -1
+					}
+					b.walk(b.stopOf(focus), by, 0)
+					return true
+				}
+			case gdk.KEY_Left, gdk.KEY_KP_Left:
+				if segment(focus, -1) {
+					return true
+				}
+			case gdk.KEY_Right, gdk.KEY_KP_Right:
+				if segment(focus, 1) {
+					return true
+				}
+			}
+		}
+		// A focused switch, segment or button takes Enter itself.
 		if w := focusedControl(focus); w != nil {
 			switch keyval {
 			case gdk.KEY_Return, gdk.KEY_KP_Enter:
 				w.Activate()
 				return true
-			case gdk.KEY_Up, gdk.KEY_KP_Up:
-				d.root.ChildFocus(gtk.DirTabBackward)
-				return true
-			case gdk.KEY_Down, gdk.KEY_KP_Down:
-				d.root.ChildFocus(gtk.DirTabForward)
-				return true
 			}
+		}
+		// Space flips a switch row too, as it does other switches. Only while the
+		// search is empty: in "ssh estab" it is part of what is typed.
+		if keyval == gdk.KEY_space && state&(gdk.ControlMask|gdk.AltMask|gdk.ShiftMask) == 0 &&
+			b.rowActivate != nil && b.inList(focus) && backspaceGoesBack(focus) && b.rowActivate() {
+			return true
 		}
 		switch keyval {
 		case gdk.KEY_Escape:

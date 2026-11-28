@@ -5,6 +5,11 @@ be run as they are: `spot examples/<name>.toml`. They share one stylesheet,
 [`theme.css`](theme.css). For **every key in one file** start with
 [`config-reference.toml`](config-reference.toml).
 
+## Every component
+
+[`components/`](components/) is one menu that opens a demo of each component, with pretend settings:
+`cd components && spot demo.toml`.
+
 ## Forms and prompts
 
 | File | Shows |

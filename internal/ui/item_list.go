@@ -253,7 +253,7 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 		}
 	}
 	if gs != nil {
-		b.groupToggle = func(delta int) bool {
+		toggle := func(delta int) bool {
 			pos := int(selection.Selected())
 			if pos < 0 || pos >= len(entries) {
 				return false
@@ -281,10 +281,11 @@ func (b *builder) list(item config.Item, row *gtk.Box) (input gtk.Widgetter) {
 			}
 			return false
 		}
+		b.groupToggle = toggle
 		d.hook(lv, lv.ConnectActivate(func(pos uint) {
 			if int(pos) < len(entries) && entries[pos].Header {
 				selection.SetSelected(pos)
-				b.groupToggle(0)
+				toggle(0)
 			}
 		}))
 	}

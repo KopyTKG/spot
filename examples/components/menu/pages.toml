@@ -1,0 +1,27 @@
+# Included by ../demo.toml: more pages of the same menu.
+
+[page.pages]
+title = "Menu pages"
+
+[[page.pages.entry]]
+label = "  One level deeper"
+page = 'deeper'
+
+[[page.pages.entry]]
+label = "  A command in a terminal"
+terminal = 'echo "Hello from a menu entry"'
+hold = true
+
+[page.deeper]
+title = "Deeper"
+
+[[page.deeper.entry]]
+label = "  To the bottom"
+page = 'bottom'
+
+[page.bottom]
+title = "The bottom"
+
+[[page.bottom.entry]]
+label = "  Search from the first page finds the bottom too"
+exec = 'true'

@@ -1,0 +1,84 @@
+# Tiles that switch, and meters. Green tiles are on; picking one flips it.
+# "Broken" shows what an unreadable state looks like.
+
+title  = "Quick settings"
+width  = 520
+style  = "style.css"
+toggle = true
+
+[[items]]
+type    = "tiles"
+id      = "q"
+columns = 4
+
+[[items.tiles]]
+icon      = ""
+label     = "Wi-Fi"
+value     = "wifi"
+state     = "./demo.sh get wifi on"
+on_change = "./demo.sh set wifi {value}"
+
+[[items.tiles]]
+icon      = ""
+label     = "Night"
+value     = "night"
+state     = "./demo.sh get night off"
+on_change = "./demo.sh set night {value}"
+
+[[items.tiles]]
+icon      = ""
+label     = "Auto lock"
+value     = "lock"
+state     = "./demo.sh get lock on"
+on_change = "./demo.sh set lock {value}"
+
+[[items.tiles]]
+icon      = ""
+label     = "Notify"
+value     = "notify"
+state     = "./demo.sh get notify on"
+on_change = "./demo.sh set notify {value}"
+
+[[items.tiles]]
+icon      = ""
+label     = "Flight"
+value     = "flight"
+state     = "./demo.sh get flight off"
+on_change = "./demo.sh set flight {value}"
+class     = "warm"
+
+[[items.tiles]]
+icon      = ""
+label     = "Broken"
+value     = "broken"
+state     = "./demo.sh broken"
+on_change = "true"
+
+# A tile without a state is an ordinary choice: it closes the dialog.
+[[items.tiles]]
+icon  = ""
+label = "More…"
+value = "more"
+
+[[items]]
+type   = "meter"
+label  = "Battery"
+state  = "./demo.sh get battery 72"
+format = "{value} %"
+
+[[items]]
+type   = "meter"
+label  = "Downloads (of 20 GB)"
+state  = "./demo.sh get downloads 13"
+max    = 20
+format = "{value} GB"
+
+# A button changes something; every state and meter is read again.
+[[items]]
+type  = "button"
+id    = "charge"
+label = "  Charge the battery"
+exec  = "./demo.sh add battery 10"
+
+[submit]
+stdout = "{q}"

@@ -215,6 +215,7 @@ type tileGroup struct {
 	children []*gtk.FlowBoxChild
 	cols     int
 	flips    []func()
+	stop     int // which item of the dialog this is, among those the keyboard walks
 }
 
 // selected is the index of the section's selected tile, or -1.
@@ -295,7 +296,8 @@ func (n *tileNav) move(dx, dy int) bool {
 	case dy > 0 && row < last/g.cols:
 		next = last // short final row
 	case dy > 0:
-		if gi+1 >= len(n.groups) || len(n.groups[gi+1].children) == 0 {
+		// Only into the grid right below: what lies between must not be skipped.
+		if gi+1 >= len(n.groups) || len(n.groups[gi+1].children) == 0 || n.groups[gi+1].stop != g.stop+1 {
 			return false
 		}
 		target = n.groups[gi+1]
@@ -303,7 +305,7 @@ func (n *tileNav) move(dx, dy int) bool {
 	case dy < 0 && idx-g.cols >= 0:
 		next = idx - g.cols
 	default:
-		if gi == 0 || len(n.groups[gi-1].children) == 0 {
+		if gi == 0 || len(n.groups[gi-1].children) == 0 || n.groups[gi-1].stop != g.stop-1 {
 			return false
 		}
 		target = n.groups[gi-1]

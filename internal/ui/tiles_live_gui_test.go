@@ -4,6 +4,7 @@ package ui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -218,5 +219,56 @@ func TestLiveTileFromAMod(t *testing.T) {
 	pump(func() bool { return false })
 	if strings.Count(mods.log(), "m.set(") != 1 {
 		t.Error("an unknown tile made a request: " + mods.log())
+	}
+}
+
+// The component demos must keep working: each is built, as shipped, and reads
+// its states without complaint, but for the one that is broken on purpose.
+func TestComponentDemos(t *testing.T) {
+	gtk.Init()
+	if gdk.DisplayGetDefault() == nil {
+		t.Skip("no display")
+	}
+	dir, err := filepath.Abs("../../examples/components")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "XDG_RUNTIME_DIR="+t.TempDir())
+	files, _ := filepath.Glob(dir + "/*.toml")
+	if len(files) != 5 {
+		t.Fatalf("%d demos", len(files))
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := config.ParseConfigAt(f, data, func(string) (string, bool) { return "", false })
+		if err != nil {
+			t.Errorf("%s: %v", f, err)
+			continue
+		}
+		if w := config.UnknownKeys(data); len(w) != 0 {
+			t.Errorf("%s: %v", f, w)
+		}
+		if _, err := os.Stat(filepath.Join(dir, cfg.Style)); err != nil {
+			t.Errorf("%s: style: %v", f, err)
+		}
+		var d *dialog
+		if cfg.IsMenu() {
+			d = newMenu(cfg, f, "", env, dir, nil, nil)
+		} else {
+			d = newDialog(cfg, env, dir, nil, nil)
+		}
+		d.finish = func(result) {}
+		m := &openMenu{t: t, d: d}
+		pump(func() bool { return false })
+		want := ""
+		if filepath.Base(f) == "toggles.toml" {
+			want = "demo.sh: this one cannot be read, on purpose"
+		}
+		if got := m.problem(); got != want {
+			t.Errorf("%s: %q, want %q", filepath.Base(f), got, want)
+		}
 	}
 }
