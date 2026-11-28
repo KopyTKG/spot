@@ -43,6 +43,7 @@ What mid and big tools need, and widgets alone do not give:
 |---------|------|--------------------|
 | [0.9](https://github.com/KopyTKG/spot/milestone/1) | **Daemon mods** (experimental): parser and provider mods in embedded Lua, run in separate mod host processes; `spot get` / `watch` / `call` ([#16](https://github.com/KopyTKG/spot/issues/16), [draft](modding.md)) | a sockets mod feeding a table and a bar counter |
 | [0.10](https://github.com/KopyTKG/spot/milestone/2) | Pages and menu trees, searchable across every level, fed by mods ([#25](https://github.com/KopyTKG/spot/issues/25)) | a whole system menu in one config |
+| [0.10.x](https://github.com/KopyTKG/spot/milestone/7) | **Components:** menus get section headings, switch rows, search words and confirm ([#39](https://github.com/KopyTKG/spot/issues/39)); a meter, state on tiles, per-tile CSS classes ([#18](https://github.com/KopyTKG/spot/issues/18)) | the system menu regrouped, a quick-settings grid |
 | [0.11](https://github.com/KopyTKG/spot/milestone/5) | **Trust:** approvals only root can write, fingerprints for configs, CSS and scripts, a built-in manager ([draft](framework.md)) | a cloned setup reviewed and approved in one window |
 | [0.12](https://github.com/KopyTKG/spot/milestone/6) | **Actions:** built-in actions for mods, root commands confirmed each time, unsandboxed mods as an alpha ([draft](framework.md)) | real shell scripts replaced |
 | [0.13](https://github.com/KopyTKG/spot/milestone/3) | Layout containers; live lists and tables; row actions | firewall and "Open With" tools |
@@ -110,17 +111,13 @@ What else is left over is in [#32](https://github.com/KopyTKG/spot/issues/32).
 
 Not tied to a release above:
 
-- **Left from 0.8** ([#18](https://github.com/KopyTKG/spot/issues/18)): a meter, switch state on
-  tiles, per-tile CSS classes. States are read on open and after each change; noticing a change made
-  elsewhere (polling or a signal) waits for live data in 0.11.
 - **"Open With" by file type** ([#13](https://github.com/KopyTKG/spot/issues/13)); its extra keys
   should come from the general row actions.
-- **A grid layout** (`layout = "grid"`, `columns`) for the apps list.
+- **Components with no release** ([#40](https://github.com/KopyTKG/spot/issues/40)): tabs, a number stepper, tables with real
+  columns, a grid layout and more.
 - **A filesystem watcher for the app index**, so an edited `.desktop` file shows at once.
 - **Desktop actions** ("New Window", "New Private Window") as secondary entries of an app.
-- **Result previews:** an image or text preview per row.
-- **Confirm on a tile or row**, key shortcuts on tiles, icons on ordinary list rows,
-  `spot --check` to validate a config.
+- **`spot --check`** to validate a config.
 - **More ready-made sources** in `examples/sources/`.
 
 ## Shipped
