@@ -1,7 +1,7 @@
 # Roadmap
 
 Where spot is going, and what it is not. Shipped work is in the [changelog](../CHANGELOG.md).
-Nothing in the plan after 0.9 exists yet, and the version numbers show order, not dates.
+Nothing in the plan after 0.10 exists yet, and the version numbers show order, not dates.
 
 ## Direction
 
@@ -134,6 +134,7 @@ Not tied to a release above:
 | 0.7.4 | `SPOT_TARGET`: open a file or URL with the picked app; `MimeType=` in the index |
 | 0.8 | Controls that apply at once (`state` / `on_change`): `switch`, `segmented`, `button`, `separator`, live `scale`, switch rows in lists |
 | 0.9 | Daemon mods (experimental): sandboxed parsers and providers, approval, `spot get` / `watch` / `call` / `parse`, `from` / `call` in dialogs, `submit.copy` |
+| 0.10 | Menus: pages in one window with Back, search into the pages below, includes, `spot --page`, pages fed by mods |
 
 ## Not planned
 

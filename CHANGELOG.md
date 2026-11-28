@@ -3,15 +3,18 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` and `spot-mod-host-linux-x64` binaries, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
-## 0.10.0 — unreleased
+## 0.10.0 — 2026-11-28
 
 - **Menus:** a config with `[page.<name>]` tables is a tree of pages in one window, with Back that
   returns to the entry you came through, a search that reaches into the pages below, includes, and
   `spot --page <name>`. See [`docs/toml.md`](docs/toml.md#menus).
 - **Menu pages fed by mods:** rows from a provider, or from a parser reading your command's output,
   with the action written once in the config. A row never becomes part of a command.
+- Without a `systemd` user session, `spot mods check` reported the memory of the mod host's supervisor
+  instead of the host's.
 - **A config that may need a change:** `{id}` of a `stdin = true` list in `submit.exec` is now refused
   (0.9 warned). Write `"$SPOT_VALUE_<ID>"` instead.
+- Without a `systemd` user session, `spot mods check` reported the memory of the wrong process.
 
 ## 0.9.3 — 2026-11-27
 

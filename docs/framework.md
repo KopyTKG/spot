@@ -1,6 +1,7 @@
 # spot as a framework: menus and mod levels
 
-> **Draft. Nothing here is built.** What was decided on 2026-11-28 is marked **decided**; the rest is open.
+> **Draft.** Menus are released (0.10); **nothing else here is built.** What was decided on 2026-11-28 is
+> marked **decided**; the rest is open.
 > It builds on [`modding.md`](modding.md) and covers [0.10, menus](https://github.com/KopyTKG/spot/issues/25).
 
 ## The goal
@@ -78,7 +79,7 @@ call = "ssh.connect"                 # picked entry's key goes to the mod
 
 **Decided:** pages from a mod can lead to further pages (the SSH groups, then their hosts).
 
-**Built, not released.** The format is in [`toml.md`](toml.md#menus). One difference from above: the
+**Released in 0.10.0.** The format is in [`toml.md`](toml.md#menus). One difference from above: the
 search covers a fed page's rows only while you are on it. **Proof:** `arch-menu` replaced, feeling the same.
 
 ## Not spot's job

@@ -256,7 +256,24 @@ func HostPath() (string, error) {
 }
 
 // PID is the host's process.
-func (h *Host) PID() int { return h.cmd.Process.Pid }
+func (h *Host) PID() int {
+	if h.Limited {
+		return h.cmd.Process.Pid
+	}
+	// Without a scope what was started is the supervisor; the host is its first
+	// child. What it adopts later comes after.
+	dir := "/proc/" + strconv.Itoa(h.cmd.Process.Pid) + "/task/"
+	tasks, _ := os.ReadDir(dir)
+	for _, t := range tasks {
+		b, err := os.ReadFile(dir + t.Name() + "/children")
+		if f := strings.Fields(string(b)); err == nil && len(f) > 0 {
+			if pid, err := strconv.Atoi(f[0]); err == nil {
+				return pid
+			}
+		}
+	}
+	return h.cmd.Process.Pid
+}
 
 // Cgroup is the folder of the host's scope, "" when not Limited.
 func (h *Host) Cgroup() string { return h.cgroup }

@@ -54,9 +54,12 @@ func gone(pid int) bool {
 
 // The whole chain: a scope with limits, the host restricting itself and
 // executing again, and the channel surviving both.
-func TestAHostStartsRestrictedAndLimited(t *testing.T) {
+func TestAHostStartsRestrictedAndLimited(t *testing.T)     { restricted(t, false) }
+func TestAHostStartsRestrictedWithoutSystemd(t *testing.T) { restricted(t, true) }
+
+func restricted(t *testing.T, noScope bool) {
 	bin := buildHost(t)
-	h, err := Start(Config{Name: "probe", Policy: sandbox.Policy{Self: bin}, Stderr: os.Stderr})
+	h, err := Start(Config{Name: "probe", Policy: sandbox.Policy{Self: bin}, Stderr: os.Stderr, NoScope: noScope})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,14 +69,28 @@ func TestAHostStartsRestrictedAndLimited(t *testing.T) {
 	}
 	pid := h.PID()
 	st := status(t, pid)
-	if st["NoNewPrivs"] != "1" || st["Seccomp"] != "2" || st["PPid"] != strconv.Itoa(os.Getpid()) {
+	parent := os.Getpid()
+	if !h.Limited { // between us and it: the supervisor
+		parent = h.cmd.Process.Pid
+		if pid == parent {
+			t.Fatal("PID is the supervisor's, not the host's")
+		}
+	}
+	if st["NoNewPrivs"] != "1" || st["Seccomp"] != "2" || st["PPid"] != strconv.Itoa(parent) {
 		t.Errorf("NoNewPrivs %s, Seccomp %s, parent %s", st["NoNewPrivs"], st["Seccomp"], st["PPid"])
 	}
 	if _, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ"); err == nil {
 		t.Error("its environment can be read")
 	}
 	if !h.Limited {
-		t.Skip("no systemd user session: limits not checked")
+		h.Stop()
+		if !gone(pid) {
+			t.Error("the host is still there")
+		}
+		if !noScope {
+			t.Skip("no systemd user session: limits not checked")
+		}
+		return
 	}
 	for file, want := range map[string]string{"memory.max": "268435456", "memory.swap.max": "0", "pids.max": "128"} {
 		b, err := os.ReadFile(filepath.Join(h.Cgroup(), file))
