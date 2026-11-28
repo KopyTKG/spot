@@ -184,7 +184,7 @@ func main() {
 	if err != nil {
 		failDialog(cfgPath, "%s: %v", cfgPath, err)
 	}
-	for _, w := range append(config.UnknownKeys(data), cfg.UnquotedStdin()...) {
+	for _, w := range config.UnknownKeys(data) {
 		fmt.Fprintf(os.Stderr, "spot: %s: warning: %s\n", cfgPath, w)
 	}
 	if page != "" && cfg.Pages[page] == nil {

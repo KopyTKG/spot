@@ -36,7 +36,7 @@ Three ways data moves between a script and spot:
 |-----------|-----|
 | **Into spot** | a list reads one option per line from **stdin** (`stdin = true`); `SPOT_TITLE`, `SPOT_FOOTER`, `SPOT_PLACEHOLDER`, `SPOT_DEFAULT`, `SPOT_QUERY` set text per call, so one config serves many scripts |
 | **Out of spot** | the answer is printed to **stdout** (`[submit] stdout = "{id}"`, or `format = "json"` for every field), and the **exit status** says how it ended |
-| **Straight to a command** | `[submit] exec = "… {field} …"` runs a command with the fields substituted (shell-quoted); use it for simple forms, a script when you need logic |
+| **Straight to a command** | `[submit] exec` runs a command; read the fields as `"$SPOT_VALUE_<ID>"` (a bare `{field}` is pasted in **unquoted**). Use it for simple forms, a script when you need logic |
 
 The exit status is the contract: `0` an answer was given, `1` it was cancelled (Esc, a click
 outside) and **nothing is printed**, `3` the config is broken. So `|| exit 0` after `spot` means

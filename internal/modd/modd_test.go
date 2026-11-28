@@ -46,11 +46,15 @@ func newFixture(t *testing.T) fixture {
 	}
 	d := t.TempDir()
 	os.Chmod(d, 0o700)
-	bin := d + "/spot-mod-host"
-	c := exec.Command("go", "build", "-o", bin, "gitlab.com/KopyTKG/spot/cmd/spot-mod-host")
-	c.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if out, err := c.CombinedOutput(); err != nil {
-		t.Fatalf("building the host: %v\n%s", err, out)
+	// A prebuilt host, to run these where there is no Go (in a container).
+	bin := os.Getenv("SPOT_TEST_HOST")
+	if bin == "" {
+		bin = d + "/spot-mod-host"
+		c := exec.Command("go", "build", "-o", bin, "gitlab.com/KopyTKG/spot/cmd/spot-mod-host")
+		c.Env = append(os.Environ(), "CGO_ENABLED=0")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("building the host: %v\n%s", err, out)
+		}
 	}
 	store := approval.Store{Mods: d + "/mods", Records: d + "/approvals", Home: d, Config: d, Dir: d + "/state"}
 	m, err := New(store, bin, d+"/run")

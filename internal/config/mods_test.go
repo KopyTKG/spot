@@ -36,10 +36,18 @@ func TestModKeys(t *testing.T) {
 	if err != nil || !fine.UsesMods() {
 		t.Errorf("the safe way: %v", err)
 	}
-	// An old config keeps working, with a warning.
-	old, err := ParseConfig([]byte(item("type='list'\nid='f'\nstdin=true\n[submit]\nexec='rm {f}'")), noEnv)
-	if err != nil || len(old.UnquotedStdin()) != 1 || old.UsesMods() {
-		t.Errorf("stdin: %v %q", err, old.UnquotedStdin())
+	// A stdin row is never pasted into the command, quoted or not.
+	for _, exec := range []string{`rm {f}`, `rm "{f}"`, `rm -- '{f}'`} {
+		_, err := ParseConfig([]byte(item("type='list'\nid='f'\nstdin=true\n[submit]\nexec='''"+exec+"'''")), noEnv)
+		if err == nil || !strings.Contains(err.Error(), "SPOT_VALUE_F") {
+			t.Errorf("stdin %s: %v", exec, err)
+		}
+	}
+	// From the environment, and printed, it is fine.
+	for _, ok := range []string{`exec='rm -- "$SPOT_VALUE_F"'`, "stdout='{f}'", "copy='{f}'"} {
+		if _, err := ParseConfig([]byte(item("type='list'\nid='f'\nstdin=true\n[submit]\n"+ok)), noEnv); err != nil {
+			t.Errorf("%s: %v", ok, err)
+		}
 	}
 	if err := fine.LeadingDash(map[string]string{"h": "-x"}); err == nil {
 		t.Error("a leading dash")

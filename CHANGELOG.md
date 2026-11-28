@@ -8,6 +8,8 @@ AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [
 - **Menus:** a config with `[page.<name>]` tables is a tree of pages in one window, with Back that
   returns to the entry you came through, a search that reaches into the pages below, includes, and
   `spot --page <name>`. See [`docs/toml.md`](docs/toml.md#menus). Pages fed by mods are not built yet.
+- **A config that may need a change:** `{id}` of a `stdin = true` list in `submit.exec` is now refused
+  (0.9 warned). Write `"$SPOT_VALUE_<ID>"` instead.
 
 ## 0.9.3 — 2026-11-27
 

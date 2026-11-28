@@ -785,7 +785,8 @@ exec = 'ping -c 1 -- "$SPOT_VALUE_HOST"'    # quotes around it, "--" before it
 
 Quoted like this nothing in a value can run. `--` keeps a value starting with `-`
 from being read as an option, where the program supports it. This matters most for
-values you did not type yourself: rows from `stdin`, such as file or network names.
+values you did not type yourself, such as file or network names. For rows from `stdin`, and from a mod
+or parser, `{id}` in `exec` is refused.
 
 ### `exec`
 

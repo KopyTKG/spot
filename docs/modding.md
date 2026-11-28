@@ -545,7 +545,7 @@ The design was agreed on 2026-11-27, by its two users, with these answers:
 |----------|--------|
 | A security switch whose mod is down | shows **unknown**, never the last value |
 | Limits on the arguments of a `run` permission | **not in the first version** |
-| Unquoted `{id}` for `stdin = true` lists | first a **warning**, refused in a later release |
+| Unquoted `{id}` for `stdin = true` lists | warned in 0.9, **refused from 0.10** |
 | No `systemd` user session | mods still run, **warned** that there is no memory or process limit |
 
 ### The sandbox
@@ -648,8 +648,8 @@ exec = 'ping -c 1 -- "$SPOT_VALUE_HOST"'
 
 Quoting automatically would not be enough: inside a template's own `"{id}"`, `$(...)` would still
 run. Two ids that map to the same variable name are a config error, and a value containing NUL is
-refused. Lists with `stdin = true` have the same problem today; changing them would break existing
-configs, so they get the variables too and the documentation warns.
+refused. Lists with `stdin = true` have the same problem: they get the variables too, were warned about in
+0.9, and from 0.10 their `{id}` in `submit.exec` is refused as well.
 
 - Every `SPOT_VALUE_*` inherited from the caller is removed first, so that an empty item cannot take
   someone else's value; item ids match `[a-zA-Z][a-zA-Z0-9_-]*`.

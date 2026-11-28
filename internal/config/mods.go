@@ -126,6 +126,9 @@ func (c *Config) checkModValues() error {
 
 // checkSubmit checks submit.call and submit.copy.
 func (c *Config) checkSubmit() error {
+	if err := c.checkStdinInExec(); err != nil {
+		return err
+	}
 	s := c.Submit
 	switch {
 	case s.Call != "" && !modItem.MatchString(s.Call):
@@ -150,16 +153,15 @@ func (c *Config) checkSubmit() error {
 	return nil
 }
 
-// UnquotedStdin names the stdin lists whose value submit.exec pastes into the
-// command. A later spot refuses them.
-func (c *Config) UnquotedStdin() []string {
-	var out []string
+// checkStdinInExec refuses a stdin list whose value submit.exec pastes into the
+// command: the rows come from outside, so a row could run anything.
+func (c *Config) checkStdinInExec() error {
 	for _, it := range c.Items {
 		if it.Stdin && it.ID != "" && strings.Contains(c.Submit.Exec, "{"+it.ID+"}") {
-			out = append(out, fmt.Sprintf("submit.exec: {%s} of a stdin list is pasted into the command unquoted; use \"$%s\" (a later spot refuses this)", it.ID, valueVar(it.ID)))
+			return fmt.Errorf("submit.exec: {%s} is from stdin and would be pasted into the command; use \"$%s\"", it.ID, valueVar(it.ID))
 		}
 	}
-	return out
+	return nil
 }
 
 // LeadingDash is the item whose foreign value would be read as an option.
