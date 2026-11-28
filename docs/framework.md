@@ -103,7 +103,8 @@ spot. A menu entry could call such a function through `hyprctl eval`; **not trie
 and so do **the scripts they call**. No folder is exempt, your own included.
 
 `spot` cannot work out reliably which scripts a command runs: a script can call others however it
-likes. So whole folders are covered, named by the setup:
+likes. So whole folders are covered, named by the setup (**decided:** named folders, not the whole
+repository):
 
 ```toml
 # setup.toml, at the root of the setup
@@ -214,7 +215,7 @@ or removed in any release, and says so at approval.
   be relied on.
 - It is not safer than a shell script. It gains one structure, dialogs wired to data, and the notice
   when it changes.
-- **Proposed:** it needs Landlock ABI 11 like every other mod, although it uses none of it. Otherwise it
+- **Decided:** it needs Landlock ABI 11 like every other mod, although it uses none of it. Otherwise it
   would become the way to run mods on an old kernel, with no protection at all. Both users have a new
   kernel, so this costs nothing now.
 
@@ -259,8 +260,10 @@ To hold before a level ships, each with a test.
 5. **Unsandboxed, alpha**, only for what is left. It may be very little: wallpaper, key list, update
    check. A month after it is released, keep or delete it.
 
-## Open questions
+## Still to work out
 
-1. **Are named folders the right unit?** The other way is covering the whole repository, which is
-   simpler and misses nothing in it, but then an edit to an editor's settings stops your menus.
-2. Should an unsandboxed mod require Landlock ABI 11, as proposed?
+None of these blocks menus.
+
+- What the root-owned helper reads and shows by itself, so that it need not trust `spot`.
+- How a covered file is checked right before a command without making menus feel slow.
+- Whether `hyprctl eval` can call a function of the Hyprland config from a menu entry.
