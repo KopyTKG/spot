@@ -42,9 +42,11 @@ What mid and big tools need, and widgets alone do not give:
 | Release | Adds | Proven by building |
 |---------|------|--------------------|
 | [0.9](https://github.com/KopyTKG/spot/milestone/1) | **Daemon mods** (experimental): parser and provider mods in embedded Lua, run in separate mod host processes; `spot get` / `watch` / `call` ([#16](https://github.com/KopyTKG/spot/issues/16), [draft](modding.md)) | a sockets mod feeding a table and a bar counter |
-| [0.10](https://github.com/KopyTKG/spot/milestone/2) | Pages and menu trees, searchable across every level, fed by mods | a whole system menu in one config |
-| [0.11](https://github.com/KopyTKG/spot/milestone/3) | Layout containers; live lists and tables; row actions | firewall and "Open With" tools |
-| [0.12](https://github.com/KopyTKG/spot/milestone/4) | Window mode; a long-running backend exchanging JSON lines with the window | a small control centre |
+| [0.10](https://github.com/KopyTKG/spot/milestone/2) | Pages and menu trees, searchable across every level, fed by mods ([#25](https://github.com/KopyTKG/spot/issues/25)) | a whole system menu in one config |
+| [0.11](https://github.com/KopyTKG/spot/milestone/5) | **Trust:** approvals only root can write, fingerprints for configs, CSS and scripts, a built-in manager ([draft](framework.md)) | a cloned setup reviewed and approved in one window |
+| [0.12](https://github.com/KopyTKG/spot/milestone/6) | **Actions:** built-in actions for mods, root commands confirmed each time, unsandboxed mods as an alpha ([draft](framework.md)) | real shell scripts replaced |
+| [0.13](https://github.com/KopyTKG/spot/milestone/3) | Layout containers; live lists and tables; row actions | firewall and "Open With" tools |
+| [0.14](https://github.com/KopyTKG/spot/milestone/4) | Window mode; a long-running backend exchanging JSON lines with the window | a small control centre |
 
 Daemon mods come first because they make real tools much easier to build, and need no new layout or
 widget: today's lists and controls can show their data. Their API stays experimental until menu
@@ -54,10 +56,10 @@ trees have used it.
 
 Open design questions, to settle before the release that needs them:
 
-- 0.9: how a mod host and an external backend (0.12) share one model, so there are not two systems.
-- 0.10: whether a menu tree is one file or includes others.
-- 0.11: how containers nest in TOML without becoming unreadable.
-- 0.12: the backend protocol, its versioning, and what happens when the backend dies.
+- 0.11: what the root-owned helper reads and shows by itself; checking files without slowing menus.
+- 0.13: how containers nest in TOML without becoming unreadable.
+- 0.14: how a mod host and a backend share one model; the backend protocol, its versioning, and what
+  happens when the backend dies.
 
 ## Where 0.9 stands
 
@@ -97,7 +99,7 @@ Open design questions, to settle before the release that needs them:
 - A script of your own can still be swapped between its check and its start.
 - Without a `systemd` user session there are no memory or task limits.
 - A name whose DNS answer needs TCP resolves only for a mod that also lists `53` in `net`.
-- A list does not update while it is open (0.11).
+- A list does not update while it is open (0.13).
 - The sandbox needs Linux with Landlock ABI 11 on `x86_64`. It is tested on Arch, and in Debian and
   Fedora containers on the same kernel. The CI machine cannot test it, so `just test-mods` runs it
   before a release.

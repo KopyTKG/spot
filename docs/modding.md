@@ -917,7 +917,7 @@ instead of `exec`. A password item cannot be used in either.
   now, the control is marked unknown (CSS class `spot-unknown`) and cannot be moved.
 - Old rows of a list may be shown, without their switches, with a note saying how old.
 - Values are read again after every change made in the dialog. A list that updates by itself while
-  open comes with live lists (0.11); the rows stay as they were, only switch positions are read again.
+  open comes with live lists (0.13); the rows stay as they were, only switch positions are read again.
 - A dialog that uses mods, and that others than you or root could change, is refused.
 - A row's `icon`, a name from the icon theme, is shown before its label (`.spot-row-icon`).
 
@@ -1001,7 +1001,7 @@ write 64 MB within an hour.
 
 ### Broken messages between daemon and host
 
-The other side is not trusted, all the less once any program can be a backend (0.12).
+The other side is not trusted, all the less once any program can be a backend (0.14).
 
 | Case | What the daemon does |
 |------|----------------------|
@@ -1075,7 +1075,7 @@ outside spot's mods.
 
 ### One model for mods and backends
 
-A mod host and a long-running **external backend** (0.12) are the same thing to the daemon: a
+A mod host and a long-running **external backend** (0.14) are the same thing to the daemon: a
 process that publishes values and answers requests in JSON lines. A mod host is simply a backend
 that runs Lua.
 
@@ -1087,7 +1087,7 @@ that runs Lua.
 
 `from`, `call` and the command line do not know which of the two is behind a name. Names are reserved
 from the start: one owner per name, and a backend cannot take the name of an installed mod. How
-backends are approved is decided before 0.12.
+backends are approved is decided before 0.14.
 
 ### What was tested
 

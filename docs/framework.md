@@ -251,13 +251,13 @@ To hold before a level ships, each with a test.
 
 ## Order
 
-1. **0.10 menus.** Safe, visible, removes the largest script.
-2. **Root-owned approvals,** then **fingerprints**, which rest on them, then **the manager**. A manager
+1. **0.10 menus** ([#25](https://github.com/KopyTKG/spot/issues/25)). Safe, visible, removes the largest script.
+2. **0.11:** **root-owned approvals** ([#33](https://github.com/KopyTKG/spot/issues/33)), then **fingerprints** ([#34](https://github.com/KopyTKG/spot/issues/34)), which rest on them, then **the manager** ([#35](https://github.com/KopyTKG/spot/issues/35)). A manager
    that only shows things can come earlier, to try its layout.
-3. **Built-in actions**, one kind at a time, each proven by replacing real scripts: `service` and
+3. **0.12: built-in actions** ([#36](https://github.com/KopyTKG/spot/issues/36)), one kind at a time, each proven by replacing real scripts: `service` and
    `process` first (idle lock, waybar).
-4. **Root commands**, proven by moving the firewall's changes into its mod.
-5. **Unsandboxed, alpha**, only for what is left. It may be very little: wallpaper, key list, update
+4. **Root commands** ([#37](https://github.com/KopyTKG/spot/issues/37)), proven by moving the firewall's changes into its mod.
+5. **Unsandboxed, alpha** ([#38](https://github.com/KopyTKG/spot/issues/38)), only for what is left. It may be very little: wallpaper, key list, update
    check. A month after it is released, keep or delete it.
 
 ## Still to work out
