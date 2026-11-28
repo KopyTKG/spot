@@ -132,6 +132,7 @@ Not tied to a release above:
 | 0.8 | Controls that apply at once (`state` / `on_change`): `switch`, `segmented`, `button`, `separator`, live `scale`, switch rows in lists |
 | 0.9 | Daemon mods (experimental): sandboxed parsers and providers, approval, `spot get` / `watch` / `call` / `parse`, `from` / `call` in dialogs, `submit.copy` |
 | 0.10 | Menus: pages in one window with Back, search into the pages below, includes, `spot --page`, pages fed by mods |
+| 0.10.1 | Tiles that switch, a meter, per-tile CSS classes, component demos; controls and lists work from the keyboard |
 
 ## Not planned
 

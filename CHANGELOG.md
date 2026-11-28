@@ -3,7 +3,7 @@
 Releases are tagged `vX.Y.Z`; each has a GitHub release with the `spot-linux-x64` and `spot-mod-host-linux-x64` binaries, and the
 AUR packages `spot-bin` / `spot-git` follow. The reference for every key is in [`docs/`](docs/).
 
-## 0.10.1 — unreleased
+## 0.10.1 — 2026-11-28
 
 - **Tiles that switch** (`state` / `on_change`, or `from` / `call`): they light up while on, flip in
   place, and show an unreadable state as unknown, never as the old one.
