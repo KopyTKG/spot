@@ -41,8 +41,10 @@ func BuildJob(req protocol.Request, mods config.ModSource) (*Job, error) {
 
 	if cfg.UsesMods() {
 		// A dialog that can call mods must not be someone else's to change (S17).
-		if err := approval.Trusted(req.Config); err != nil {
-			return nil, fmt.Errorf("a dialog that uses mods: %w", err)
+		for _, f := range append([]string{req.Config}, cfg.Files...) {
+			if err := approval.Trusted(f); err != nil {
+				return nil, fmt.Errorf("a dialog that uses mods: %w", err)
+			}
 		}
 		for i := range cfg.Items {
 			fetch(&cfg.Items[i], req, mods)
@@ -103,6 +105,14 @@ func fetch(it *config.Item, req protocol.Request, mods config.ModSource) {
 		}
 		rows(mods.Parse(it.Parse, out))
 	}
+}
+
+// Fetch gets the rows of a menu page: of a mod's value, or of a parser reading
+// what a command prints. note says why there are none, or that they are old.
+func Fetch(from, run, parse string, env []string, dir string, mods config.ModSource) (rows []config.Row, note string) {
+	it := config.Item{Type: "list", From: from, Run: run, Parse: parse}
+	fetch(&it, protocol.Request{Env: env, Dir: dir}, mods)
+	return it.Rows, it.Note
 }
 
 // output is what the dialog's own command prints. It runs as you, like state

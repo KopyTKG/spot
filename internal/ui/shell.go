@@ -134,7 +134,7 @@ func (s *Shell) live() *dialog {
 func (s *Shell) Present(j *scheduler.Job) {
 	var d *dialog
 	if j.Cfg.IsMenu() {
-		d = newMenu(j.Cfg, j.Config, j.Page, j.Env, j.Dir, j.Back)
+		d = newMenu(j.Cfg, j.Config, j.Page, j.Env, j.Dir, j.Back, j.Mods)
 	} else {
 		d = newDialog(j.Cfg, j.Env, j.Dir, j.Back, j.Mods)
 	}

@@ -751,7 +751,42 @@ it, with the way to them ("Install › Terminal › Kitty"). Words of the way ma
 is defined once.
 
 **A menu is a program:** its commands run as you, with no check. Open only menus you would run as a
-script. Pages fed by mods are not built yet.
+script.
+
+### Pages fed by mods
+
+A page can take its rows from a [mod](modding.md). They come before the entries written on it.
+
+```toml
+[page.sockets]
+from = "sockets.table"                 # a provider's value
+exec = 'wl-copy -- "$SPOT_VALUE"'      # what picking any of its rows does
+
+[page.remote]
+run   = "cat ~/.ssh/config"            # your command, run as you
+parse = "ssh-groups"                   # a parser mod turns its output into rows
+then  = "hosts"                        # picking a row goes there
+
+[page.hosts]
+run   = "cat ~/.ssh/config"
+parse = "ssh-hosts"
+group = true                           # only rows whose `group` is the key just picked
+exec  = 'xdg-terminal-exec ssh "$SPOT_VALUE"'
+```
+
+| Key | |
+|-----|---|
+| `from`, or `run` and `parse` | Where the rows come from |
+| `then`, `exec`, `terminal` or `call` | **Exactly one:** go to a page; run a command; run it in a terminal (`hold` works); make a mod's request with the row's key |
+| `group` | Show only the rows whose `group` is the key picked on the page before |
+| `allow_leading_dash` | Let a key that starts with `-` reach the action |
+
+**A row never becomes part of a command.** It is in `$SPOT_VALUE` (its key) and `$SPOT_LABEL`; write
+them in double quotes. A key starting with `-` is refused unless the page allows it.
+
+Rows are fetched when the page is first opened, once per menu. While they are on the way the page is
+empty. If they cannot be had, the page says why and its written entries still work. The search covers
+a fed page's rows only while you are on it.
 
 ## `[submit]`
 

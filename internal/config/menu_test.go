@@ -123,3 +123,44 @@ func TestMenuIncludes(t *testing.T) {
 		t.Errorf("empty glob: %v", err)
 	}
 }
+
+func TestMenuDynamicPages(t *testing.T) {
+	page := func(body string) string {
+		return "[[page.main.entry]]\nlabel='a'\npage='d'\n[page.d]\n" + body
+	}
+	for name, ok := range map[string]string{
+		"from a mod":     "from='m.v'\nexec='x'",
+		"run and parse":  "run='cat f'\nparse='p'\nterminal='x'\nhold=true",
+		"to a page":      "from='m.v'\nthen='main'",
+		"a call":         "from='m.v'\ncall='m.do'",
+		"a group's rows": "from='m.v'\ngroup=true\nexec='x'",
+	} {
+		c, err := ParseConfig([]byte(page(ok)), noEnv)
+		if err != nil || !c.UsesMods() {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, c := range map[string]struct{ body, want string }{
+		"no action":        {"from='m.v'", "exactly one"},
+		"two actions":      {"from='m.v'\nexec='x'\nthen='main'", "exactly one"},
+		"both sources":     {"from='m.v'\nrun='x'\nparse='p'\nexec='x'", "not both"},
+		"run alone":        {"run='x'\nexec='x'", "go together"},
+		"parse alone":      {"parse='p'\nexec='x'", "go together"},
+		"a bad from":       {"from='m'\nexec='x'", "<mod>.<value>"},
+		"a parser path":    {"run='x'\nparse='../p'\nexec='x'", "name of a parser"},
+		"a bad call":       {"from='m.v'\ncall='m'", "<mod>.<request>"},
+		"then nowhere":     {"from='m.v'\nthen='gone'", "no page"},
+		"action, no rows":  {"exec='x'\n[[page.d.entry]]\nlabel='a'\nexec='x'", "go with from"},
+		"hold without":     {"from='m.v'\nexec='x'\nhold=true", "hold goes"},
+		"nothing in there": {"title='x'", "no entries"},
+	} {
+		if _, err := ParseConfig([]byte(page(c.body)), noEnv); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", name, err, c.want)
+		}
+	}
+	// then is a way to a page too.
+	c, err := ParseConfig([]byte(page("from='m.v'\nthen='e'\n[page.e]\nfrom='m.w'\nexec='x'")), noEnv)
+	if err != nil || !slices.Equal(c.PagePath("e"), []string{"main", "d", "e"}) {
+		t.Errorf("%v %v", err, c.PagePath("e"))
+	}
+}

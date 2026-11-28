@@ -70,7 +70,7 @@ func newOpenMenu(t *testing.T, toml, page string, back *config.BackSpec) *openMe
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.d = newMenu(cfg, "/tmp/menu.toml", page, os.Environ(), t.TempDir(), back)
+	m.d = newMenu(cfg, "/tmp/menu.toml", page, os.Environ(), t.TempDir(), back, nil)
 	m.d.finish = func(r result) { m.ended = append(m.ended, r) }
 	return m
 }
@@ -242,11 +242,11 @@ func TestMenuCommands(t *testing.T) {
 	cfg := &config.Config{Menu: &config.MenuConfig{Terminal: "env WRAPPED=1"}}
 	row := func(e config.Entry) menuRow { return menuRow{entry: e, page: "p's"} }
 
-	cmd, got := menuCommand(cfg, "/c/menu.toml", row(config.Entry{Exec: "x y"}), env)
+	cmd, got := menuCommand(cfg, "/c/menu.toml", row(config.Entry{Exec: "x y"}), env, nil)
 	if cmd != "x y" || strings.Join(got, " ") != "PATH=/usr/bin" {
 		t.Errorf("exec: %q %q", cmd, got)
 	}
-	_, got = menuCommand(cfg, "/c d/it's.toml", row(config.Entry{Exec: "x", Back: true}), env)
+	_, got = menuCommand(cfg, "/c d/it's.toml", row(config.Entry{Exec: "x", Back: true}), env, nil)
 	// The Back command, run as a shell would, gets its words unharmed.
 	back := strings.TrimPrefix(got[len(got)-1], "SPOT_BACK=")
 	words, _, _ := runCommand(`set -- `+back+`; shift; printf '[%s]' "$@"`, env, "/")
@@ -254,7 +254,7 @@ func TestMenuCommands(t *testing.T) {
 		t.Errorf("back: %q from %q", words, back)
 	}
 	for _, text := range []string{"it's $HOME; `id` && echo \"q\"", "-x\nsecond line"} {
-		cmd, _ = menuCommand(cfg, "/c", row(config.Entry{Terminal: "printf %s " + shellQuote(text) + " > " + out}), env)
+		cmd, _ = menuCommand(cfg, "/c", row(config.Entry{Terminal: "printf %s " + shellQuote(text) + " > " + out}), env, nil)
 		if _, se, status := runCommand(cmd, env, "/"); status != 0 {
 			t.Fatalf("terminal: %s", se)
 		}
@@ -262,7 +262,7 @@ func TestMenuCommands(t *testing.T) {
 			t.Errorf("terminal: %q", b)
 		}
 	}
-	cmd, _ = menuCommand(cfg, "/c", row(config.Entry{Open: "https://x/?a=1&b='; id"}), env)
+	cmd, _ = menuCommand(cfg, "/c", row(config.Entry{Open: "https://x/?a=1&b='; id"}), env, nil)
 	if words, _, _ := runCommand(strings.Replace(cmd, "xdg-open", "printf '[%s]'", 1), env, "/"); words != "[https://x/?a=1&b='; id]" {
 		t.Errorf("open: %q from %q", words, cmd)
 	}

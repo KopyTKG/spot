@@ -28,6 +28,7 @@ type ModSource interface {
 // Row is one row of a mod's value or a parser's output.
 type Row struct {
 	Label, Key string
+	Group      string // a menu: which pick on the page before it belongs to
 	Icon       string // a name from the icon theme, never a file
 	State      *bool  // a switch row
 }
@@ -50,6 +51,11 @@ func (it *Item) foreign() bool { return it.From != "" || it.Parse != "" }
 func (c *Config) UsesMods() bool {
 	if c.Submit.Call != "" {
 		return true
+	}
+	for _, p := range c.Pages {
+		if p.Dynamic() || p.Call != "" {
+			return true
+		}
 	}
 	for _, it := range c.Items {
 		if it.foreign() || it.Call != "" {
@@ -210,6 +216,9 @@ func Rows(raw json.RawMessage) ([]Row, error) {
 			}
 			if on, ok := x["state"].(bool); ok {
 				r.State = &on
+			}
+			if g, ok := x["group"].(string); ok {
+				r.Group = g
 			}
 		default:
 			return nil, fmt.Errorf("row %d is not a text or a record", i+1)

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"sort"
@@ -15,20 +16,33 @@ import (
 	"gitlab.com/KopyTKG/spot/internal/launcher"
 	"gitlab.com/KopyTKG/spot/internal/match"
 	"gitlab.com/KopyTKG/spot/internal/protocol"
+	"gitlab.com/KopyTKG/spot/internal/scheduler"
 )
 
 // menuRow is a line of the list: an entry, and where it is.
 type menuRow struct {
 	text  string
 	entry config.Entry
-	page  string   // the page it is on
-	below []string // pages between the one shown and that one, for a search hit
+	page  string      // the page it is on
+	below []string    // pages between the one shown and that one, for a search hit
+	given *config.Row // a row a mod gave; the page says what picking it does
 }
 
-// menuStep is a page left behind, and the row to come back to.
+// menuStep is a page left behind, the row to come back to, and the key that
+// had been picked to get to that page.
 type menuStep struct {
-	page string
-	row  int
+	page   string
+	row    int
+	picked string
+}
+
+// source is where the rows of a page come from: pages with the same one share them.
+type source struct{ from, run, parse string }
+
+type fetched struct {
+	rows []config.Row
+	note string
+	done bool
 }
 
 // menu is the state of a menu: where it is and what it shows.
@@ -38,19 +52,21 @@ type menu struct {
 	history []menuStep
 	rows    []menuRow
 	query   string // what rows were made for
+	picked  string // the key picked on the page before, for a page with group
+	sources map[source]*fetched
 }
 
 // newMenu builds a menu: one list whose pages are swapped in place. page, when
 // set, is where it starts; Back then goes up the way that leads there. It looks
 // like a dialog with a list: the same classes, so the same stylesheet fits.
-func newMenu(cfg *config.Config, path, page string, env []string, dir string, back *config.BackSpec) *dialog {
+func newMenu(cfg *config.Config, path, page string, env []string, dir string, back *config.BackSpec, mods config.ModSource) *dialog {
 	d := &dialog{}
-	m := &menu{cfg: cfg, page: cfg.StartPage()}
+	m := &menu{cfg: cfg, page: cfg.StartPage(), sources: map[source]*fetched{}}
 	if page != "" {
 		m.page = page
 		if way := cfg.PagePath(page); way != nil {
 			for i, p := range way[:len(way)-1] {
-				m.history = append(m.history, menuStep{p, entryTo(cfg, p, way[i+1])})
+				m.history = append(m.history, menuStep{page: p, row: entryTo(cfg, p, way[i+1])})
 			}
 		}
 	}
@@ -138,12 +154,19 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 	row.Append(search)
 	row.Append(scrolled)
 	root.Append(row)
+	// Why a mod's rows are not there, or are old; or why a request failed.
+	problem := gtk.NewLabel("")
+	problem.AddCSSClass("spot-error")
+	problem.SetXAlign(0)
+	problem.SetWrap(true)
+	problem.SetVisible(false)
 	if cfg.Footer != "" {
 		f := gtk.NewLabel(cfg.Footer)
 		f.AddCSSClass("spot-footer")
 		f.SetXAlign(0)
 		root.Append(f)
 	}
+	root.Append(problem)
 	d.root = root
 	d.firstFocus = search
 
@@ -156,8 +179,41 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 	}
 	d.cancel = func() { end(result{}) }
 
+	say := func(text string) {
+		problem.SetText(text)
+		problem.SetVisible(text != "")
+	}
 	// show puts the rows for what is typed on screen, with row sel selected.
-	show := func(sel int) {
+	var show func(int)
+	// want asks for the rows of the page shown, once for each source.
+	want := func(sel int) {
+		p := cfg.Pages[m.page]
+		if !p.Dynamic() {
+			say("")
+			return
+		}
+		at := source{p.From, p.Run, p.Parse}
+		if f := m.sources[at]; f != nil {
+			say(f.note)
+			return
+		}
+		f := &fetched{}
+		m.sources[at] = f
+		say("")
+		go func() {
+			rows, note := scheduler.Fetch(at.from, at.run, at.parse, env, dir, mods)
+			coreglib.IdleAdd(func() {
+				f.rows, f.note, f.done = rows, note, true
+				now := cfg.Pages[m.page]
+				if d.done || (source{now.From, now.Run, now.Parse}) != at {
+					return
+				}
+				say(f.note)
+				show(sel)
+			})
+		}()
+	}
+	show = func(sel int) {
 		m.query = search.Text()
 		m.rows = m.find(m.query)
 		texts := make([]string, len(m.rows))
@@ -179,9 +235,10 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 		plain.SetVisible(!deeper && title != "")
 		header.SetVisible(deeper)
 	}
-	enter := func(page string, sel int) {
-		m.page = page
+	enter := func(page, picked string, sel int) {
+		m.page, m.picked = page, picked
 		search.SetText("")
+		want(sel)
 		show(sel)
 	}
 	goBack := func() {
@@ -191,7 +248,7 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 		if n := len(m.history); n > 0 {
 			step := m.history[n-1]
 			m.history = m.history[:n-1]
-			enter(step.page, step.row)
+			enter(step.page, step.picked, step.row)
 			return
 		}
 		if back == nil {
@@ -214,18 +271,59 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 			return
 		}
 		r := m.rows[i]
+		var given []string // a mod's row, for the command, in its environment
+		if r.given != nil {
+			p := cfg.Pages[r.page]
+			if p.Then != "" {
+				m.history = append(m.history, menuStep{m.page, i, m.picked})
+				enter(p.Then, r.given.Key, 0)
+				return
+			}
+			// Nothing from outside may pass for an option of the command.
+			if strings.HasPrefix(r.given.Key, "-") && !p.AllowLeadingDash {
+				say(fmt.Sprintf("%q starts with a dash and would be read as an option (allow_leading_dash = true if that is meant)", r.given.Key))
+				return
+			}
+			if p.Call != "" {
+				if mods == nil {
+					say("mods are not available here")
+					return
+				}
+				d.busy = true
+				root.SetSensitive(false)
+				go func(key string) {
+					err := mods.Call(p.Call, []string{key})
+					coreglib.IdleAdd(func() {
+						d.busy = false
+						root.SetSensitive(true)
+						if d.done {
+							return
+						}
+						if err != nil {
+							say(err.Error())
+							search.GrabFocus()
+							return
+						}
+						end(result{submitted: true, then: thenNothing})
+					})
+				}(r.given.Key)
+				return
+			}
+			r.entry = config.Entry{Exec: p.Exec, Terminal: p.Terminal, Hold: p.Hold}
+			given = []string{"SPOT_VALUE=" + r.given.Key, "SPOT_LABEL=" + r.given.Label}
+		}
 		if r.entry.Page != "" {
 			// Back leads up the pages it is really on, each with its row.
 			at := m.page
 			for _, next := range append(slices.Clone(r.below), r.entry.Page) {
 				sel := entryTo(cfg, at, next)
-				m.history = append(m.history, menuStep{at, sel})
+				m.history = append(m.history, menuStep{page: at, row: sel})
 				at = next
 			}
-			enter(at, 0)
+			enter(at, "", 0)
 			return
 		}
-		cmd, runEnv := menuCommand(cfg, path, r, env)
+		cmd, runEnv := menuCommand(cfg, path, r, env, given)
 		// Close first: what runs may want the keyboard or the screen. One that
 		// opens a dialog with a Back here gets the window handed over.
 		then := thenNothing
@@ -252,6 +350,9 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 		}
 	}))
 	d.onKey = func(keyval uint, state gdk.ModifierType, focus gtk.Widgetter) bool {
+		if d.busy {
+			return false
+		}
 		switch {
 		case keyval == gdk.KEY_Escape:
 			end(result{})
@@ -274,6 +375,7 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 		}
 		return true
 	}
+	want(0)
 	show(0)
 	return d
 }
@@ -289,22 +391,25 @@ const maxFound = 200
 // find is the rows for query: the entries of this page that match, best first,
 // then those of the pages below it, shown with the way there.
 func (m *menu) find(query string) []menuRow {
-	here := m.cfg.Pages[m.page].Entry
+	page := m.cfg.Pages[m.page]
+	here := page.Entry
+	all, ready := m.here()
+	if !ready {
+		// Until a mod's rows are here nothing is shown: a written row at the top
+		// would be what an early Enter picks.
+		return nil
+	}
 	if strings.TrimSpace(query) == "" {
-		rows := make([]menuRow, len(here))
-		for i, e := range here {
-			rows[i] = menuRow{text: e.Label, entry: e, page: m.page}
-		}
-		return rows
+		return all
 	}
 	type hit struct {
 		row   menuRow
 		score int
 	}
 	var near, far []hit
-	for _, e := range here {
-		if s := match.SmartScore(e.Label, query); s >= 0 {
-			near = append(near, hit{menuRow{text: e.Label, entry: e, page: m.page}, s})
+	for _, r := range all {
+		if s := match.SmartScore(r.text, query); s >= 0 {
+			near = append(near, hit{r, s})
 		}
 	}
 	// Breadth first, so that of equal hits the nearest comes first. A page
@@ -318,6 +423,8 @@ func (m *menu) find(query string) []menuRow {
 		seen[h.page] = true // what is above is not below
 	}
 	var queue []place
+	// A page reached by picking a mod's row (then) means nothing without that
+	// row, so search follows written entries only.
 	follow := func(entries []config.Entry, way []string) {
 		for _, e := range entries {
 			if e.Page != "" && !seen[e.Page] {
@@ -360,15 +467,42 @@ func (m *menu) find(query string) []menuRow {
 	return rows
 }
 
+// here is every row of the page shown; ready is false while a mod's are fetched.
+func (m *menu) here() (rows []menuRow, ready bool) {
+	p := m.cfg.Pages[m.page]
+	if p.Dynamic() {
+		f := m.sources[source{p.From, p.Run, p.Parse}]
+		if f == nil || !f.done {
+			return nil, false
+		}
+		for i, r := range f.rows {
+			if p.Group && m.picked != "" && r.Group != m.picked {
+				continue
+			}
+			rows = append(rows, menuRow{text: r.Label, page: m.page, given: &f.rows[i]})
+		}
+	}
+	for _, e := range p.Entry {
+		rows = append(rows, menuRow{text: e.Label, entry: e, page: m.page})
+	}
+	return rows, true
+}
+
 // iconOf is what WithoutIcon takes off a label.
 func iconOf(label string) string {
 	return label[:max(0, len(label)-len(config.WithoutIcon(label)))]
 }
 
 // menuCommand is the shell command an entry runs, and its environment. Nothing
-// but what the config says becomes part of it.
-func menuCommand(cfg *config.Config, path string, r menuRow, env []string) (string, []string) {
+// but what the config says becomes part of the command: given, the row of a mod
+// as NAME=value, is only ever in the environment.
+func menuCommand(cfg *config.Config, path string, r menuRow, env, given []string) (string, []string) {
 	env = withoutEnv(env, "SPOT_BACK")
+	// What the caller inherited from another dialog is not this row's.
+	env = slices.DeleteFunc(env, func(kv string) bool {
+		return strings.HasPrefix(kv, "SPOT_VALUE") || strings.HasPrefix(kv, "SPOT_LABEL=")
+	})
+	env = append(env, given...)
 	e := r.entry
 	switch {
 	case e.Exec != "":
@@ -389,7 +523,17 @@ func menuCommand(cfg *config.Config, path string, r menuRow, env []string) (stri
 		if e.Hold {
 			inside += "\nprintf '\\nPress Enter to close.'; read -r _"
 		}
-		return terminal + " sh -c " + shellQuote(inside), env
+		// A terminal may not pass its caller's environment on (one started by a
+		// session service does not), so the row is set inside it too.
+		run := "sh -c "
+		if len(given) > 0 {
+			run = "env "
+			for _, kv := range given {
+				run += shellQuote(kv) + " "
+			}
+			run += "sh -c "
+		}
+		return terminal + " " + run + shellQuote(inside), env
 	default:
 		return "xdg-open " + shellQuote(e.Open), env
 	}

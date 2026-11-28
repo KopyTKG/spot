@@ -23,10 +23,44 @@ type MenuConfig struct {
 	Terminal    string // the command that opens a terminal; default xdg-terminal-exec
 }
 
-// Page is one [page.<name>].
+// Page is one [page.<name>]. Its rows are the entries written there, and, before
+// them, those a mod gives: from a value (From), or from a parser reading what a
+// command of the menu prints (Run and Parse). A row of the second kind never
+// holds a command: what picking it does is written here, once for the page.
 type Page struct {
 	Title string
 	Entry []Entry
+
+	From  string // <mod>.<value>
+	Run   string // a command whose output Parse reads
+	Parse string // a parser mod
+	Group bool   // show only the rows of the group picked on the page before
+
+	// What picking such a row does: exactly one of these.
+	Then     string // go to this page
+	Exec     string // run, with the row in $SPOT_VALUE and $SPOT_LABEL
+	Terminal string // the same, in a terminal
+	Call     string // <mod>.<request>, with the row's key
+
+	Hold             bool // terminal only
+	AllowLeadingDash bool `toml:"allow_leading_dash"`
+}
+
+// Dynamic reports whether a mod gives rows of the page.
+func (p *Page) Dynamic() bool { return p.From != "" || p.Parse != "" || p.Run != "" }
+
+// leads are the pages that picking something on p goes to.
+func (p *Page) leads() []string {
+	var out []string
+	for _, e := range p.Entry {
+		if e.Page != "" {
+			out = append(out, e.Page)
+		}
+	}
+	if p.Then != "" {
+		out = append(out, p.Then)
+	}
+	return out
 }
 
 // Entry is one row. It does exactly one of Page, Exec, Terminal and Open.
@@ -85,10 +119,10 @@ func (c *Config) PagePath(name string) []string {
 			slices.Reverse(path)
 			return path
 		}
-		for _, e := range c.Pages[p].Entry {
-			if _, seen := from[e.Page]; e.Page != "" && !seen {
-				from[e.Page] = p
-				queue = append(queue, e.Page)
+		for _, next := range c.Pages[p].leads() {
+			if _, seen := from[next]; !seen {
+				from[next] = p
+				queue = append(queue, next)
 			}
 		}
 	}
@@ -154,6 +188,7 @@ func (c *Config) include(path string) error {
 				return fmt.Errorf("include %s: only [page.*] tables belong in it, not %q", f, k)
 			}
 		}
+		c.Files = append(c.Files, real)
 		var part Config
 		if err := toml.Unmarshal(data, &part); err != nil {
 			return fmt.Errorf("include %s: %w", f, err)
@@ -217,7 +252,10 @@ func (c *Config) checkMenu() error {
 	entries := 0
 	for _, name := range slices.Sorted(mapKeys(c.Pages)) {
 		p := c.Pages[name]
-		if len(p.Entry) == 0 {
+		if err := c.checkDynamic(name, p); err != nil {
+			return err
+		}
+		if len(p.Entry) == 0 && !p.Dynamic() {
 			return fmt.Errorf("page %q has no entries", name)
 		}
 		entries += len(p.Entry)
@@ -254,6 +292,44 @@ func (c *Config) checkMenu() error {
 	}
 	if entries > maxEntries {
 		return fmt.Errorf("more than %d entries", maxEntries)
+	}
+	return nil
+}
+
+// checkDynamic checks the keys of a page whose rows a mod gives.
+func (c *Config) checkDynamic(name string, p *Page) error {
+	fail := func(format string, args ...any) error {
+		return fmt.Errorf("page %q: "+format, append([]any{name}, args...)...)
+	}
+	actions := 0
+	for _, a := range []string{p.Then, p.Exec, p.Terminal, p.Call} {
+		if a != "" {
+			actions++
+		}
+	}
+	if !p.Dynamic() {
+		if actions > 0 || p.Group || p.Hold || p.AllowLeadingDash {
+			return fail("then, exec, terminal, call, group, hold and allow_leading_dash go with from, or run and parse")
+		}
+		return nil
+	}
+	switch {
+	case p.From != "" && (p.Run != "" || p.Parse != ""):
+		return fail("from, or run and parse, not both")
+	case p.From == "" && (p.Run == "" || p.Parse == ""):
+		return fail("run and parse go together")
+	case p.From != "" && !modItem.MatchString(p.From):
+		return fail("from: say <mod>.<value>")
+	case p.Parse != "" && !modName.MatchString(p.Parse):
+		return fail("parse: say the name of a parser")
+	case actions != 1:
+		return fail("wants exactly one of then, exec, terminal, call for what its rows do")
+	case p.Call != "" && !modItem.MatchString(p.Call):
+		return fail("call: say <mod>.<request>")
+	case p.Then != "" && c.Pages[p.Then] == nil:
+		return fail("there is no page %q", p.Then)
+	case p.Hold && p.Terminal == "":
+		return fail("hold goes with terminal")
 	}
 	return nil
 }

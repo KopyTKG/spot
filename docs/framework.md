@@ -78,8 +78,8 @@ call = "ssh.connect"                 # picked entry's key goes to the mod
 
 **Decided:** pages from a mod can lead to further pages (the SSH groups, then their hosts).
 
-**Built, not released:** everything above but `from` and `call` on pages. The format is in
-[`toml.md`](toml.md#menus). **Proof:** `arch-menu` replaced, feeling the same.
+**Built, not released.** The format is in [`toml.md`](toml.md#menus). One difference from above: the
+search covers a fed page's rows only while you are on it. **Proof:** `arch-menu` replaced, feeling the same.
 
 ## Not spot's job
 

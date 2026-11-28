@@ -38,6 +38,7 @@ type Config struct {
 	Menu         *MenuConfig      // [menu]
 	Pages        map[string]*Page `toml:"page"` // [page.<name>]: the config is a menu
 	Include      []string         // files with more pages
+	Files        []string         `toml:"-"` // the files that were included
 	Apps         *AppsConfig      // [apps]: the application index and how apps are launched (type = "apps")
 	Sources      []SourceConfig   // [[sources]]: prefixes that hand the launcher's search to a command (see package launcher)
 
