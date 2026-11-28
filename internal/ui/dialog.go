@@ -18,7 +18,17 @@ import (
 type result struct {
 	submitted bool
 	code      int // non-zero: end with this status (on_error = "exit")
+	then      follow
 }
+
+// follow is what a dialog knows of what comes after it, when it knows.
+type follow int
+
+const (
+	asAsked     follow = iota // as the caller said (--chain, --last)
+	thenNothing               // let go of the screen at once
+	thenDialog                // another dialog is coming: keep the window for it
+)
 
 // dialog is one config rendered as a widget tree. It does not own a window:
 // the shell puts d.root into the one layer-shell window and routes keys to

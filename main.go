@@ -37,6 +37,7 @@ flags:
   -v, --version    print the version
   --chain          another dialog follows this one: keep the window up for it
   --last           nothing follows: release the window immediately
+  --page <name>    open a menu on this page
   --back           show a Back control (SPOT_BACK=<cmd> does too, and runs <cmd>);
                    Back ends the dialog with status 4
   --sub            open on top of the dialog that is showing; it returns when
@@ -98,10 +99,18 @@ func main() {
 	var (
 		arg                             string
 		chain, last, sub, back, oneshot bool
+		page                            string
+		wantPage                        bool
 		isDaemon, dismiss, quit, stat   bool
 	)
 	for _, a := range os.Args[1:] {
 		switch {
+		case wantPage:
+			page, wantPage = a, false
+		case a == "--page":
+			wantPage = true
+		case strings.HasPrefix(a, "--page="):
+			page = strings.TrimPrefix(a, "--page=")
 		case a == "-h" || a == "--help":
 			fmt.Print(usage)
 			return
@@ -134,6 +143,9 @@ func main() {
 			arg = a
 		}
 	}
+	if wantPage {
+		usageError("--page wants a page name")
+	}
 	if chain && last {
 		usageError("--chain and --last contradict each other")
 	}
@@ -158,7 +170,7 @@ func main() {
 	}
 	req := protocol.Request{
 		Op: protocol.OpShow, Version: protocol.Version, Config: cfgPath, Env: os.Environ(),
-		Chain: chain, Last: last, Sub: sub, Back: back,
+		Chain: chain, Last: last, Sub: sub, Back: back, Page: page,
 	}
 	req.Dir, _ = os.Getwd()
 
@@ -168,12 +180,15 @@ func main() {
 	if err != nil {
 		failDialog(cfgPath, "%v", err)
 	}
-	cfg, err := config.ParseConfig(data, os.LookupEnv)
+	cfg, err := config.ParseConfigAt(cfgPath, data, os.LookupEnv)
 	if err != nil {
 		failDialog(cfgPath, "%s: %v", cfgPath, err)
 	}
 	for _, w := range append(config.UnknownKeys(data), cfg.UnquotedStdin()...) {
 		fmt.Fprintf(os.Stderr, "spot: %s: warning: %s\n", cfgPath, w)
+	}
+	if page != "" && cfg.Pages[page] == nil {
+		failDialog(cfgPath, "%s has no page %q", cfgPath, page)
 	}
 	for _, it := range cfg.Items {
 		if it.Type == "list" && it.Stdin {

@@ -67,14 +67,19 @@ from = "ssh.hosts"                   # entries from a mod
 call = "ssh.connect"                 # picked entry's key goes to the mod
 ```
 
-- One window; Back and Esc behave as they do between chained dialogs now.
+- One window; Back and Esc behave as they do between chained dialogs now. **Decided:** Back lands on the
+  entry you came through.
 - An entry does exactly one of: `page`, `exec`, `terminal`, `open` (a URL or file), `call`.
-- Typing searches every static entry on every page, and shows the path ("Capture › Region").
+- **Decided:** typing shows the matches on the page first, then those on pages below it, with the path
+  ("Capture › Region").
 - A page from a mod is fetched when it is opened, and is searched only once fetched.
 - **Data never becomes a command:** a key from a mod goes to `call`, or to `exec` only as
   `$SPOT_VALUE_<ID>`, as in dialogs today. A page from a mod cannot supply `exec`.
 
-**Proof:** `arch-menu` replaced, feeling the same.
+**Decided:** pages from a mod can lead to further pages (the SSH groups, then their hosts).
+
+**Built, not released:** everything above but `from` and `call` on pages. The format is in
+[`toml.md`](toml.md#menus). **Proof:** `arch-menu` replaced, feeling the same.
 
 ## Not spot's job
 

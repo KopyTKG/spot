@@ -35,8 +35,11 @@ type Config struct {
 	Submit       Submit
 	Opacity      *Opacity
 	Back         *Back
-	Apps         *AppsConfig    // [apps]: the application index and how apps are launched (type = "apps")
-	Sources      []SourceConfig // [[sources]]: prefixes that hand the launcher's search to a command (see package launcher)
+	Menu         *MenuConfig      // [menu]
+	Pages        map[string]*Page `toml:"page"` // [page.<name>]: the config is a menu
+	Include      []string         // files with more pages
+	Apps         *AppsConfig      // [apps]: the application index and how apps are launched (type = "apps")
+	Sources      []SourceConfig   // [[sources]]: prefixes that hand the launcher's search to a command (see package launcher)
 
 	// From SPOT_BACK: the caller wants a Back control, and what to run on it.
 	backEnv bool
@@ -162,8 +165,19 @@ func configDir() string {
 // ParseConfig decodes and validates a config, and applies the SPOT_* overrides
 // looked up through env.
 func ParseConfig(data []byte, env func(string) (string, bool)) (*Config, error) {
+	return ParseConfigAt("", data, env)
+}
+
+// ParseConfigAt is ParseConfig for the file at path, which can include others.
+func ParseConfigAt(path string, data []byte, env func(string) (string, bool)) (*Config, error) {
 	var cfg Config
 	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return nil, menuHint(data, err)
+	}
+	if err := cfg.include(path); err != nil {
+		return nil, err
+	}
+	if err := cfg.meantAsMenu(data); err != nil {
 		return nil, err
 	}
 	applyEnv(&cfg, env)
@@ -257,6 +271,9 @@ func (c *Config) validate() error {
 		default:
 			return fmt.Errorf("back.show: unknown mode %q (want \"auto\" or \"never\")", c.Back.Show)
 		}
+	}
+	if err := c.checkMenu(); err != nil {
+		return err
 	}
 	if err := ValidateSources(c.Sources); err != nil {
 		return err

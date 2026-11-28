@@ -132,8 +132,18 @@ func (s *Shell) live() *dialog {
 // ---- presenter ------------------------------------------------------------
 
 func (s *Shell) Present(j *scheduler.Job) {
-	d := newDialog(j.Cfg, j.Env, j.Dir, j.Back, j.Mods)
-	d.finish = func(r result) { s.Sched.Complete(j, s.answer(d, r)) }
+	var d *dialog
+	if j.Cfg.IsMenu() {
+		d = newMenu(j.Cfg, j.Config, j.Page, j.Env, j.Dir, j.Back)
+	} else {
+		d = newDialog(j.Cfg, j.Env, j.Dir, j.Back, j.Mods)
+	}
+	d.finish = func(r result) {
+		if r.then != asAsked {
+			j.Follows(r.then == thenDialog)
+		}
+		s.Sched.Complete(j, s.answer(d, r))
+	}
 	j.View = d
 	s.show(j)
 	if !s.mapped {

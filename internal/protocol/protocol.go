@@ -54,6 +54,7 @@ type Request struct {
 	Env    []string `json:"env,omitempty"`    // KEY=VALUE, the caller's environment
 	Dir    string   `json:"dir,omitempty"`
 	Stdin  string   `json:"stdin,omitempty"` // for list items with stdin = true
+	Page   string   `json:"page,omitempty"`  // a menu: the page to open on
 
 	// How this dialog relates to the ones around it.
 	Chain bool `json:"chain,omitempty"` // another dialog follows: keep the window up for it

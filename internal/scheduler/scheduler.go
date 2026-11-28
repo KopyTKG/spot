@@ -11,17 +11,25 @@ import (
 
 // Job is one request on its way through the daemon.
 type Job struct {
-	req   protocol.Request
-	Cfg   *config.Config
-	CSS   string // absolute path of the stylesheet, or ""
-	Env   []string
-	Dir   string
-	Back  *config.BackSpec
-	Mods  config.ModSource       // for from, call and parse
-	Reply chan protocol.Response // buffered: the scheduler never blocks on a slow client
-	View  any                    // the presenter\'s widgets, set while the dialog exists
+	req    protocol.Request
+	Config string // the config file
+	Page   string // a menu: the page asked for
+	Cfg    *config.Config
+	CSS    string // absolute path of the stylesheet, or ""
+	Env    []string
+	Dir    string
+	Back   *config.BackSpec
+	Mods   config.ModSource       // for from, call and parse
+	Reply  chan protocol.Response // buffered: the scheduler never blocks on a slow client
+	View   any                    // the presenter\'s widgets, set while the dialog exists
 
 	finished bool
+}
+
+// Follows records what the dialog itself knows of what comes after it: another
+// dialog, or nothing at all.
+func (j *Job) Follows(dialog bool) {
+	j.req.Chain, j.req.Last = dialog, !dialog
 }
 
 // presenter is the window as the scheduler sees it.

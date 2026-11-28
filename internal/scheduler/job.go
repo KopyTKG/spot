@@ -24,9 +24,13 @@ func BuildJob(req protocol.Request, mods config.ModSource) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := config.ParseConfig(data, protocol.EnvLookup(req.Env))
+	cfg, err := config.ParseConfigAt(req.Config, data, protocol.EnvLookup(req.Env))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", req.Config, err)
+	}
+
+	if req.Page != "" && cfg.Pages[req.Page] == nil {
+		return nil, fmt.Errorf("%s has no page %q", req.Config, req.Page)
 	}
 
 	for i := range cfg.Items {
@@ -52,7 +56,7 @@ func BuildJob(req protocol.Request, mods config.ModSource) (*Job, error) {
 			css = filepath.Join(filepath.Dir(req.Config), css)
 		}
 	}
-	return &Job{req: req, Mods: mods, Cfg: cfg, CSS: css, Env: req.Env, Dir: req.Dir, Back: cfg.BackSpec(req.Back), Reply: make(chan protocol.Response, 1)}, nil
+	return &Job{req: req, Config: req.Config, Page: req.Page, Mods: mods, Cfg: cfg, CSS: css, Env: req.Env, Dir: req.Dir, Back: cfg.BackSpec(req.Back), Reply: make(chan protocol.Response, 1)}, nil
 }
 
 // stdinLines splits newline-delimited list options.

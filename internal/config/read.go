@@ -22,3 +22,16 @@ func ReadFile(path string) ([]byte, error) {
 	}
 	return b, err
 }
+
+// readRegular is ReadFile for a file that must be an ordinary one, such as an
+// included one: a pipe there would hold the daemon.
+func readRegular(path string) ([]byte, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	return ReadFile(path)
+}

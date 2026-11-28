@@ -34,6 +34,7 @@ For a single commented file with every key and its default, see
   - [Validation](#validation)
 - [`[apps]`](#apps-1) · [`[[sources]]`](#sources)
 - [`[submit]`](#submit)
+- [Menus](#menus)
 - [Environment overrides](#environment-overrides)
 
 ## Mods
@@ -684,6 +685,73 @@ activate = "xdg-open {value}"
 Sources work only on an `apps` item. To open the launcher already in a mode, set
 `SPOT_QUERY`: `SPOT_QUERY=". " spot launcher`. Example:
 [`examples/launcher.toml`](../examples/launcher.toml).
+
+## Menus
+
+A config with `[page.<name>]` tables is a **menu**: pages of entries in one window, with Back and a
+search that reaches into the pages below. It has no `[[items]]` and no `[submit]`.
+
+```toml
+title  = "Menu"
+width  = 320
+style  = "spot.css"
+toggle = true
+
+[menu]
+placeholder = "Search…"
+height      = 480
+
+[[page.main.entry]]
+label = "Capture"
+page  = "capture"
+
+[[page.main.entry]]
+label    = "Update"
+terminal = "sudo pacman -Syu"
+hold     = true
+
+[page.capture]
+title = "Capture"
+
+[[page.capture.entry]]
+label = "Region"
+exec  = "hyprshot -m region"
+```
+
+| `[menu]` | Default | |
+|----------|---------|---|
+| `start` | `main` | The first page; its title is the config's `title` unless it has its own |
+| `placeholder` | | Text of the empty search box |
+| `height` | `320` | Height of the list, px |
+| `terminal` | `xdg-terminal-exec` | The command that opens a terminal; spot adds `sh -c <command>` |
+
+A page has a `title` (default: its name) and one or more `[[page.<name>.entry]]`. An entry has a
+`label` and **exactly one** of:
+
+| Key | Does |
+|-----|------|
+| `page` | Goes to that page |
+| `exec` | Closes the menu and runs a shell command |
+| `terminal` | Closes the menu and runs a shell command in a terminal. With `hold = true` the terminal waits for Enter before closing |
+| `open` | Closes the menu and opens a file or URL (`xdg-open`; no shell, `~` is not expanded) |
+
+With `back = true`, an `exec` entry's command gets `SPOT_BACK`, so a dialog it opens has a Back to
+this page, and the menu's window is kept for it.
+
+**Keys:** Enter picks; Back is Backspace on an empty search, Alt+Left or the button, and lands on the
+entry you came through; Esc closes. A double click picks.
+
+**Search** ([smart matching](#list)) shows the matches on the page first, then those on pages below
+it, with the way to them ("Install › Terminal › Kitty"). Words of the way match too.
+
+**Opening a page:** `spot --page setup menu.toml`. Back then goes up as if you had walked there.
+
+**Includes:** `include = ["menu/*.toml"]` reads more pages from files below the config's folder
+(links that lead outside it are refused). An included file holds `[page.*]` tables only, and a page
+is defined once.
+
+**A menu is a program:** its commands run as you, with no check. Open only menus you would run as a
+script. Pages fed by mods are not built yet.
 
 ## `[submit]`
 
