@@ -270,3 +270,92 @@ func TestMenuCommands(t *testing.T) {
 		t.Errorf("open runs %q", cmd)
 	}
 }
+
+const gridMenu = `
+[menu]
+columns = 4
+[[page.main.entry]]
+label = "\uf019  One"
+page = "list"
+[[page.main.entry]]
+label = "Two"
+exec = "printf two > OUT"
+[[page.main.entry]]
+label = "Three"
+exec = "true"
+[[page.main.entry]]
+label = "Four"
+exec = "true"
+[[page.main.entry]]
+label = "Five"
+exec = "true"
+[[page.main.entry]]
+label = "Six"
+exec = "printf six > OUT"
+[page.list]
+columns = 1
+[[page.list.entry]]
+label = "In a list"
+exec = "true"
+`
+
+func (m *openMenu) grid() (labels []string, cursor int) {
+	var kids []*gtk.FlowBoxChild
+	find[*gtk.FlowBoxChild](m.d.root, &kids)
+	cursor = -1
+	for i, k := range kids {
+		var ls []*gtk.Label
+		find[*gtk.Label](k, &ls)
+		labels = append(labels, ls[len(ls)-1].Text())
+		if k.HasCSSClass("spot-cursor") {
+			cursor = i
+		}
+	}
+	return labels, cursor
+}
+
+func TestMenuAsAGrid(t *testing.T) {
+	m := newOpenMenu(t, gridMenu, "", nil)
+	at := func(what string, want int) {
+		t.Helper()
+		if _, c := m.grid(); c != want {
+			t.Errorf("%s: cursor on %d, want %d", what, c, want)
+		}
+	}
+	if l, _ := m.grid(); strings.Join(l, ",") != "One,Two,Three,Four,Five,Six" {
+		t.Fatal(l)
+	}
+	at("start", 0)
+	m.press(gdk.KEY_Right, gdk.KEY_Right)
+	at("right", 2)
+	m.press(gdk.KEY_Down)
+	at("down into the short row", 5)
+	m.press(gdk.KEY_Up, gdk.KEY_Up)
+	at("up", 1)
+	m.press(gdk.KEY_Down, gdk.KEY_Left, gdk.KEY_Left, gdk.KEY_Left, gdk.KEY_Left, gdk.KEY_Left, gdk.KEY_Left)
+	at("stops at the first", 0)
+	// A page that asks for a list gets one, and Back returns to the tile.
+	m.press(gdk.KEY_Return)
+	if l, _ := m.grid(); len(l) != 0 {
+		t.Error("tiles on a list page", l)
+	}
+	m.is("the list page", "‹ list", "In a list", 0)
+	m.press(gdk.KEY_BackSpace)
+	at("back", 0)
+	// Typing turns it into the list; Left and Right are then the search's.
+	m.search("six")
+	if l, _ := m.grid(); len(l) != 0 {
+		t.Error("tiles while searching", l)
+	}
+	if m.d.onKey(gdk.KEY_Left, 0, nil) {
+		t.Error("Left was taken from the search")
+	}
+	m.press(gdk.KEY_Return)
+	m.ran("six")
+}
+
+func TestMenuGridRuns(t *testing.T) {
+	m := newOpenMenu(t, gridMenu, "", nil)
+	m.press(gdk.KEY_Right, gdk.KEY_Return)
+	m.ran("two")
+}

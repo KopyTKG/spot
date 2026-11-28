@@ -15,6 +15,9 @@
 .spot-tile-pick { opacity: 0; font-size: 1px; }
 .spot-tile.spot-cursor { outline: 2px solid #7aa2f7; outline-offset: -2px; }
 
+/* The chosen tile of a menu grid. */
+.spot-menu-grid .spot-tile.spot-cursor { background: rgba(122, 162, 247, 0.16); }
+
 /* Where the keyboard is. */
 .spot-control:focus-visible, .spot-scale:focus-visible, .spot-toggle:focus-visible, .spot-select:focus-within {
   outline: 2px solid #7aa2f7;

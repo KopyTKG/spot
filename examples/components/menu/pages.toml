@@ -4,6 +4,10 @@
 title = "Menu pages"
 
 [[page.pages.entry]]
+label = '  A page as a grid'
+page = 'grid'
+
+[[page.pages.entry]]
 label = "  One level deeper"
 page = 'deeper'
 
@@ -11,6 +15,38 @@ page = 'deeper'
 label = "  A command in a terminal"
 terminal = 'echo "Hello from a menu entry"'
 hold = true
+
+[page.grid]
+title   = "A page as a grid"
+columns = 3
+
+[[page.grid.entry]]
+label = '  One'
+exec = 'true'
+
+[[page.grid.entry]]
+label = '  Files'
+exec = 'true'
+
+[[page.grid.entry]]
+label = '  Settings'
+exec = 'true'
+
+[[page.grid.entry]]
+label = '  Bookmarks'
+exec = 'true'
+
+[[page.grid.entry]]
+label = '  Power'
+exec = 'true'
+
+[[page.grid.entry]]
+label = '  Favourites'
+exec = 'true'
+
+[[page.grid.entry]]
+label = '  A longer name'
+exec = 'true'
 
 [page.deeper]
 title = "Deeper"

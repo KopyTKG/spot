@@ -21,6 +21,7 @@ type MenuConfig struct {
 	Placeholder string // of the search box
 	Height      int    // of the list, px
 	Terminal    string // the command that opens a terminal; default xdg-terminal-exec
+	Columns     int    // pages as a grid of tiles, this many wide; 0 or 1: a list
 }
 
 // Page is one [page.<name>]. Its rows are the entries written there, and, before
@@ -28,8 +29,9 @@ type MenuConfig struct {
 // command of the menu prints (Run and Parse). A row of the second kind never
 // holds a command: what picking it does is written here, once for the page.
 type Page struct {
-	Title string
-	Entry []Entry
+	Title   string
+	Entry   []Entry
+	Columns int // of this page, instead of [menu] columns
 
 	From  string // <mod>.<value>
 	Run   string // a command whose output Parse reads
@@ -232,6 +234,19 @@ func menuHint(data []byte, err error) error {
 	return err
 }
 
+// PageColumns is how many tiles wide a page is; 1 means a list.
+func (c *Config) PageColumns(name string) int {
+	if p := c.Pages[name]; p != nil && p.Columns > 0 {
+		return p.Columns
+	}
+	if c.Menu != nil && c.Menu.Columns > 0 {
+		return c.Menu.Columns
+	}
+	return 1
+}
+
+const maxColumns = 12
+
 func (c *Config) checkMenu() error {
 	if !c.IsMenu() {
 		if c.Menu != nil {
@@ -243,6 +258,9 @@ func (c *Config) checkMenu() error {
 		c.Submit.Copy != "" || c.Submit.Call != "" || c.Apps != nil || len(c.Sources) > 0 {
 		return errors.New("a menu has pages only: no [[items]], [submit], [apps] or [[sources]]")
 	}
+	if c.Menu != nil && (c.Menu.Columns < 0 || c.Menu.Columns > maxColumns) {
+		return fmt.Errorf("menu.columns: 1 to %d", maxColumns)
+	}
 	if len(c.Pages) > maxPages {
 		return fmt.Errorf("more than %d pages", maxPages)
 	}
@@ -252,6 +270,9 @@ func (c *Config) checkMenu() error {
 	entries := 0
 	for _, name := range slices.Sorted(mapKeys(c.Pages)) {
 		p := c.Pages[name]
+		if p.Columns < 0 || p.Columns > maxColumns {
+			return fmt.Errorf("page %q: columns: 1 to %d", name, maxColumns)
+		}
 		if err := c.checkDynamic(name, p); err != nil {
 			return err
 		}

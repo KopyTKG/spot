@@ -149,10 +149,13 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 	scrolled.SetHExpand(true)
 	scrolled.SetVExpand(true)
 	scrolled.AddCSSClass("spot-list-scroll")
+	// A page can be a grid of tiles instead; search results are always the list.
+	grid := newMenuGrid(height)
 	row := gtk.NewBox(gtk.OrientationVertical, 4)
 	row.AddCSSClass("spot-item")
 	row.Append(search)
 	row.Append(scrolled)
+	row.Append(grid.scrolled)
 	root.Append(row)
 	// Why a mod's rows are not there, or are old; or why a request failed.
 	problem := gtk.NewLabel("")
@@ -220,13 +223,24 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 		for i, r := range m.rows {
 			texts[i] = r.text
 		}
-		model.Splice(0, model.NItems(), texts)
 		if sel < 0 || sel >= len(texts) {
 			sel = 0
 		}
-		if len(texts) > 0 {
-			selection.SetSelected(uint(sel))
-			lv.ScrollTo(uint(sel), gtk.ListScrollFocus|gtk.ListScrollSelect, nil)
+		cols := cfg.PageColumns(m.page)
+		grid.on = cols > 1 && strings.TrimSpace(m.query) == ""
+		scrolled.SetVisible(!grid.on)
+		grid.scrolled.SetVisible(grid.on)
+		if grid.on {
+			model.Splice(0, model.NItems(), nil)
+			grid.fill(texts, cols)
+			grid.choose(sel)
+		} else {
+			grid.fill(nil, cols)
+			model.Splice(0, model.NItems(), texts)
+			if len(texts) > 0 {
+				selection.SetSelected(uint(sel))
+				lv.ScrollTo(uint(sel), gtk.ListScrollFocus|gtk.ListScrollSelect, nil)
+			}
 		}
 		title := cfg.PageTitle(m.page)
 		deeper := len(m.history) > 0 || back != nil
@@ -267,6 +281,9 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 			show(0)
 		}
 		i := int(selection.Selected())
+		if grid.on {
+			i = grid.at
+		}
 		if i < 0 || i >= len(m.rows) {
 			return
 		}
@@ -344,6 +361,10 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 		selection.SetSelected(pos)
 		activate()
 	}))
+	d.hook(grid.flow, grid.flow.ConnectChildActivated(func(child *gtk.FlowBoxChild) {
+		grid.choose(child.Index())
+		activate()
+	}))
 	d.hook(root, root.ConnectMap(func() {
 		if d.saved == nil {
 			d.focusFirst()
@@ -362,6 +383,7 @@ func newMenu(cfg *config.Config, path, page string, env []string, dir string, ba
 			goBack()
 		case keyval == gdk.KEY_Return || keyval == gdk.KEY_KP_Enter:
 			activate()
+		case grid.on && grid.key(keyval, state, search.Text() == ""):
 		case keyval == gdk.KEY_Up || keyval == gdk.KEY_KP_Up:
 			moveSelection(selection, lv, -1)
 		case keyval == gdk.KEY_Down || keyval == gdk.KEY_KP_Down:

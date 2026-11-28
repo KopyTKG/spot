@@ -778,6 +778,7 @@ exec  = "hyprshot -m region"
 | `placeholder` | | Text of the empty search box |
 | `height` | `320` | Height of the list, px |
 | `terminal` | `xdg-terminal-exec` | The command that opens a terminal; spot adds `sh -c <command>` |
+| `columns` | `1` | Show pages as a grid of tiles this many wide (up to 12); `1` is a list. A page can set its own |
 
 A page has a `title` (default: its name) and one or more `[[page.<name>.entry]]`. An entry has a
 `label` and **exactly one** of:
@@ -791,6 +792,12 @@ A page has a `title` (default: its name) and one or more `[[page.<name>.entry]]`
 
 With `back = true`, an `exec` entry's command gets `SPOT_BACK`, so a dialog it opens has a Back to
 this page, and the menu's window is kept for it.
+
+**As a grid.** With `columns`, a page shows tiles: the glyph in front of a label large, the rest
+below. The arrows move around it (Left and Right once the search is empty), and typing turns it into
+the list, so that search results keep their way. Style it like [`tiles`](#tiles): `.spot-tile`,
+`.spot-tile-icon`, `.spot-tile-label`, with `.spot-cursor` on the chosen one and `.spot-menu-grid` on
+the grid. Make the window wide enough (`width`).
 
 **Keys:** Enter picks; Back is Backspace on an empty search, Alt+Left or the button, and lands on the
 entry you came through; Esc closes. A double click picks.

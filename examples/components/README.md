@@ -18,8 +18,8 @@ folder to start your own.
 | `controls.toml` | `switch` in its three looks, `segmented`, live `scale`, `separator` |
 | `lists.toml` | switch rows in a list, groups that fold |
 | `form.toml` | `field` with validation, `select`, multi `list`, `toggle`, `scale`, `text` |
-| `demo.toml`, `menu/` | menu pages, Back, search into deeper pages, `include` |
+| `demo.toml`, `menu/` | menu pages, a page as a grid, Back, search into deeper pages, `include` |
 
-Needs spot 0.10.1 or newer. Not shown here: the app launcher
+Needs spot 0.10.1 or newer; the grid page 0.10.2. Not shown here: the app launcher
 ([`../launcher.toml`](../launcher.toml)), passwords ([`../password.toml`](../password.toml)) and
 [mods](../mods/).
